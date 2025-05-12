@@ -387,6 +387,19 @@ rule build_tes_operation:
             "ptes",
             "min_bottom_temperature",
         ),
+        supplemental_heating_activated=config_provider(
+            "sector",
+            "district_heating",
+            "ptes",
+            "supplemental_heating",
+            "enable",
+        ),
+        capacity_approximator_actvated=config_provider(
+            "sector",
+            "district_heating",
+            "ptes",
+            "dynamic_capacity",
+        ),
         snapshots=config_provider("snapshots"),
     input:
         central_heating_forward_temperature_profiles=resources(
@@ -1164,21 +1177,6 @@ rule build_egs_potentials:
         "../scripts/build_egs_potentials.py"
 
 
-def input_heat_source_power(w):
-
-    return {
-        heat_source_name: resources(
-            "heat_source_power_" + heat_source_name + "_base_s_{clusters}.csv"
-        )
-        for heat_source_name in config_provider(
-            "sector", "heat_pump_sources", "urban central"
-        )(w)
-        if heat_source_name
-        in config_provider("sector", "district_heating", "limited_heat_sources")(
-            w
-        ).keys()
-    }
-
 
 rule prepare_sector_network:
     params:
@@ -1292,6 +1290,9 @@ rule prepare_sector_network:
             if config_provider(
                 "sector", "district_heating", "ptes", "dynamic_capacity"
             )
+            or config_provider(
+                "sector", "district_heating", "ptes", "supplemental_heating", "enable"
+            )
             else []
         ),
         tes_supplemental_heating_profile=lambda w: (
@@ -1301,6 +1302,7 @@ rule prepare_sector_network:
             if config_provider(
                 "sector", "district_heating", "ptes", "supplemental_heating", "enable"
             )(w)
+            # hier vllt noch ein or einfügen
             else []
         ),
         solar_thermal_total=lambda w: (
