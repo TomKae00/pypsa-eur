@@ -5,9 +5,9 @@
 import xarray as xr
 
 
-class TESSupplementalHeatingApproximator:
+class PTESSupplementalHeatingApproximator:
     """
-    Approximates the need for supplemental heating in TES integration.
+    Approximates the need for supplemental heating in PTES integration.
 
     Parameters
     ----------
@@ -21,7 +21,7 @@ class TESSupplementalHeatingApproximator:
         self, forward_temperature: xr.DataArray, max_ptes_top_temperature: float
     ):
         """
-        Initialize the TESSupplementalHeatingApproximator.
+        Initialize the PTESSupplementalHeatingApproximator.
 
         Parameters
         ----------
@@ -31,7 +31,7 @@ class TESSupplementalHeatingApproximator:
             The maximum operational PTES temperature.
         """
         self.forward_temperature = forward_temperature
-        self.max_ptes_temperature = max_ptes_top_temperature
+        self.max_ptes_top_temperature = max_ptes_top_temperature
 
     def determine_ptes_usage(self) -> xr.DataArray:
         """
@@ -42,4 +42,4 @@ class TESSupplementalHeatingApproximator:
         xr.DataArray
             Array with 1 for direct PTES usage, 0 if supplemental heating is needed.
         """
-        return (self.forward_temperature < self.max_ptes_temperature).astype(int)
+        return (self.forward_temperature <= self.max_ptes_top_temperature).astype(int)

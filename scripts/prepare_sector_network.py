@@ -1518,7 +1518,7 @@ def insert_electricity_distribution_grid(
     - Resistive heaters
     - Micro-CHP units
     """
-    nodes = pop_layout.index
+    nodes = n.buses.query("carrier == 'AC'").index
 
     n.add(
         "Bus",
@@ -2741,7 +2741,7 @@ def add_heat(
     direct_heat_source_utilisation_profile_file: str,
     hourly_heat_demand_total_file: str,
     ptes_e_max_pu_file: str,
-    tes_supplemental_heating_profile_file: str,
+    ptes_supplemental_heating_profiles_file: str,
     district_heat_share_file: str,
     solar_thermal_total_file: str,
     retro_cost_file: str,
@@ -2770,7 +2770,7 @@ def add_heat(
         Path to NetCDF file containing direct heat source utilisation profiles
     hourly_heat_demand_total_file : str
         Path to CSV file containing hourly heat demand data
-    tes_supplemental_heating_profile_file: str
+    ptes_supplemental_heating_profiles_file: str
         Path to CSV file indicating when supplemental heating for thermal energy storage (TES) is needed
     district_heat_share_file : str
         Path to CSV file containing district heating share information
@@ -3037,16 +3037,16 @@ def add_heat(
                 if options["district_heating"]["ptes"]["supplemental_heating"][
                     "enable"
                 ]:
-                    tes_supplemental_heating_profile = xr.open_dataarray(
-                        tes_supplemental_heating_profile_file
+                    ptes_supplemental_heating_profiles = xr.open_dataarray(
+                        ptes_supplemental_heating_profiles_file
                     )
-                    tes_supplemental_heating = (
-                        tes_supplemental_heating_profile.sel(name=nodes)
+                    ptes_supplemental_heating = (
+                        ptes_supplemental_heating_profiles.sel(name=nodes)
                         .to_pandas()
                         .reindex(index=n.snapshots)
                     )
                 else:
-                    tes_supplemental_heating = 1
+                    ptes_supplemental_heating = 1
 
                 n.add(
                     "Link",
@@ -3059,7 +3059,7 @@ def add_heat(
                         "central water pit discharger",
                         "efficiency",
                     ]
-                    * tes_supplemental_heating,
+                    * ptes_supplemental_heating,
                     p_nom_extendable=True,
                     lifetime=costs.at["central water pit storage", "lifetime"],
                 )
@@ -3205,8 +3205,10 @@ def add_heat(
                 )
 
             if (
-                heat_source in params.temperature_limited_stores and
-                options["district_heating"]["ptes"]["supplemental_heating"]["enable"]
+                heat_source in params.temperature_limited_stores
+                and options["district_heating"]["ptes"]["supplemental_heating"][
+                    "enable"
+                ]
                 and options["district_heating"]["ptes"]["supplemental_heating"][
                     "booster_heat_pump"
                 ]
@@ -6065,7 +6067,7 @@ if __name__ == "__main__":
             opts="",
             clusters="5",
             sector_opts="",
-            planning_horizons="2050",
+            planning_horizons="2030",
         )
 
     configure_logging(snakemake)  # pylint: disable=E0606
@@ -6187,7 +6189,7 @@ if __name__ == "__main__":
             direct_heat_source_utilisation_profile_file=snakemake.input.direct_heat_source_utilisation_profiles,
             hourly_heat_demand_total_file=snakemake.input.hourly_heat_demand_total,
             ptes_e_max_pu_file=snakemake.input.ptes_e_max_pu_profiles,
-            tes_supplemental_heating_profile_file=snakemake.input.tes_supplemental_heating_profile,
+            ptes_supplemental_heating_profiles_file=snakemake.input.ptes_supplemental_heating_profiles,
             district_heat_share_file=snakemake.input.district_heat_share,
             solar_thermal_total_file=snakemake.input.solar_thermal_total,
             retro_cost_file=snakemake.input.retro_cost,

@@ -5,7 +5,7 @@
 import xarray as xr
 
 
-class BuildTesTopTemperature:
+class PTESTopTemperatureProfileApproximator:
     """
     Determines the top temperature profile for Thermal Energy Storage (TES).
 
@@ -26,13 +26,13 @@ class BuildTesTopTemperature:
         self, forward_temperature: xr.DataArray, max_ptes_top_temperature: float
     ):
         """
-        Initialize BuildTESTemperature.
+        Initialize PTESTopTemperatureProfileApproximator.
 
         Parameters
         ----------
-        forward_temperature_celsius : xr.DataArray
+        forward_temperature : xr.DataArray
             The forward temperature profile from the district heating network.
-        max_ptes_temperature : float
+        max_ptes_top_temperature : float
             The maximum operational PTES temperature .
         """
         self.forward_temperature = forward_temperature
