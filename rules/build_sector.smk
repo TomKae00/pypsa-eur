@@ -375,26 +375,26 @@ rule build_cop_profiles:
 
 rule build_tes_operation:
     params:
-        max_ptes_temperature=config_provider(
+        max_ptes_top_temperature=config_provider(
             "sector",
             "district_heating",
             "ptes",
             "max_top_temperature",
         ),
-        min_bottom_temperature=config_provider(
+        min_ptes_bottom_temperature=config_provider(
             "sector",
             "district_heating",
             "ptes",
             "min_bottom_temperature",
         ),
-        supplemental_heating_activated=config_provider(
+        enable_ptes_supplemental_heating=config_provider(
             "sector",
             "district_heating",
             "ptes",
             "supplemental_heating",
             "enable",
         ),
-        capacity_approximator_actvated=config_provider(
+        enable_ptes_capacity_approximation=config_provider(
             "sector",
             "district_heating",
             "ptes",
@@ -410,7 +410,7 @@ rule build_tes_operation:
         ),
         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
     output:
-        tes_supplemental_heating_profile=resources(
+        ptes_supplemental_heating_profile=resources(
             "tes_supplemental_heating_profile_s_{clusters}_{planning_horizons}.nc"
         ),
         tes_top_temperature_profile=resources(
@@ -1176,6 +1176,22 @@ rule build_egs_potentials:
     script:
         "../scripts/build_egs_potentials.py"
 
+
+
+def input_heat_source_power(w):
+
+    return {
+        heat_source_name: resources(
+            "heat_source_power_" + heat_source_name + "_base_s_{clusters}.csv"
+        )
+        for heat_source_name in config_provider(
+            "sector", "heat_pump_sources", "urban central"
+        )(w)
+        if heat_source_name
+        in config_provider("sector", "district_heating", "limited_heat_sources")(
+            w
+        ).keys()
+    }
 
 
 rule prepare_sector_network:

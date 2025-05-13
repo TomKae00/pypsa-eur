@@ -25,33 +25,36 @@ class ComputeReheatRatio:
 
     def __init__(
         self,
-        forward_temperature_celsius: xr.DataArray,
-        bottom_temperature: xr.DataArray,
+        forward_temperature: xr.DataArray,
+        return_temperature: xr.DataArray,
         clipped_top_temperature: xr.DataArray,
-        supplemental_heating: bool = False,
+        supplemental_heating_profile: xr.DataArray,
     ):
         """
         Initialize the ComputeReheatRatio calculation.
 
         Parameters
         ----------
-        forward_temperature_celsius : xr.DataArray
+        forward_temperature : xr.DataArray
             The forward temperature profile (°C) from the district heating network.
-        bottom_temperature : xr.DataArray
-            The return-flow temperature profile (°C).
+        return_temperature : xr.DataArray
+            The return temperature profile (°C) from the district heating network.
         clipped_top_temperature : xr.DataArray
             The forward temperature profile clipped at the maximum PTES temperature (°C).
-        supplemental_heating : bool, optional
+        supplemental_heating_profile : xr.DataArray
             Whether supplemental heating is required. If True, the computed ratio
             will be squared to reflect additional reheat effort (default: False).
         """
-        self.forward_temperature = forward_temperature_celsius
-        self.bottom_temperature = bottom_temperature
+        self.forward_temperature = forward_temperature
+        self.return_temperature = return_temperature
         self.clipped_top_temperature = clipped_top_temperature
-        self.supplemental_heating = supplemental_heating
+        self.supplemental_heating = supplemental_heating_profile
 
     @property
     def reheat_ratio(self) -> xr.DataArray:
+        # hier noch herausfinden, wo die +1 genua herkommt -> mathematische herleitung
+        # überlegen, wie die capital cost berechnet werden müssen. Efficiency wird zwar mit +1 beschrieben z.b 4 MW brauhen 2,4 MW nacherhitzung mit Kessel bei VLT 120 max ptes temp 90 und RLT 40
+        # , aber der Kessel hat dann eigentlich eine installierte Leistung von 2,4 MW und nicht 4 wie es jetzt im Modell der Fall wäre. Daher capital cost * (base_ratio - 1), das müsste das problem lösen. Aber nochmal überprüfen, ob das stimmt.
         """
         Calculate the reheat ratio:
 
@@ -66,11 +69,9 @@ class ComputeReheatRatio:
         xr.DataArray
             The reheat ratio profile; squared if supplemental heating is enabled.
         """
-        base_ratio = (
-            self.clipped_top_temperature - self.bottom_temperature
-        ) / (
+        base_ratio = 1 + (
             self.forward_temperature - self.clipped_top_temperature
-        )
-        if self.supplemental_heating:
-            return base_ratio * base_ratio
+        ) / (
+            self.clipped_top_temperature - self.return_temperature
+        )   #* self.supplemental_heating
         return base_ratio

@@ -11,27 +11,27 @@ class TESSupplementalHeatingApproximator:
 
     Parameters
     ----------
-    forward_temperature_celsius : xr.DataArray
+    forward_temperature : xr.DataArray
         Forward temperature profile from the district heating network.
-    max_ptes_temperature : float
+    max_ptes_top_temperature : float
         The maximum operational PTES temperature.
     """
 
     def __init__(
-        self, forward_temperature_celsius: xr.DataArray, max_ptes_temperature: float
+        self, forward_temperature: xr.DataArray, max_ptes_top_temperature: float
     ):
         """
         Initialize the TESSupplementalHeatingApproximator.
 
         Parameters
         ----------
-        forward_temperature_celsius : xr.DataArray
+        forward_temperature : xr.DataArray
             Forward temperature profile from the district heating network.
-        max_ptes_temperature : float
+        max_ptes_top_temperature : float
             The maximum operational PTES temperature.
         """
-        self.forward_temperature = forward_temperature_celsius
-        self.max_ptes_temperature = max_ptes_temperature
+        self.forward_temperature = forward_temperature
+        self.max_ptes_temperature = max_ptes_top_temperature
 
     def determine_ptes_usage(self) -> xr.DataArray:
         """
