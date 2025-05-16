@@ -106,3 +106,5 @@ class PtesTemperatureApproximator:
             self.max_ptes_top_temperature - self.bottom_temperature
         )
         return normalized_delta_t.clip(min=0)  # Ensure non-negative values
+
+    # hier wird dann ein noch weiterer Teil hinzugeüfgt
