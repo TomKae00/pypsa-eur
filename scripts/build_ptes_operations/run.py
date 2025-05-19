@@ -27,6 +27,7 @@ Relevant Settings
                 supplemental_heating:
                     enable:
                 max_top_temperature:
+                min_bottom_temperature:
 
 Inputs
 ------
@@ -67,8 +68,8 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_ptes_operations",
-            clusters=5,
-            planning_horizons="2030",
+            clusters=8,
+            planning_horizons="2050",
         )
 
     set_scenario_config(snakemake)
@@ -115,4 +116,12 @@ if __name__ == "__main__":
     )
     ptes_temperature_approximator.e_max_pu.to_netcdf(
         snakemake.output.ptes_e_max_pu_profiles
+    )
+
+    # Get PTES reheat ratio for boiler
+    logger.info(
+        f"Saving PTES reheat ratio profiles to {snakemake.output.ptes_reheat_ratio_profiles}"
+    )
+    ptes_temperature_approximator.reheat_ratio.to_netcdf(
+        snakemake.output.ptes_reheat_ratio_profiles
     )

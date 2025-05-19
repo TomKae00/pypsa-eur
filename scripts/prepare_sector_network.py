@@ -2742,6 +2742,7 @@ def add_heat(
     hourly_heat_demand_total_file: str,
     ptes_e_max_pu_file: str,
     ptes_direct_utilisation_profile: str,
+    ptes_reheat_ratio_profiles: str,
     ates_e_nom_max: str,
     ates_capex_as_fraction_of_geothermal_heat_source: float,
     ates_recovery_factor: float,
@@ -3319,6 +3320,32 @@ def add_heat(
                 p_nom_extendable=True,
                 lifetime=costs.at[key, "lifetime"],
             )
+
+            if options["district_heating"]["ptes"]["supplemental_heating"][
+                    "booster_resistive_heater"] and heat_system.central_or_decentral == 'central':
+
+                ptes_reheat_ratio = (
+                        xr.open_dataarray(ptes_reheat_ratio_profiles)
+                        .sel(name=nodes)
+                        .to_pandas()
+                        .reindex(index=n.snapshots)
+                    )
+
+                n.add(
+                    "Link",
+                    nodes + f" {heat_system} ptes resistive heater",
+                    bus0=nodes,
+                    bus1=nodes + f" {heat_system} water pits",
+                    bus2=nodes + f" {heat_system} heat",
+                    carrier=f"{heat_system} resistive heater",
+                    efficiency=costs.at[key, "efficiency"], #nochmal überprüfen, ob das soweit passt
+                    efficiency2= ptes_reheat_ratio,
+                    capital_cost=costs.at[key, "efficiency"]
+                                 * costs.at[key, "capital_cost"]
+                                 * overdim_factor,
+                    p_nom_extendable=True,
+                    lifetime=costs.at[key, "lifetime"],
+                )
 
         if options["boilers"]:
             key = f"{heat_system.central_or_decentral} gas boiler"
@@ -6122,7 +6149,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "prepare_sector_network",
             opts="",
-            clusters="10",
+            clusters="8",
             sector_opts="",
             planning_horizons="2050",
         )
@@ -6246,6 +6273,8 @@ if __name__ == "__main__":
             direct_heat_source_utilisation_profile_file=snakemake.input.direct_heat_source_utilisation_profiles,
             hourly_heat_demand_total_file=snakemake.input.hourly_heat_demand_total,
             ptes_e_max_pu_file=snakemake.input.ptes_e_max_pu_profiles,
+            ptes_direct_utilisation_profile=snakemake.input.ptes_direct_utilisation_profiles,
+            ptes_reheat_ratio_profiles=snakemake.input.ptes_reheat_ratio_profiles,
             ates_e_nom_max=snakemake.input.ates_potentials,
             ates_capex_as_fraction_of_geothermal_heat_source=snakemake.params.sector[
                 "district_heating"
@@ -6257,7 +6286,6 @@ if __name__ == "__main__":
                 "recovery_factor"
             ],
             enable_ates=snakemake.params.sector["district_heating"]["ates"]["enable"],
-            ptes_direct_utilisation_profile=snakemake.input.ptes_direct_utilisation_profiles,
             district_heat_share_file=snakemake.input.district_heat_share,
             solar_thermal_total_file=snakemake.input.solar_thermal_total,
             retro_cost_file=snakemake.input.retro_cost,
