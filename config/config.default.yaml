@@ -479,9 +479,10 @@ sector:
       upper_threshold_ambient_temperature: 10
       rolling_window_ambient_temperature: 72
       relative_annual_temperature_reduction: 0.01
+    supplemental_heating_storages: ['PTES']
     ptes:
       dynamic_capacity: true
-      supplemental_heating:
+      supplemental_heating: # liste mit booster technoloogien und enable belassen
         enable: true
         booster_heat_pump: true
         booster_resistive_heater: true
