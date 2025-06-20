@@ -485,10 +485,9 @@ sector:
     supplemental_heating_storages: ['PTES']
     ptes:
       dynamic_capacity: true
-      supplemental_heating: # liste mit booster technoloogien und enable belassen
-        enable: true
-        booster_heat_pump: true
-        booster_resistive_heater: true
+      supplemental_heating:
+        enable: false
+        booster_technologies: []
       max_top_temperature: 90
       min_bottom_temperature: 35
     ates:
@@ -508,6 +507,7 @@ sector:
       heat_exchanger_pinch_point_temperature_difference: 5 #K
       isentropic_compressor_efficiency: 0.8
       heat_loss: 0.0
+      min_delta_t_lift: 10 #K
     limited_heat_sources:
       geothermal:
         constant_temperature_celsius: 65
@@ -519,7 +519,6 @@ sector:
   heat_pump_sources:
     urban central:
     - air
-    - ptes
     urban decentral:
     - air
     rural:

@@ -2754,8 +2754,8 @@ def add_heat(
     direct_heat_source_utilisation_profile_file: str,
     hourly_heat_demand_total_file: str,
     ptes_e_max_pu_file: str,
-    ptes_direct_utilisation_profile: str,
-    ptes_reheat_ratio_profiles: str,
+    ptes_direct_utilisation_profile_file: str,
+    ptes_temperature_boost_ratio_profile_file: str,
     ates_e_nom_max: str,
     ates_capex_as_fraction_of_geothermal_heat_source: float,
     ates_recovery_factor: float,
@@ -2789,8 +2789,10 @@ def add_heat(
         Path to NetCDF file containing direct heat source utilisation profiles
     hourly_heat_demand_total_file : str
         Path to CSV file containing hourly heat demand data
-    ptes_supplemental_heating_required_file: str
-        Path to CSV file indicating when supplemental heating for thermal energy storage (TES) is needed
+    ptes_direct_utilisation_profile_file : str
+        Path to CSV file containing when supplemental heating for thermal energy storage (TES) is needed
+    ptes_temperature_boost_ratio_profile_file : str
+        Path to CSV file containing Ratio of PTES charge that requires additional heating
     district_heat_share_file : str
         Path to CSV file containing district heating share information
     solar_thermal_total_file : str
@@ -3081,6 +3083,25 @@ def add_heat(
                     #]:
                     #boosted = options["district_heating"]["ptes"]["supplemental_heating"]["enable"]
 
+                if options["district_heating"]["ptes"]["supplemental_heating"][
+                    "enable"
+                ]:
+                    n.add("Carrier", f"{heat_system} water pits boosting")
+
+                    n.add(
+                        "Bus",
+                        nodes + f" {heat_system} water pits boosting",
+                        location=nodes,
+                        carrier=f"{heat_system} water pits boosting",
+                        unit="MWh_th",
+                    )
+
+                    ptes_supplemental_heating_required = (
+                        xr.open_dataarray(ptes_direct_utilisation_profile_file)
+                        .sel(name=nodes)
+                        .to_pandas()
+                        .reindex(index=n.snapshots)
+                    )
                     #n.add("Carrier", f"{heat_system} water pits boosting")
 
                     #n.add(
@@ -3100,6 +3121,52 @@ def add_heat(
                     else:
                         ptes_supplemental_heating_required = 1
 
+                    n.add(
+                        "Link",
+                        nodes,
+                        suffix=f" {heat_system} water pits discharger",
+                        bus0=nodes + f" {heat_system} water pits",
+                        bus1=nodes + f" {heat_system} heat",
+                        bus2=nodes + f" {heat_system} water pits boosting",
+                        carrier=f"{heat_system} water pits discharger",
+                        efficiency=costs.at[
+                            "central water pit discharger",
+                            "efficiency",
+                        ]
+                        * ptes_supplemental_heating_required,
+                        efficiency2=costs.at[
+                            "central water pit discharger",
+                            "efficiency",
+                        ]
+                        * (ptes_supplemental_heating_required - 1)
+                        * (-1),
+                        p_nom_extendable=True,
+                        lifetime=costs.at["central water pit storage", "lifetime"],
+                    )
+                    n.links.loc[
+                        nodes + f" {heat_system} water pits charger",
+                        "energy to power ratio",
+                    ] = energy_to_power_ratio_water_pit
+
+                else:
+                    n.add(
+                        "Link",
+                        nodes,
+                        suffix=f" {heat_system} water pits discharger",
+                        bus0=nodes + f" {heat_system} water pits",
+                        bus1=nodes + f" {heat_system} heat",
+                        carrier=f"{heat_system} water pits discharger",
+                        efficiency=costs.at[
+                            "central water pit discharger",
+                            "efficiency",
+                        ],
+                        p_nom_extendable=True,
+                        lifetime=costs.at["central water pit storage", "lifetime"],
+                    )
+                    n.links.loc[
+                        nodes + f" {heat_system} water pits charger",
+                        "energy to power ratio",
+                    ] = energy_to_power_ratio_water_pit
                     n.add(
                         "Link",
                         nodes,
@@ -3301,12 +3368,13 @@ def add_heat(
                 not options["district_heating"]["ptes"]["supplemental_heating"][
                     "enable"
                 ]
-                and options["district_heating"]["ptes"]["supplemental_heating"][
-                    "booster_heat_pump"
+                and "heat_pump"
+                in options["district_heating"]["ptes"]["supplemental_heating"][
+                    "booster_technologies"
                 ]
             ):
                 raise ValueError(
-                    "'booster_heat_pump' is true, but 'enable' is false in 'supplemental_heating'."
+                    "Supplemental heating: 'booster_technologies' contains 'heat_pump', but 'enable' is false."
                 )
 
             if (
@@ -3314,20 +3382,32 @@ def add_heat(
                 and options["district_heating"]["ptes"]["supplemental_heating"][
                     "enable"
                 ]
-                and options["district_heating"]["ptes"]["supplemental_heating"][
-                    "booster_heat_pump"
+                and "heat_pump"
+                in options["district_heating"]["ptes"]["supplemental_heating"][
+                    "booster_technologies"
                 ]
             ):
+                ptes_temperature_boost_ratio = (
+                    xr.open_dataarray(ptes_temperature_boost_ratio_profile_file)
+                    .sel(name=nodes)
+                    .to_pandas()
+                    .reindex(index=n.snapshots)
+                )
+
                 n.add(
                     "Link",
                     nodes,
                     suffix=f" {heat_system} {heat_source} heat pump",
                     bus0=nodes,
-                    bus1=nodes + f" {heat_system} water pits",
+                    bus1=nodes + f" {heat_system} water pits boosting",
                     bus2=nodes + f" {heat_system} heat",
                     carrier=f"{heat_system} {heat_source} heat pump",
-                    efficiency=(-(cop_heat_pump - 1)).clip(upper=0),
-                    efficiency2=cop_heat_pump,
+                    efficiency=-(cop_heat_pump / ptes_temperature_boost_ratio).where(
+                        ptes_temperature_boost_ratio > 0, 0.0
+                    ),
+                    efficiency2=(
+                        cop_heat_pump * (1 + (1 / ptes_temperature_boost_ratio))
+                    ).where(ptes_temperature_boost_ratio > 0, 0.0),
                     capital_cost=costs.at[costs_name_heat_pump, "efficiency"]
                     * costs.at[costs_name_heat_pump, "capital_cost"]
                     * overdim_factor,
@@ -3367,6 +3447,56 @@ def add_heat(
                 p_nom_extendable=True,
                 lifetime=costs.at[key, "lifetime"],
             )
+
+            if (
+                not options["district_heating"]["ptes"]["supplemental_heating"][
+                    "enable"
+                ]
+                and "resistive_heaters"
+                in options["district_heating"]["ptes"]["supplemental_heating"][
+                    "booster_technologies"
+                ]
+            ):
+                raise ValueError(
+                    "Supplemental heating: 'booster_technologies' contains 'resistive_heaters', but 'enable' is false."
+                )
+            if (
+                "resistive_heaters"
+                in options["district_heating"]["ptes"]["supplemental_heating"][
+                    "booster_technologies"
+                ]
+                and heat_system == HeatSystem.URBAN_CENTRAL
+            ):
+                ptes_temperature_boost_ratio = (
+                    xr.open_dataarray(ptes_temperature_boost_ratio_profile_file)
+                    .sel(name=nodes)
+                    .to_pandas()
+                    .reindex(index=n.snapshots)
+                )
+
+                n.add(
+                    "Link",
+                    nodes,
+                    suffix=f" {heat_system} water pits resistive heater",
+                    bus0=nodes,
+                    bus1=nodes + f" {heat_system} water pits boosting",
+                    bus2=nodes + f" {heat_system} heat",
+                    carrier=f"{heat_system} water pits resistive heater",
+                    efficiency=-(
+                        costs.at[key, "efficiency"] / ptes_temperature_boost_ratio
+                    ).where(ptes_temperature_boost_ratio > 0, 0.0),
+                    efficiency2=(costs.at[key, "efficiency"])
+                    * (1 + (1 / ptes_temperature_boost_ratio)).where(
+                        ptes_temperature_boost_ratio > 0, 0.0
+                    ),
+                    capital_cost=(
+                        costs.at[key, "efficiency"]
+                        * costs.at[key, "capital_cost"]
+                        * overdim_factor
+                    ),
+                    p_nom_extendable=True,
+                    lifetime=costs.at[key, "lifetime"],
+                )
 
             if options["district_heating"]["ptes"]["supplemental_heating"][
                     "booster_resistive_heater"] and heat_system == HeatSystem.URBAN_CENTRAL:
@@ -6323,8 +6453,8 @@ if __name__ == "__main__":
             direct_heat_source_utilisation_profile_file=snakemake.input.direct_heat_source_utilisation_profiles,
             hourly_heat_demand_total_file=snakemake.input.hourly_heat_demand_total,
             ptes_e_max_pu_file=snakemake.input.ptes_e_max_pu_profiles,
-            ptes_direct_utilisation_profile=snakemake.input.ptes_direct_utilisation_profiles,
-            ptes_reheat_ratio_profiles=snakemake.input.ptes_reheat_ratio_profiles,
+            ptes_direct_utilisation_profile_file=snakemake.input.ptes_direct_utilisation_profiles,
+            ptes_temperature_boost_ratio_profile_file=snakemake.input.ptes_temperature_boost_ratio_profiles,
             ates_e_nom_max=snakemake.input.ates_potentials,
             ates_capex_as_fraction_of_geothermal_heat_source=snakemake.params.sector[
                 "district_heating"
