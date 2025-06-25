@@ -58,9 +58,10 @@ import logging
 import xarray as xr
 from _helpers import set_scenario_config
 
-from scripts.build_ptes_operations.ptes_temperature_approximator import (
-    PtesTemperatureApproximator,
+from scripts.build_tes_operations.tes_temperature_approximator import (
+    TesTemperatureApproximator,
 )
+from scripts.definitions.tes_system import TesSystem
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_ptes_operations",
+            "build_tes_operations",
             clusters=8,
             planning_horizons="2050",
         )
@@ -80,50 +81,70 @@ if __name__ == "__main__":
     logger.info(
         "Loading district heating temperature profiles and constructing PTES temperature approximator"
     )
-    # Initialize unified PTES temperature class
-    ptes_temperature_approximator = PtesTemperatureApproximator(
-        forward_temperature=xr.open_dataarray(
-            snakemake.input.central_heating_forward_temperature_profiles
-        ),
-        return_temperature=xr.open_dataarray(
-            snakemake.input.central_heating_return_temperature_profiles
-        ),
-        max_ptes_top_temperature=snakemake.params.max_ptes_top_temperature,
-        min_ptes_bottom_temperature=snakemake.params.min_ptes_bottom_temperature,
+    forward_temperature = xr.open_dataarray(
+        snakemake.input.central_heating_forward_temperature_profiles
+    )
+    return_temperature = xr.open_dataarray(
+        snakemake.input.central_heating_return_temperature_profiles
     )
 
-    # Get PTES clipped top temperature profiles
+    # Compute temperature-dependent profiles for each TES system separately
+    top_temperatures = []
+    direct_utilisation_profiles = []
+    e_max_pu_profiles = []
+    boost_ratios = []
+
+    for tes_system in TesSystem:
+        approximator = TesTemperatureApproximator(
+            forward_temperature=forward_temperature,
+            return_temperature=return_temperature,
+            max_tes_top_temperature=snakemake.params.max_ptes_top_temperature,
+            min_tes_bottom_temperature=snakemake.params.min_ptes_bottom_temperature,
+        )
+
+        top_temperatures.append(
+            approximator.top_temperature.expand_dims(tes_system=[tes_system.name])
+        )
+        direct_utilisation_profiles.append(
+            approximator.direct_utilisation_profile.expand_dims(
+                tes_system=[tes_system.name]
+            )
+        )
+        e_max_pu_profiles.append(
+            approximator.e_max_pu.expand_dims(tes_system=[tes_system.name])
+        )
+        boost_ratios.append(
+            approximator.temperature_boost_ratio.expand_dims(
+                tes_system=[tes_system.name]
+            )
+        )
+
+    top_temperatures = xr.concat(top_temperatures, dim="tes_system")
+    direct_utilisation_profiles = xr.concat(
+        direct_utilisation_profiles, dim="tes_system"
+    )
+    e_max_pu_profiles = xr.concat(e_max_pu_profiles, dim="tes_system")
+    boost_ratios = xr.concat(boost_ratios, dim="tes_system")
+
     logger.info(
-        f"Saving TES top temperature profile to {snakemake.output.ptes_top_temperature_profiles}"
+        f"Saving TES top temperature profile to {snakemake.output.tes_top_temperature_profiles}"
     )
-    ptes_temperature_approximator.top_temperature.to_netcdf(
-        snakemake.output.ptes_top_temperature_profiles
-    )
+    top_temperatures.to_netcdf(snakemake.output.tes_top_temperature_profiles)
 
-    # if snakemake.params.enable_supplemental_heating:
-    # Get PTES supplemental heating profiles
     logger.info(
-        f"Saving PTES direct utilisation profile to {snakemake.output.ptes_direct_utilisation_profiles}"
+        f"Saving TES direct utilisation profile to {snakemake.output.tes_direct_utilisation_profiles}"
     )
-    ptes_temperature_approximator.direct_utilisation_profile.to_netcdf(
-        snakemake.output.ptes_direct_utilisation_profiles
+    direct_utilisation_profiles.to_netcdf(
+        snakemake.output.tes_direct_utilisation_profiles
     )
 
-    # if snakemake.params.enable_dynamic_capacity:
-    logger.info("Calculating dynamic PTES capacity profiles")
-
-    # Get PTES capacity profiles
+    logger.info("Calculating dynamic TES capacity profiles")
     logger.info(
-        f"Saving PTES capacity profiles to {snakemake.output.ptes_e_max_pu_profiles}"
+        f"Saving TES capacity profiles to {snakemake.output.tes_e_max_pu_profiles}"
     )
-    ptes_temperature_approximator.e_max_pu.to_netcdf(
-        snakemake.output.ptes_e_max_pu_profiles
-    )
+    e_max_pu_profiles.to_netcdf(snakemake.output.tes_e_max_pu_profiles)
 
-    # Get PTES temperature boost ratio
     logger.info(
-        f"Saving PTES reheat ratio profiles to {snakemake.output.ptes_temperature_boost_ratio_profiles}"
+        f"Saving TES reheat ratio profiles to {snakemake.output.tes_temperature_boost_ratio_profiles}"
     )
-    ptes_temperature_approximator.temperature_boost_ratio.to_netcdf(
-        snakemake.output.ptes_temperature_boost_ratio_profiles
-    )
+    boost_ratios.to_netcdf(snakemake.output.tes_temperature_boost_ratio_profiles)

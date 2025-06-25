@@ -2849,7 +2849,7 @@ def add_heat(
     )
 
     cop = xr.open_dataarray(cop_profiles_file)
-    direct_heat_profile = xr.open_dataarray(direct_heat_source_utilisation_profile_file)
+    direct_heat_profile = xr.open_dataarray(direct_heat_source_utilisation_profile_file) # schauen ob wir auch alles in einem nc speichern können und dann immer auswählen welchen Datentyp wir brauchen
     district_heat_info = pd.read_csv(district_heat_share_file, index_col=0)
     dist_fraction = district_heat_info["district fraction of node"]
     urban_fraction = district_heat_info["urban fraction"]
@@ -2945,32 +2945,29 @@ def add_heat(
             p_set=heat_load.loc[n.snapshots],
         )
 
-        if options["tes"]:
+        if options["tes"]: # hier schauen, dass wir in den loop auch nur reingehen, wenn es wirklich benötigt wird. PTES, TTES, ATES 'urban central', TTES für 'urban decentral', TTES für 'rural' damit sparen wir uns unnötiges loopen im loop selbst. Das heißt wir müsen die heat_system types und storage_types miteinander verbinden.
 
-            supplemental_heating_storages = options["district_heating"]["supplemental_heating_storages"]
+            supplemental = options["district_heating"]["supplemental_heating_storages"]
 
-            # Dict mapping each TesSystem to its relevant cases, based on config
-            tes_cases = [
-                (tes_system, case)
-                for tes_system in TesSystem
-                for case in (
-                    [TesSystemCase.BASE, TesSystemCase.BOOSTED]
-                    if tes_system.name in supplemental_heating_storages
-                    else [TesSystemCase.BASE]
-                )
-            ]
-            for tes_system, case in tes_cases:
-                label = tes_system.component_name(case)
+            for tes_system in TesSystem.names_for(heat_system, supplemental):
+
+            # wie gehen wir dann mit den boosting buses um? und dem Aufbau dafür. eine Möglichkeit vllt eine class die dies beinhlatet? Also die strings dann direkt eingesezt und zusammengepackt werden und wenn boosted das zweimal drüber geloopt werden muss
+            #boosting_buses = {
+            #    tes_system: nodes
+            #                + f" {heat_system} {tes_system.component_name(TesSystemCase.BOOSTED)}"
+            #    for tes_system in TesSystem
+            #    if tes_system.name in supplemental_heating_storages
+            #}
 
             # loop hier drüber aber nur für die cases
                 if tes_system == TesSystem.TTES:
-                    n.add("Carrier", f"{heat_system} water tanks")
+                    n.add("Carrier", f"{heat_system} {tes_system}") # tes_system.boosted_or_normal -> bei boosted dann 'boosting' dazu sonst ''
 
                     n.add(
                     "Bus",
-                    nodes + f" {heat_system} water tanks",
+                    nodes + f" {heat_system} {tes_system}",
                     location=nodes,
-                    carrier=f"{heat_system} water tanks",
+                    carrier=f"{heat_system} {tes_system}",
                     unit="MWh_th",
                     )
 
@@ -3040,15 +3037,15 @@ def add_heat(
                         ],
                     )
 
-                if tes_system == TesSystem.PTES and heat_system == HeatSystem.URBAN_CENTRAL:
+                if tes_system == TesSystem.PTES:
 
-                    n.add("Carrier", f"{heat_system} {label}")
+                    n.add("Carrier", f"{heat_system} {tes_system}")
 
                     n.add(
                         "Bus",
-                        nodes + f" {heat_system} {label}",
+                        nodes + f" {heat_system} {tes_system}",
                         location=nodes,
-                        carrier=f"{heat_system} {label}",
+                        carrier=f"{heat_system} {tes_system}",
                         unit="MWh_th",
                     )
 
@@ -3092,7 +3089,7 @@ def add_heat(
 
                         ptes_supplemental_heating_required = (
                             xr.open_dataarray(ptes_direct_utilisation_profile_file)
-                            .sel(name=nodes)
+                            .sel(name=nodes, tes_system=tes_system.name)
                             .to_pandas()
                             .reindex(index=n.snapshots)
                         )
@@ -3216,6 +3213,7 @@ def add_heat(
                         lifetime=costs.at["central geothermal heat source", "lifetime"],
                     )
 
+        # hier mal schauen, wie wir die heat sources smart mit rein bekommen für die nacherhitzung
         ## Add heat pumps
         for heat_source in params.heat_pump_sources[heat_system.system_type.value]:
             costs_name_heat_pump = heat_system.heat_pump_costs_name(heat_source)
@@ -3399,31 +3397,16 @@ def add_heat(
                 lifetime=costs.at[key, "lifetime"],
             )
 
-            if (
-                not options["district_heating"]["ptes"]["supplemental_heating"][
-                    "enable"
-                ]
-                and "resistive_heaters"
-                in options["district_heating"]["ptes"]["supplemental_heating"][
-                    "booster_technologies"
-                ]
-            ):
-                raise ValueError(
-                    "Supplemental heating: 'booster_technologies' contains 'resistive_heaters', but 'enable' is false."
-                )
-            if (
-                "resistive_heaters"
-                in options["district_heating"]["ptes"]["supplemental_heating"][
-                    "booster_technologies"
-                ]
-                and heat_system == HeatSystem.URBAN_CENTRAL
-            ):
+            if options["district_heating"]["ptes"]["supplemental_heating"][
+                    "booster_resistive_heater"] and heat_system == HeatSystem.URBAN_CENTRAL:
+
                 ptes_temperature_boost_ratio = (
                     xr.open_dataarray(ptes_temperature_boost_ratio_profile_file)
                     .sel(name=nodes)
                     .to_pandas()
                     .reindex(index=n.snapshots)
                 )
+
 
                 n.add(
                     "Link",
@@ -3445,34 +3428,6 @@ def add_heat(
                         * costs.at[key, "capital_cost"]
                         * overdim_factor
                     ),
-                    p_nom_extendable=True,
-                    lifetime=costs.at[key, "lifetime"],
-                )
-
-            if options["district_heating"]["ptes"]["supplemental_heating"][
-                    "booster_resistive_heater"] and heat_system == HeatSystem.URBAN_CENTRAL:
-
-                ptes_reheat_ratio = (
-                        xr.open_dataarray(ptes_reheat_ratio_profiles)
-                        .sel(name=nodes)
-                        .to_pandas()
-                        .reindex(index=n.snapshots)
-                    )
-
-                n.add(
-                    "Link",
-                    nodes,
-                    suffix=f" {heat_system} ptes resistive heater",
-                    bus0=nodes,
-                    bus1=nodes + f" {heat_system} water pits ", #boosting
-                    bus2=nodes + f" {heat_system} heat",
-                    carrier=f"{heat_system} resistive heater",
-                    efficiency=(-(1 / (ptes_reheat_ratio - 1))).where(ptes_reheat_ratio > 1, 0.0), #nochmal überprüfen, ob das soweit passt, IM AKTUELLEN RUN NICHT DRIN
-                    efficiency2=(ptes_reheat_ratio / (ptes_reheat_ratio - 1)).where(ptes_reheat_ratio > 1, 0.0) * (costs.at[key, "efficiency"]),
-                    capital_cost=(costs.at[key, "efficiency"]
-                                 * costs.at[key, "capital_cost"]
-                                 * overdim_factor),
-                                 #* (ptes_reheat_ratio.max() -1)),
                     p_nom_extendable=True,
                     lifetime=costs.at[key, "lifetime"],
                 )
