@@ -25,9 +25,9 @@ class TesTemperatureMode(Enum):
     DYNAMIC = "dynamic"
 
 
-class PtesTemperatureApproximator:
+class TesTemperatureApproximator:
     """
-    A unified class to handle pit thermal energy storage (PTES) temperature-related calculations.
+    A unified class to handle Thermal Energy Storage (TES) temperature-related calculations.
 
     It calculates top temperature profiles, determines when supplemental heating is needed,
     and approximates storage capacity based on temperature differences.
@@ -39,9 +39,9 @@ class PtesTemperatureApproximator:
     return_temperature : xr.DataArray
         The return temperature profile from the district heating network.
     max_top_temperature : float
-        Maximum operational temperature of top layer in PTES.
+        Maximum operational temperature of top layer in TES.
     min_bottom_temperature : float
-        Minimum operational temperature of bottom layer in PTES.
+        Minimum operational temperature of bottom layer in TES.
     temperature_profile : TesTemperatureProfile
         TES temperature profile assumption.
     charge_boosting_required : bool
@@ -64,7 +64,7 @@ class PtesTemperatureApproximator:
         dynamic_capacity: bool,
     ):
         """
-        Initialize PtesTemperatureApproximator.
+        Initialize TesTemperatureApproximator.
 
         Parameters
         ----------
@@ -73,9 +73,9 @@ class PtesTemperatureApproximator:
         return_temperature : xr.DataArray
             The return temperature profile from the district heating network.
         max_top_temperature : float
-            Maximum operational temperature of top layer in PTES.
+            Maximum operational temperature of top layer in TES.
         min_bottom_temperature : float
-            Minimum operational temperature of bottom layer in PTES.
+            Minimum operational temperature of bottom layer in TES.
         temperature_profile : TesTemperatureProfile
             TES temperature profile assumption.
         charge_boosting_required : bool
@@ -97,12 +97,12 @@ class PtesTemperatureApproximator:
     @property
     def top_temperature(self) -> xr.DataArray:
         """
-        Forward temperature clipped at the maximum PTES temperature or constant max temperature.
+        Forward temperature clipped at the maximum TES temperature or constant max temperature.
 
         Returns
         -------
         xr.DataArray
-            The resulting top temperature profile for PTES.
+            The resulting top temperature profile for TES.
         """
         if self.temperature_profile == TesTemperatureMode.CONSTANT:
             return xr.full_like(self.forward_temperature, self.max_top_temperature)
@@ -117,12 +117,12 @@ class PtesTemperatureApproximator:
     @property
     def bottom_temperature(self) -> xr.DataArray:
         """
-        Return temperature clipped at the minimum PTES temperature or constant min temperature.
+        Return temperature clipped at the minimum TES temperature or constant min temperature.
 
         Returns
         -------
         xr.DataArray
-            The resulting bottom temperature profile for PTES.
+            The resulting bottom temperature profile for TES.
         """
         if self.temperature_profile == TesTemperatureMode.CONSTANT:
             return xr.full_like(self.return_temperature, self.min_bottom_temperature)
@@ -176,14 +176,14 @@ class PtesTemperatureApproximator:
             α = Q_boost / Q_source
               = (T_forward − T_top) / (T_top − T_bottom)
 
-        This expression quantifies the share of PTES output that is covered
+        This expression quantifies the share of TES output that is covered
         by stored energy relative to the additional heating needed to meet
         the desired forward temperature.
 
         Returns
         -------
         xr.DataArray
-            The resulting fraction of PTES charge that must be further heated.
+            The resulting fraction of TES charge that must be further heated.
         """
         if self.discharge_boosting_required:
             return ((self.forward_temperature - self.top_temperature) / (
@@ -195,7 +195,7 @@ class PtesTemperatureApproximator:
     @property
     def boost_per_charge(self) -> xr.DataArray:
         """
-        Calculate how much of the total energy needed to fill the PTES to its
+        Calculate how much of the total energy needed to fill the TES to its
         maximum capacity has already been delivered by charging up to the forward
         temperature, versus how much extra energy remains to reach the maximum.
 
@@ -218,7 +218,7 @@ class PtesTemperatureApproximator:
 
         This ratio quantifies the share of the total charge process that has
         already been completed (via Q_forward) relative to what is still
-        required (Q_boosting) to hit the maximum PTES top temperature.
+        required (Q_boosting) to hit the maximum TES top temperature.
 
         Wherever the forward temperature meets or exceeds the maximum, α is set
         to zero since no further boost is needed.
@@ -226,7 +226,7 @@ class PtesTemperatureApproximator:
         Returns
         -------
         xr.DataArray
-            The fraction of the PTES's available storage capacity already used.
+            The fraction of the TES's available storage capacity already used.
         """
         if self.charge_boosting_required:
             return ((self.max_top_temperature - self.forward_temperature) / (

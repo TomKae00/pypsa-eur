@@ -48,7 +48,7 @@ from scripts.build_cop_profiles.DecentralHeatingCopApproximator import (
     DecentralHeatingCopApproximator,
 )
 from scripts.definitions.heat_system_type import HeatSystemType
-
+from scripts.definitions.tes_system import TesSystem
 
 def get_cop(
     heat_system_type: str,
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     for heat_system_type, heat_sources in snakemake.params.heat_pump_sources.items():
         cop_this_system_type = []
         for heat_source in heat_sources:
-            if heat_source in ["ground", "air", "water pits"]:
+            if heat_source in ["ground", "air"] or TesSystem:
                 source_inlet_temperature_celsius = xr.open_dataarray(
                     snakemake.input[
                         f"temp_{heat_source.replace(" ", "_").replace('ground', 'soil')}_total"

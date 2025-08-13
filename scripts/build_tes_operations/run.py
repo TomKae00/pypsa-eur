@@ -54,12 +54,15 @@ Approximate thermal energy storage (TES) top temperature and identify need for s
 import logging
 
 import xarray as xr
+import pandas as pd
 from scripts._helpers import set_scenario_config
 
-from scripts.build_ptes_operations.ptes_temperature_approximator import (
-    PtesTemperatureApproximator,
+from scripts.build_tes_operations.tes_temperature_approximator import (
+    TesTemperatureApproximator,
     TesTemperatureMode,
 )
+
+from scripts.definitions.tes_system  import TesSystem
 
 logger = logging.getLogger(__name__)
 
@@ -68,58 +71,57 @@ if __name__ == "__main__":
         from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_ptes_operations",
+            "build_tes_operations",
             clusters=8,
-            planning_horizons="2030",
+            planning_horizons="2040",
         )
 
     set_scenario_config(snakemake)
 
-    if (snakemake.params.charge_boosting_required and
-            TesTemperatureMode(snakemake.params.ptes_temperature_profile) is TesTemperatureMode.DYNAMIC):
-        raise ValueError(
-            "Charger boosting cannot be used with 'dynamic' temperature profile"
+#    if (snakemake.params.charge_boosting_required and
+#            TesTemperatureMode(snakemake.params.tes_temperature_profile) is TesTemperatureMode.DYNAMIC):
+#        raise ValueError(
+#            "Charger boosting cannot be used with 'dynamic' temperature profile"
+#        )
+
+    central_heating_forward_temperature = xr.open_dataarray(
+        snakemake.input.central_heating_forward_temperature_profiles
+    )
+    central_heating_return_temperature = xr.open_dataarray(
+        snakemake.input.central_heating_return_temperature_profiles
+    )
+
+    variable_to_output = {
+        "top_temperature": snakemake.output.tes_top_temperature_profile,
+        "e_max_pu": snakemake.output.tes_e_max_pu_profile,
+        "boost_per_discharge": snakemake.output.boost_per_discharge_profile,
+        "boost_per_charge": snakemake.output.boost_per_charge_profile,
+    }
+
+    profiles_all_tes_systems = {v: [] for v in variable_to_output}
+    tes_system_all_names = []
+
+    for tes_system in TesSystem:
+        params_this_tes_system = snakemake.params.tes[tes_system.name]
+        if not params_this_tes_system.get("enable", True):
+            continue
+
+        tes_temperature_approximator = TesTemperatureApproximator(
+            forward_temperature=central_heating_forward_temperature,
+            return_temperature=central_heating_return_temperature,
+            max_top_temperature=params_this_tes_system["max_top_temperature"],
+            min_bottom_temperature=params_this_tes_system["min_bottom_temperature"],
+            temperature_profile=TesTemperatureMode(params_this_tes_system["temperature_profile"]),
+            charge_boosting_required=params_this_tes_system["charge_boosting_required"],
+            discharge_boosting_required=params_this_tes_system["discharge_boosting_required"],
+            dynamic_capacity=params_this_tes_system["dynamic_capacity"],
         )
 
-    # Load temperature profiles
-    logger.info(
-        f"Loading district heating temperature profiles and approximating PTES temperatures"
-    )
-    logger.info(
-        f"PTES configuration: temperature_profile={snakemake.params.ptes_temperature_profile}, "
-        f"charge_boosting_required={snakemake.params.charge_boosting_required}, "
-        f"discharge_boosting_required={snakemake.params.discharge_boosting_required}, "
-        f"dynamic_capacity={snakemake.params.dynamic_capacity}"
-    )
+        for variable in profiles_all_tes_systems:
+            profiles_all_tes_systems[variable].append(getattr(tes_temperature_approximator, variable))
+        tes_system_all_names.append(tes_system.name)
 
-    # Initialize unified PTES temperature class
-    ptes_temperature_approximator = PtesTemperatureApproximator(
-        forward_temperature=xr.open_dataarray(
-            snakemake.input.central_heating_forward_temperature_profiles
-        ),
-        return_temperature=xr.open_dataarray(
-            snakemake.input.central_heating_return_temperature_profiles
-        ),
-        max_top_temperature=snakemake.params.max_ptes_top_temperature,
-        min_bottom_temperature=snakemake.params.min_ptes_bottom_temperature,
-        temperature_profile=TesTemperatureMode(snakemake.params.ptes_temperature_profile),
-        charge_boosting_required=snakemake.params.charge_boosting_required,
-        discharge_boosting_required=snakemake.params.discharge_boosting_required,
-        dynamic_capacity=snakemake.params.dynamic_capacity,
-    )
+    tes_system_index = pd.Index(tes_system_all_names, name="tes_system")
 
-    ptes_temperature_approximator.top_temperature.to_netcdf(
-        snakemake.output.ptes_top_temperature_profile
-    )
-
-    ptes_temperature_approximator.e_max_pu.to_netcdf(
-        snakemake.output.ptes_e_max_pu_profile
-    )
-    
-    ptes_temperature_approximator.boost_per_discharge.to_netcdf(
-        snakemake.output.boost_per_discharge_profile
-    )
-
-    ptes_temperature_approximator.boost_per_charge.to_netcdf(
-        snakemake.output.boost_per_charge_profile
-    )
+    for variable, dataarrays in profiles_all_tes_systems.items():
+        xr.concat(dataarrays, dim=tes_system_index).to_netcdf(variable_to_output[variable])

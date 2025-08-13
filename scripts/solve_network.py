@@ -1143,6 +1143,8 @@ def add_charge_boosting_constraints(
     )
     rhs = rhs_base * (gamma / (gamma + 1e-9))
 
+    # bei definition hilfsvariablen bounds setzen nixht vergessen
+
     # --- LHS: boosters
     lhs = None
     for tech in ptes_booster_technologies:

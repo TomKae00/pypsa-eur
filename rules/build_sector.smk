@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+from scripts.definitions.tes_system import TesSystem
+
 
 rule build_population_layouts:
     input:
@@ -438,8 +440,8 @@ rule build_cop_profiles:
         ),
         temp_soil_total=resources("temp_soil_total_base_s_{clusters}.nc"),
         temp_air_total=resources("temp_air_total_base_s_{clusters}.nc"),
-        temp_water_pits_total=resources(
-            "ptes_top_temperature_profile_s_{clusters}_{planning_horizons}.nc"
+        temp_tes_total=resources(
+            "tes_top_temperature_profile_s_{clusters}_{planning_horizons}.nc"
         ),
         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
     output:
@@ -456,44 +458,39 @@ rule build_cop_profiles:
         "../scripts/build_cop_profiles/run.py"
 
 
-rule build_ptes_operations:
+def build_tes_params(cfg):
+    dh = cfg["sector"]["district_heating"]
+    out = {}
+
+    # every TES must define all of these explicitly
+    required = [
+        "max_top_temperature",
+        "min_bottom_temperature",
+        "temperature_profile",
+        "charge_boosting_required",
+        "discharge_boosting_required",
+        "dynamic_capacity",
+    ]
+
+    for e in TesSystem:
+        key = e.name.lower()  # 'PTES' -> 'ptes'
+        block = dh.get(key)
+        if block is None:
+            raise KeyError(f"Missing config block: sector.district_heating.{key}")
+
+        missing = [k for k in required if k not in block]
+        if missing:
+            raise ValueError(f"{e.name} missing required keys: {missing} "
+                             f"(in sector.district_heating.{key})")
+
+        out[e.name] = block  # keep as-is; no inheritance, no renames
+
+    return out
+
+
+rule build_tes_operations:
     params:
-        max_ptes_top_temperature=config_provider(
-            "sector",
-            "district_heating",
-            "ptes",
-            "max_top_temperature",
-        ),
-        min_ptes_bottom_temperature=config_provider(
-            "sector",
-            "district_heating",
-            "ptes",
-            "min_bottom_temperature",
-        ),
-        ptes_temperature_profile=config_provider(
-            "sector",
-            "district_heating",
-            "ptes",
-            "temperature_profile",
-        ),
-        charge_boosting_required=config_provider(
-            "sector",
-            "district_heating",
-            "ptes",
-            "charge_boosting_required",
-        ),
-        discharge_boosting_required=config_provider(
-            "sector",
-            "district_heating",
-            "ptes",
-            "discharge_boosting_required",
-        ),
-        dynamic_capacity=config_provider(
-            "sector",
-            "district_heating",
-            "ptes",
-            "dynamic_capacity",
-        ),
+        tes=lambda wc: build_tes_params(config),  # dict: {"PTES": {...}, "TTES": {...}, "ATES": {...}}
         snapshots=config_provider("snapshots"),
     input:
         central_heating_forward_temperature_profiles=resources(
@@ -504,28 +501,28 @@ rule build_ptes_operations:
         ),
         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
     output:
-        ptes_top_temperature_profile=resources(
-           "ptes_top_temperature_profile_s_{clusters}_{planning_horizons}.nc"
+        tes_top_temperature_profile=resources(
+           "tes_top_temperature_profiles_s_{clusters}_{planning_horizons}.nc"
         ),
-        ptes_e_max_pu_profile=resources(
-            "ptes_e_max_pu_profile_base_s_{clusters}_{planning_horizons}.nc"
+        tes_e_max_pu_profile=resources(
+            "tes_e_max_pu_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
         boost_per_discharge_profile=resources(
-            "boost_per_discharge_profile_base_s_{clusters}_{planning_horizons}.nc"
+            "boost_per_discharge_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
         boost_per_charge_profile=resources(
-            "boost_per_charge_profile_base_s_{clusters}_{planning_horizons}.nc"
+            "boost_per_charge_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
     resources:
         mem_mb=2000,
     log:
-        logs("build_ptes_operations_s_{clusters}_{planning_horizons}.log"),
+        logs("build_tes_operations_s_{clusters}_{planning_horizons}.log"),
     benchmark:
-        benchmarks("build_ptes_operations_s_{clusters}_{planning_horizons}")
+        benchmarks("build_tes_operations_s_{clusters}_{planning_horizons}")
     conda:
         "../envs/environment.yaml"
     script:
-        "../scripts/build_ptes_operations/run.py"
+        "../scripts/build_tes_operations/run.py"
 
 
 rule build_direct_heat_source_utilisation_profiles:
@@ -1397,8 +1394,8 @@ rule prepare_sector_network:
         temp_soil_total=resources("temp_soil_total_base_s_{clusters}.nc"),
         temp_air_total=resources("temp_air_total_base_s_{clusters}.nc"),
         cop_profiles=resources("cop_profiles_base_s_{clusters}_{planning_horizons}.nc"),
-        ptes_e_max_pu_profiles=resources(
-            "ptes_e_max_pu_profile_base_s_{clusters}_{planning_horizons}.nc"
+        tes_e_max_pu_profiles=resources(
+            "tes_e_max_pu_profile_base_s_{clusters}_{planning_horizons}.nc"
         ),
         solar_thermal_total=lambda w: (
             resources("solar_thermal_total_base_s_{clusters}.nc")
