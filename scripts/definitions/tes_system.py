@@ -17,9 +17,9 @@ class TesSystem(Enum):
         Aquifer Thermal Energy Storage.
     """
 
-    TTES = "water tanks"
-    PTES = "water pits"
-    ATES = "aquifer thermal energy storage"
+    TTES = "tank_thermal_energy_storage"
+    PTES = "pit_thermal_energy_storage"
+    ATES = "aquifer_thermal_energy_storage"
 
     def __str__(self) -> str:
         """

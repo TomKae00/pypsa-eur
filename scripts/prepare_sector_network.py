@@ -2755,7 +2755,7 @@ def add_heat(
     cop_profiles_file: str,
     direct_heat_source_utilisation_profile_file: str,
     hourly_heat_demand_total_file: str,
-    ptes_e_max_pu_file: str,
+    tes_e_max_pu_file: str,
     ates_e_nom_max: str,
     ates_capex_as_fraction_of_geothermal_heat_source: float,
     ates_recovery_factor: float,
@@ -2946,7 +2946,7 @@ def add_heat(
                 heat_system.central_or_decentral
             ]
 
-            if options["district_heating"]["ttes"]["enable"]:
+            if options["district_heating"]["tank_thermal_energy_storage"]["enable"]:
                 n.add("Carrier", f"{heat_system} water tanks")
 
                 n.add(
@@ -3019,7 +3019,7 @@ def add_heat(
                     ],
                 )
 
-            if heat_system == HeatSystem.URBAN_CENTRAL and options["district_heating"]["ptes"]["enable"
+            if heat_system == HeatSystem.URBAN_CENTRAL and options["district_heating"]["pit_thermal_energy_storage"]["enable"
                 ]:
                 n.add("Carrier", f"{heat_system} water pits")
 
@@ -3074,9 +3074,10 @@ def add_heat(
 
                 # Load pre-calculated e_max_pu profiles
                 # (flat ones if dynamic capacity disabled)
-                e_max_pu_data = xr.open_dataarray(ptes_e_max_pu_file)
+                e_max_pu_data = xr.open_dataarray(tes_e_max_pu_file)
                 e_max_pu = (
-                    e_max_pu_data.sel(name=nodes)
+                    e_max_pu_data.sel(tes_system='pit_thermal_energy_storage')
+                    .sel(name=nodes)
                     .to_pandas()
                     .reindex(index=n.snapshots)
                 )
@@ -6230,18 +6231,18 @@ if __name__ == "__main__":
             cop_profiles_file=snakemake.input.cop_profiles,
             direct_heat_source_utilisation_profile_file=snakemake.input.direct_heat_source_utilisation_profiles,
             hourly_heat_demand_total_file=snakemake.input.hourly_heat_demand_total,
-            ptes_e_max_pu_file=snakemake.input.ptes_e_max_pu_profiles,
+            tes_e_max_pu_file=snakemake.input.tes_e_max_pu_profiles,
             ates_e_nom_max=snakemake.input.ates_potentials,
             ates_capex_as_fraction_of_geothermal_heat_source=snakemake.params.sector[
                 "district_heating"
-            ]["ates"]["capex_as_fraction_of_geothermal_heat_source"],
+            ]["aquifer_thermal_energy_storage"]["capex_as_fraction_of_geothermal_heat_source"],
             ates_marginal_cost_charger=snakemake.params.sector["district_heating"][
-                "ates"
+                "aquifer_thermal_energy_storage"
             ]["marginal_cost_charger"],
-            ates_recovery_factor=snakemake.params.sector["district_heating"]["ates"][
+            ates_recovery_factor=snakemake.params.sector["district_heating"]["aquifer_thermal_energy_storage"][
                 "recovery_factor"
             ],
-            enable_ates=snakemake.params.sector["district_heating"]["ates"]["enable"],
+            enable_ates=snakemake.params.sector["district_heating"]["aquifer_thermal_energy_storage"]["enable"],
             district_heat_share_file=snakemake.input.district_heat_share,
             solar_thermal_total_file=snakemake.input.solar_thermal_total,
             retro_cost_file=snakemake.input.retro_cost,

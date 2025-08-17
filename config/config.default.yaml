@@ -513,29 +513,29 @@ sector:
       upper_threshold_ambient_temperature: 10
       rolling_window_ambient_temperature: 72
       relative_annual_temperature_reduction: 0.01
-    ptes:
+    pit_thermal_energy_storage:
       enable: true
       dynamic_capacity: false
       discharge_boosting_required: false
-      charger_boosting_required: false
+      charge_boosting_required: false
       temperature_profile: 'constant'
       booster_technologies: ["resistive heater", "air heat pump", "water pits heat pump"]
       max_top_temperature: 90
       min_bottom_temperature: 35
-    ttes:
+    tank_thermal_energy_storage: #ttes:
       enable: true
       dynamic_capacity: false
       discharge_boosting_required: false
-      charger_boosting_required: false
+      charge_boosting_required: false
       temperature_profile: "constant"
       booster_technologies: [ "resistive heater", "air heat pump", "water pits heat pump" ]
       max_top_temperature: 120
       min_bottom_temperature: 35
-    ates:
+    aquifer_thermal_energy_storage:
       enable: false
       dynamic_capacity: false
       discharge_boosting_required: false
-      charger_boosting_required: false
+      charge_boosting_required: false
       temperature_profile: "constant"
       booster_technologies: [ "resistive heater", "air heat pump", "water pits heat pump" ]
       max_top_temperature: 60
@@ -1057,7 +1057,7 @@ solving:
       solver: "ipm"
       run_crossover: "off"
       small_matrix_value: 1e-6
-      large_matrix_value: 1e9
+      large_matrix_value: 1e9https://login.wifionice.de/cna/?url=http%3A%2F%2Fconnectivity-check.ubuntu.com%2F
       primal_feasibility_tolerance: 1e-5
       dual_feasibility_tolerance: 1e-5
       ipm_optimality_tolerance: 1e-4

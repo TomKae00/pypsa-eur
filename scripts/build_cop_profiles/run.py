@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
         snakemake = mock_snakemake(
             "build_cop_profiles",
-            clusters=5,
+            clusters=8,
             planning_horizons=2030,
         )
 
@@ -129,11 +129,17 @@ if __name__ == "__main__":
     for heat_system_type, heat_sources in snakemake.params.heat_pump_sources.items():
         cop_this_system_type = []
         for heat_source in heat_sources:
-            if heat_source in ["ground", "air"] or TesSystem:
+            if heat_source in ["ground", "air"]:
                 source_inlet_temperature_celsius = xr.open_dataarray(
                     snakemake.input[
                         f"temp_{heat_source.replace(" ", "_").replace('ground', 'soil')}_total"
                     ]
+                )
+            elif heat_source in TesSystem:
+                source_inlet_temperature_celsius = (
+                    xr.open_dataarray(snakemake.input["temp_tes_total"])
+                        .sel(tes_system=heat_source)
+                        .reset_coords(drop=True)
                 )
             elif heat_source in snakemake.params.limited_heat_sources.keys():
                 source_inlet_temperature_celsius = (
@@ -143,7 +149,7 @@ if __name__ == "__main__":
                 )
             else:
                 raise ValueError(
-                    f"Unknown heat source {heat_source}. Must be one of [ground, air] or {snakemake.params.heat_sources.keys()}."
+                    f"Unknown heat source {heat_source}. Must be one of [ground, air] or {snakemake.params.limited_heat_sources.keys()}." # brauch ein fix gibt die falschen errors raus # ist limited_heat_sources gemeint anstatt heat_sources?
                 )
 
             cop_da = get_cop(

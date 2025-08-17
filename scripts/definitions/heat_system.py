@@ -6,6 +6,7 @@ from enum import Enum
 
 from scripts.definitions.heat_sector import HeatSector
 from scripts.definitions.heat_system_type import HeatSystemType
+from scripts.definitions.tes_system import TesSystem
 
 
 class HeatSystem(Enum):
@@ -223,7 +224,7 @@ class HeatSystem(Enum):
         str
             The name for the heat pump costs.
         """
-        if heat_source in ["water pits", "geothermal"]:
+        if heat_source in ["geothermal"] or heat_source in TesSystem:
             return f"{self.central_or_decentral} excess-heat-sourced heat pump"
         else:
             return f"{self.central_or_decentral} {heat_source}-sourced heat pump"

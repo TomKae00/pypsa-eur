@@ -73,7 +73,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_tes_operations",
             clusters=8,
-            planning_horizons="2040",
+            planning_horizons="2030",
         )
 
     set_scenario_config(snakemake)
@@ -119,8 +119,9 @@ if __name__ == "__main__":
 
         for variable in profiles_all_tes_systems:
             profiles_all_tes_systems[variable].append(getattr(tes_temperature_approximator, variable))
-        tes_system_all_names.append(tes_system.name)
+        tes_system_all_names.append(tes_system.value)
 
+        # hier muss das tes_system anders bennant werden, damit es richtig ausgewählt wird
     tes_system_index = pd.Index(tes_system_all_names, name="tes_system")
 
     for variable, dataarrays in profiles_all_tes_systems.items():

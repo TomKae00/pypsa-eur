@@ -12,7 +12,7 @@ def ptes_operation_profiles(w):
         "sector", "district_heating", "ptes", "discharge_boosting_required"
     )(w):
         profiles["boost_per_discharge_profile"] = resources(
-            "boost_per_discharge_profile_base_s_{clusters}_{planning_horizons}.nc"
+            "boost_per_discharge_profiles_base_s_{clusters}_{planning_horizons}.nc"
         )
         profiles["cop_profiles"] = resources(
             "cop_profiles_base_s_{clusters}_{planning_horizons}.nc"
@@ -22,7 +22,7 @@ def ptes_operation_profiles(w):
         "sector", "district_heating", "ptes", "charger_boosting_required"
     )(w):
         profiles["boost_per_charge_profile"] = resources(
-            "boost_per_charge_profile_base_s_{clusters}_{planning_horizons}.nc"
+            "boost_per_charge_profiles_base_s_{clusters}_{planning_horizons}.nc"
         )
 
     return profiles

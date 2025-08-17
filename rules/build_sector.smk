@@ -337,49 +337,49 @@ rule build_ates_potentials:
         max_top_temperature=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "max_top_temperature",
         ),
         min_bottom_temperature=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "min_bottom_temperature",
         ),
         suitable_aquifer_types=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "suitable_aquifer_types",
         ),
         aquifer_volumetric_heat_capacity=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "aquifer_volumetric_heat_capacity",
         ),
         fraction_of_aquifer_area_available=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "fraction_of_aquifer_area_available",
         ),
         effective_screen_length=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "effective_screen_length",
         ),
         dh_area_buffer=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "dh_area_buffer",
         ),
         ignore_missing_regions=config_provider(
             "sector",
             "district_heating",
-            "ates",
+            "aquifer_thermal_energy_storage",
             "ignore_missing_regions",
         ),
         countries=config_provider("countries"),
@@ -441,7 +441,7 @@ rule build_cop_profiles:
         temp_soil_total=resources("temp_soil_total_base_s_{clusters}.nc"),
         temp_air_total=resources("temp_air_total_base_s_{clusters}.nc"),
         temp_tes_total=resources(
-            "tes_top_temperature_profile_s_{clusters}_{planning_horizons}.nc"
+            "tes_top_temperature_profiles_s_{clusters}_{planning_horizons}.nc"
         ),
         regions_onshore=resources("regions_onshore_base_s_{clusters}.geojson"),
     output:
@@ -472,18 +472,18 @@ def build_tes_params(cfg):
         "dynamic_capacity",
     ]
 
-    for e in TesSystem:
-        key = e.name.lower()  # 'PTES' -> 'ptes'
+    for tes_system in TesSystem:
+        key = tes_system.value          # e.g. "tank_thermal_energy_storage"
         block = dh.get(key)
         if block is None:
-            raise KeyError(f"Missing config block: sector.district_heating.{key}")
+            raise KeyError(f"Missing config block: sector.district_heating.{tes_system}")
 
         missing = [k for k in required if k not in block]
         if missing:
-            raise ValueError(f"{e.name} missing required keys: {missing} "
-                             f"(in sector.district_heating.{key})")
+            raise ValueError(f"{tes_system.name} missing required keys: {missing} "
+                             f"(in sector.district_heating.{tes_system})")
 
-        out[e.name] = block  # keep as-is; no inheritance, no renames
+        out[tes_system.name] = block  # keep as-is; no inheritance, no renames
 
     return out
 
@@ -1395,7 +1395,7 @@ rule prepare_sector_network:
         temp_air_total=resources("temp_air_total_base_s_{clusters}.nc"),
         cop_profiles=resources("cop_profiles_base_s_{clusters}_{planning_horizons}.nc"),
         tes_e_max_pu_profiles=resources(
-            "tes_e_max_pu_profile_base_s_{clusters}_{planning_horizons}.nc"
+            "tes_e_max_pu_profiles_base_s_{clusters}_{planning_horizons}.nc"
         ),
         solar_thermal_total=lambda w: (
             resources("solar_thermal_total_base_s_{clusters}.nc")
@@ -1427,7 +1427,7 @@ rule prepare_sector_network:
         ),
         ates_potentials=lambda w: (
             resources("ates_potentials_base_s_{clusters}_{planning_horizons}.csv")
-            if config_provider("sector", "district_heating", "ates", "enable")(w)
+            if config_provider("sector", "district_heating", "aquifer_thermal_energy_storage", "enable")(w)
             else []
         ),
     output:
