@@ -1013,76 +1013,79 @@ def add_discharge_boosting_constraints(
     """
     p = n.model["Link-p"]
     snapshot = p.coords["snapshot"]
-    tes_heat_pumps = {f"{t.value} heat pump" for t in TesSystem}
 
-    cop = xr.open_dataarray(cop_profiles_file).rename({"name": "node"})
-    ptes_boost_per_discharge_dataarray = xr.open_dataarray(boost_per_discharge_profile_file).rename({"name": "node"})
+    for tes_system in TesSystem: # das stimmt nicht, wir dürfen nur über die loopen, die verfügbar sind.
 
-    # --- RHS: ptes discharger
-    ptes_discharger_links = n.links.index[
-        n.links.index.str.contains("urban central water pits discharger")
-    ]
-    ptes_discharger_node_da = xr.DataArray(
-        ptes_discharger_links.str.extract(r"^(\S+\s+\S+)")[0].to_numpy(),
-        coords={"Link": ptes_discharger_links},
-        dims="Link",
-        name="node"
-    )
+        tes_heat_pumps = f"{tes_system.value} heat pump"
+        cop = xr.open_dataarray(cop_profiles_file).rename({"name": "node"})
+        boost_per_discharge_dataarray = xr.open_dataarray(boost_per_discharge_profile_file).sel(tes_system=tes_system).rename({"name": "node"})
 
-    rhs_base = p.sel(Link=ptes_discharger_links).groupby(ptes_discharger_node_da).sum("Link")
-    gamma = (
-        ptes_boost_per_discharge_dataarray
-        .sel(node=rhs_base.coords["node"])
-        .sel(time=snapshot)
-        .transpose("snapshot", "node")
-    )
-    rhs = rhs_base * (gamma / (gamma + 1e-9))
-
-    # --- LHS: boosters
-    lhs = None
-    for tech in ptes_booster_technologies:
-        booster_technologies_links = n.links.index[
-            n.links.index.str.contains("urban central") & n.links.index.str.contains(tech)
+        # --- RHS: ptes discharger
+        discharger_links = n.links.index[
+            n.links.index.str.contains(f"urban central {tes_system} discharger")
         ]
-        if booster_technologies_links.empty:
-            if tech in tes_heat_pumps:
-                raise ValueError(
-                    f"Booster technology {tech} not found: it may not be listed as a heat_pump_source for urban central heating"
-                )
-            raise ValueError(f"No links found for booster technology '{tech}', check if the component exists")
-
-        booster_tech_nodes_da = xr.DataArray(
-            booster_technologies_links.str.extract(r"^(\S+\s+\S+)")[0].to_numpy(),
-            coords={"Link": booster_technologies_links},
+        discharger_node_da = xr.DataArray(
+            discharger_links.str.extract(r"^(\S+\s+\S+)")[0].to_numpy(),
+            coords={"Link": discharger_links},
             dims="Link",
-            name="node",
+            name="node"
         )
-        expr_base = p.sel(Link=booster_technologies_links).groupby(booster_tech_nodes_da).sum("Link")
 
-        if tech in tes_heat_pumps:
-            cop_heat_pump_da = (
-                cop.sel(heat_system="urban central", heat_source="water pits")
-                .sel(node=expr_base.coords["node"])
-                .sel(time=snapshot)
-                .transpose("snapshot", "node")
+        rhs_base = p.sel(Link=discharger_links).groupby(discharger_node_da).sum("Link")
+        gamma = (
+            boost_per_discharge_dataarray
+            .sel(node=rhs_base.coords["node"])
+            .sel(time=snapshot)
+            .transpose("snapshot", "node")
+        )
+        rhs = rhs_base * (gamma / (gamma + 1e-9))
+
+        # --- LHS: boosters
+        lhs = None
+        for tech in ptes_booster_technologies:
+            booster_technologies_links = n.links.index[
+                n.links.index.str.contains("urban central") & n.links.index.str.contains(tech)
+            ]
+            n.model.add_variables(coords=p.sel(Link=booster_technologies_links), name=f"{tes_system} {tech}")
+            if booster_technologies_links.empty:
+                if tech in tes_heat_pumps:
+                    raise ValueError(
+                        f"Booster technology {tech} not found: it may not be listed as a heat_pump_source for urban central heating"
+                    )
+                raise ValueError(f"No links found for booster technology '{tech}', check if the component exists")
+
+            booster_tech_nodes_da = xr.DataArray(
+                booster_technologies_links.str.extract(r"^(\S+\s+\S+)")[0].to_numpy(),
+                coords={"Link": booster_technologies_links},
+                dims="Link",
+                name="node",
             )
-            alpha = (cop_heat_pump_da - 1).clip(min=0)
-            expr = expr_base * alpha
+            expr_base = p.sel(Link=booster_technologies_links).groupby(booster_tech_nodes_da).sum("Link")
 
-            # per-tech constraint
-            n.model.add_constraints(expr <= rhs, name=f"{tech}_thermal_output_constraint")
-        else:
-            ptes_booster_per_discharge_da = (ptes_boost_per_discharge_dataarray
-                         .sel(node=expr_base.coords["node"])
-                         .sel(time=snapshot)
-                         .transpose("snapshot", "node")
-                         )
-            alpha = xr.where(ptes_booster_per_discharge_da > 0, 1.0 / ptes_booster_per_discharge_da, 0.0)
-            expr = expr_base * alpha
+            if tech in tes_heat_pumps:
+                cop_heat_pump_da = (
+                    cop.sel(heat_system="urban central", heat_source=tes_system)
+                    .sel(node=expr_base.coords["node"])
+                    .sel(time=snapshot)
+                    .transpose("snapshot", "node")
+                )
+                alpha = (cop_heat_pump_da - 1).clip(min=0)
+                expr = expr_base * alpha
 
-        lhs = expr if lhs is None else (lhs + expr)
+                # per-tech constraint
+                n.model.add_constraints(expr <= rhs, name=f"{tech}_thermal_output_constraint")
+            else:
+                booster_per_discharge_da = (boost_per_discharge_dataarray
+                    .sel(node=expr_base.coords["node"])
+                    .sel(time=snapshot)
+                    .transpose("snapshot", "node")
+                )
+                alpha = xr.where(booster_per_discharge_da > 0, 1.0 / booster_per_discharge_da, 0.0)
+                expr = expr_base * alpha
 
-    n.model.add_constraints(lhs >= rhs, name="ptes_discharge_boosting")
+            lhs = expr if lhs is None else (lhs + expr)
+
+        n.model.add_constraints(lhs >= rhs, name=f"{tes_system}_discharge_boosting")
 
 
 def add_charge_boosting_constraints(
@@ -1432,22 +1435,22 @@ def extra_functionality(
     add_battery_constraints(n)
     add_lossy_bidirectional_link_constraints(n)
     add_pipe_retrofit_constraint(n)
-    if config['sector']['district_heating']['ptes']['discharge_boosting_required']:
+    if config['sector']['district_heating']['pit_thermal_energy_storage']['discharge_boosting_required']:
         if config['foresight'] == 'perfect':
             raise ValueError("Temperature boosting is not available with perfect foresight.")
         add_discharge_boosting_constraints(
             n,
             boost_per_discharge_profile_file=boost_per_discharge_profile_file,
             cop_profiles_file=cop_profiles_file,
-            ptes_booster_technologies=config['sector']['district_heating']['ptes']['booster_technologies'],
+            ptes_booster_technologies=config['sector']['district_heating']['pit_thermal_energy_storage']['booster_technologies'],
         )
-    if config['sector']['district_heating']['ptes']['charger_boosting_required']:
+    if config['sector']['district_heating']['pit_thermal_energy_storage']['charger_boosting_required']:
         if config['foresight'] == 'perfect':
             raise ValueError("Temperature boosting is not available with perfect foresight.")
         add_charge_boosting_constraints(
             n,
             boost_per_charge_profile_file=boost_per_charge_profile_file,
-            ptes_booster_technologies=config['sector']['district_heating']['ptes']['booster_technologies'],
+            ptes_booster_technologies=config['sector']['district_heating']['pit_thermal_energy_storage']['booster_technologies'],
         )
     if n._multi_invest:
         add_carbon_constraint(n, snapshots)
@@ -1626,12 +1629,12 @@ if __name__ == "__main__":
         from scripts._helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_sector_network_myopic",
+            "solve_sector_network",
             opts="",
             clusters="8",
             #configfiles="config/test/config.myopic.yaml",
             sector_opts="",
-            planning_horizons="2050",
+            planning_horizons="2030",
         )
     configure_logging(snakemake)
     set_scenario_config(snakemake)
