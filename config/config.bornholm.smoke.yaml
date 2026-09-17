@@ -2,7 +2,7 @@ run:
   name: all
   scenarios:
     enable: true
-    file: config/scenarios_bornholm.yaml
+    file: config/scenarios_bornholm_smoke.yaml
 foresight: overnight
 planning_horizons:
 - 2035
@@ -10,9 +10,9 @@ sector:
   enabled: false
 clustering:
   cluster_network:
-    n_clusters: 90
+    n_clusters: 20
   temporal:
-    averaging: 3h
+    averaging: 6h
 energy_islands:
   enabled: false
   case: hybrid
@@ -25,3 +25,8 @@ solving:
   solver:
     name: highs
     options: highs-default
+countries:
+- DK
+- DE
+- SE
+- PL

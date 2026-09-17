@@ -81,14 +81,6 @@ if __name__ == "__main__":
 
     add_electricity_components(n, inputs, params, costs)
 
-    add_energy_islands(
-        n,
-        inputs,
-        params.energy_islands,
-        costs,
-        current_horizon=current_horizon,
-    )
-
     if sector_mode:
         add_sector_components(n, inputs, params, costs, nyears, current_horizon)
 
@@ -119,6 +111,16 @@ if __name__ == "__main__":
 
     apply_co2_budget_constraints(
         n, inputs=inputs, params=params, nyears=nyears, current_horizon=current_horizon
+    )
+
+    # Add exogenous energy-island projects after generic transmission
+    # preparation so their fixed capacity bounds are preserved.
+    add_energy_islands(
+        n,
+        inputs,
+        params.energy_islands,
+        costs,
+        current_horizon=current_horizon,
     )
 
     adjustments = params.adjustments

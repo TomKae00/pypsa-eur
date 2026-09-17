@@ -1,0 +1,11 @@
+smoke_baseline:
+  energy_islands:
+    enabled: false
+smoke_radial:
+  energy_islands:
+    enabled: true
+    case: radial
+smoke_hybrid:
+  energy_islands:
+    enabled: true
+    case: hybrid
