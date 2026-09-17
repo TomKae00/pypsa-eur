@@ -1,0 +1,27 @@
+run:
+  name: all
+  scenarios:
+    enable: true
+    file: config/scenarios_bornholm.yaml
+
+foresight: overnight
+planning_horizons:
+- 2040
+
+sector:
+  enabled: false
+
+clustering:
+  cluster_network:
+    n_clusters: 90
+  temporal:
+    averaging: 3h
+
+energy_islands:
+  enabled: false
+  case: hybrid
+  hubs: data/energy_islands/bornholm_hubs.csv
+  wind: data/energy_islands/bornholm_wind.csv
+  links: data/energy_islands/bornholm_links.csv
+  subtract_generic_potential: true
+  length_factor: 1.25

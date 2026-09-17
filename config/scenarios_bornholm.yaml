@@ -1,0 +1,13 @@
+baseline:
+  energy_islands:
+    enabled: false
+
+radial:
+  energy_islands:
+    enabled: true
+    case: radial
+
+hybrid:
+  energy_islands:
+    enabled: true
+    case: hybrid

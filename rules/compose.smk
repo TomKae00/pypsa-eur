@@ -55,6 +55,14 @@ def get_compose_inputs(w):
         ),
     )
 
+    energy_islands = cfg.get("energy_islands", {})
+    if energy_islands.get("enabled", False):
+        inputs.update(
+            energy_island_hubs=energy_islands["hubs"],
+            energy_island_wind=energy_islands["wind"],
+            energy_island_links=energy_islands["links"],
+        )
+
     # Sector-specific inputs (only when sector coupling is enabled)
     if sector_enabled:
         sector_inputs = dict(
@@ -174,6 +182,7 @@ def get_compose_inputs(w):
         "scripts/add_electricity.py",
         "scripts/add_existing_baseyear.py",
         "scripts/add_brownfield.py",
+        "scripts/add_energy_islands.py",
         "scripts/prepare_network.py",
         "scripts/prepare_perfect_foresight.py",
         "scripts/prepare_sector_network.py",
@@ -242,6 +251,9 @@ rule compose_network:
         ),
         co2_budget=config_provider("co2_budget"),
         adjustments=config_provider("adjustments"),
+        energy_islands=config_provider(
+            "energy_islands", default={"enabled": False}
+        ),
     message:
         "Composing network for horizon {wildcards.horizon}"
     script:
