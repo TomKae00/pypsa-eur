@@ -8,6 +8,9 @@ run:
   shared_resources:
     policy: false
 foresight: overnight
+# Explicit full study footprint; never inherit a Bornholm smoke-run subset.
+# This is PyPSA-Eur's 34-country footprint, not every geographical European state.
+countries: [AL, AT, BA, BE, BG, CH, CZ, DE, DK, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT, LT, LU, LV, ME, MK, NL, 'NO', PL, PT, RO, RS, SE, SI, SK, XK]
 planning_horizons: [2023]
 sector:
   enabled: false

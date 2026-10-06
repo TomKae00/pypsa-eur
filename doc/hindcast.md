@@ -2,24 +2,80 @@
 
 ## What is implemented
 
-This is the first validation stage before Bornholm scenario runs. Start by
-benchmarking the authors' published **Hindcast-dynamic 2023** network. It already
-contains the hourly demand, renewable availability, fixed capacities, and dynamic
-generator marginal costs. A second command re-solves those inputs with the local
-PyPSA installation. A separate configuration starts a rebuild with this branch.
+The main case is a **Europe-wide historical network represented by bidding
+zones**, before Bornholm scenario runs. `build-2023.yaml` explicitly includes
+PyPSA-Eur's default 34-country study footprint, with bidding-zone clustering and
+hourly 2023 inputs. It does not inherit the four-country smoke-case selection.
+This footprint does not literally include every European state: extensions to
+Ukraine, Moldova or Turkey require corresponding historical network and input
+data. Keep the build and benchmark country lists consistent if extending it.
 
-These are distinct results:
+`benchmark.yaml` is now the main zonal benchmark. Every electricity bus must be
+mapped to its historical bidding zone. All mapped zones and all modelled
+inter-zone AC/DC connections enter the reporting; missing observations are
+reported as unscored, never used to remove a country from the optimisation.
+Separate DK1/DK2, SE1–SE4 and NO1–NO5 are required. Italian and other market zones
+must also use their historical boundaries and identifiers in the bus mapping.
 
-1. Benchmarking the archived solved network checks our analysis against the
-   published model. It does not validate our own new network construction.
-2. Re-solving the archived inputs checks reproducibility with our PyPSA/solver.
-3. Building a new historical network and applying the same benchmark validates
-   the construction workflow that will later support the Bornholm analysis.
+The authors' archived 2023 solution is a separate reference exercise using
+`benchmark-reference.yaml`. Its six-country selection affects only reported
+metrics: the archived optimisation itself covers its full European network.
+Those six selections did not truncate the simulated system or cause the price
+errors. However, the archive has country-level DK/SE/NO buses and cannot be made
+into a bidding-zone model by renaming or duplicating their prices.
 
-The CLI implements the paper's MAE/RMSE/SMAPE comparisons at hourly, daily and
-weekly resolution. The default six-country selection targets Northern Europe.
-It additionally calculates price spreads, border flows, signed bias, correlation,
-coverage and load shedding. No arbitrary pass/fail threshold is imposed.
+Building and solving our historical zonal network remains necessary. Benchmarking
+or re-solving an archived country-level network does not validate that new build.
+The CLI reports raw hourly/daily/weekly MAE, RMSE, SMAPE, bias, correlation, coverage,
+price spreads, border flows and load shedding without arbitrary pass thresholds.
+
+## Main Europe-wide bidding-zone workflow
+
+1. Build the composed network using `build-2023.yaml` as described below.
+2. Create the bus mapping template from that actual network:
+
+```bash
+pixi run python scripts/hindcast.py prepare-zonal \
+  resources/hindcast-build-2023/networks/composed_2023.nc
+```
+
+Fill `data/hindcast/bus_zones_2023.csv` with the historical ENTSO-E area code for
+**every** bus, for example `DK_1`, `DK_2`, `SE_4`, `DE_LU`, `IT_NORD`. Use the
+actual bus names written by the command, not illustrative names. Multiple buses
+may share a market zone, including shared zones spanning countries, but one bus
+cannot represent multiple zones. Refer to the generated bidding-zone shapes and
+bus maps; current shape data must be reconciled with the target historical year.
+No country-prefix guessing is applied. Re-run the command after filling the CSV;
+it generates `data/hindcast/flow-sources-zonal-2023.yaml` for **all** modelled zonal
+borders. Their canonical direction is alphabetical zone order.
+
+3. Build hourly historical marginal costs and solve the complete network using
+   the commands below. Changing the reporting selection never changes the solve.
+4. Export zonal price observations from the ENTSO-E pipeline as
+   `data/hindcast/prices_zonal_2023.csv`: UTC hourly index and one column per exact
+   `bidding_zone` code in the mapping. Do not use country-averaged DK/SE/NO prices.
+   Retain unavailable zones as all-missing columns; they remain in the network
+   and are explicitly unscored. The pinned analyzer CSV is incomplete for this
+   full zonal scope and has different identifiers, so it is not the default here.
+5. Retrieve physical flows using the generated list of all zonal borders:
+
+```bash
+pixi run python scripts/retrieve_hindcast_flows.py --year 2023 --kind physical
+```
+
+Set `flows: data/hindcast/flows_physical_2023.csv` in `benchmark.yaml`, then run:
+
+```bash
+pixi run python scripts/hindcast.py benchmark --config config/hindcast/benchmark.yaml
+```
+
+Existing pipeline observations may be supplied directly in the same format.
+For unsupported directional API queries the flow downloader stops explicitly;
+provide a documented alternate source or missing columns rather than inventing
+zero exchange. All-missing borders are reported as unscored in the benchmark.
+The European network, manual historical-zone mapping, price/flow observations
+and historical costs still need to be supplied; these instructions are not a
+claim that that full workflow has already been executed.
 
 ## Sources and provenance
 
@@ -44,13 +100,13 @@ file and record that difference, rather than silently changing its topology.
 The file contains no load-shedding generators; its metadata sets transmission
 losses to 2. The re-solve preserves these choices (it does not add load shedding).
 
-## First run on your laptop
+## Optional published-network reference comparison
 
 Run from the root of your existing PyPSA-Eur checkout, using its Pixi environment:
 
 ```bash
 pixi run python scripts/hindcast.py fetch-reference --year 2023
-pixi run python scripts/hindcast.py benchmark --config config/hindcast/benchmark.yaml
+pixi run python scripts/hindcast.py benchmark --config config/hindcast/benchmark-reference.yaml
 ```
 
 This uses the published solved network and creates `results/hindcast-dynamic-2023/`:
@@ -74,6 +130,7 @@ pixi run python scripts/hindcast.py solve \
   --solver gurobi --threads 4
 
 pixi run python scripts/hindcast.py benchmark \
+  --config config/hindcast/benchmark-reference.yaml \
   --network results/hindcast-resolved-2023/network.nc \
   --output results/hindcast-resolved-2023/benchmark
 ```
@@ -89,24 +146,26 @@ Custom constraints defined only in external Python callbacks cannot be recovered
 from NetCDF. The archived inputs and current PyPSA version alone are therefore
 not a guarantee of an identical optimisation problem; inspect the re-solve check.
 
-## Historical power flows
+## Country-level reference flow comparison
 
 Retrieve directional data with your existing ENTSO-E credentials in the environment
 (`ENTSOE_API_KEY`). Do not commit the token. `entsoe-py` is already included in
 this branch's Pixi dependencies and is needed for retrieval only.
 
 ```bash
-pixi run python scripts/retrieve_hindcast_flows.py --year 2023 --kind physical
+pixi run python scripts/retrieve_hindcast_flows.py --year 2023 --kind physical \
+  --config config/hindcast/flow-sources-reference.yaml \
+  --output data/hindcast/flows_reference_2023.csv
 ```
 
-Then set in `config/hindcast/benchmark.yaml`:
+Then set in `config/hindcast/benchmark-reference.yaml`:
 
 ```yaml
-flows: data/hindcast/flows_physical_2023.csv
+flows: data/hindcast/flows_reference_2023.csv
 flow_kind: physical
 ```
 
-Re-run the benchmark command. Border mappings in `flow-sources.yaml` sum
+Re-run the reference benchmark command. Border mappings in `flow-sources-reference.yaml` sum
 DK1–Germany and DK2–Germany into DK–Germany, and the two relevant Danish–Swedish
 borders into DK–Sweden. SE–PL uses SE4–PL. Both directional series are queried and
 subtracted; a missing series raises an error and is not assumed to be zero.
@@ -137,9 +196,10 @@ The paper file has country-level buses, including one DK, SE and NO bus each.
 Prices for countries with multiple zones are aggregated using historical zonal
 loads. All declared zones and loads must be present; a missing zone invalidates
 that hour. Single-zone regions do not need load weights. A country DK price is
-**not a DK2 price**. The default DK–DE spread is labelled accordingly.
+**not a DK2 price**. The reference DK–DE spread is labelled accordingly.
 
-For your own bidding-zone network, supply an explicit mapping in a copied config:
+The main zonal workflow uses the complete bus CSV above. For a separate, explicitly
+limited diagnostic, the CLI also accepts inline regions as in this example:
 
 ```yaml
 regions:
@@ -241,7 +301,8 @@ capacity guards and a complete HiGHS solve/export/benchmark on a small system.
 ## Recorded implementation check (2026-10-06)
 
 All 11 tests passed using PyPSA 1.2.4 and HiGHS 1.15.1; Ruff checks passed.
-The real archived 2023 network was benchmarked with the default configuration:
+The real archived 2023 network was benchmarked with the six-country reference
+configuration, now named `benchmark-reference.yaml`:
 
 | Country | Matched hours | Hourly MAE (EUR/MWh) | Hourly bias (EUR/MWh) |
 | --- | ---: | ---: | ---: |
@@ -262,3 +323,10 @@ process (exit 137) before the solver returned a solution. No successful full-yea
 re-solve is claimed. Run the documented command in an adequately provisioned
 job. Historical flow validation remains pending observed-flow inputs or an
 ENTSO-E API key. The complete native network rebuild also remains to be run.
+
+## Scope revision (2026-10-06)
+
+The Europe-wide zonal configuration, complete bus mapping and all-border
+reporting were added after the recorded implementation check above. No tests,
+model solves or benchmark validation were run for this revision, as requested.
+The earlier 11-test result does not describe the revised code.

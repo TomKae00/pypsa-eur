@@ -1,41 +1,15 @@
-# Run from the repository root. Paper-country aggregation is deliberate here.
-# DK is NOT DK2: use explicit bus mappings and separate observations for a zonal run.
+# Main case: full European study network, reported by historical bidding zone.
+# The country-level archived solution has its own benchmark-reference.yaml.
 year: 2023
-network: data/hindcast/reference/hindcast-dyn-wy2023.nc
-prices: data/hindcast/reference/electricity_prices.csv
-loads: data/hindcast/reference/demand.csv
-output: results/hindcast-dynamic-2023
-regions:
-  DE:
-    country: DE
-    price_zones: [DE]
-  DK:
-    country: DK
-    price_zones: [DK_1, DK_2]
-  SE:
-    country: SE
-    price_zones: [SE_1, SE_2, SE_3, SE_4]
-  'NO':
-    country: 'NO'
-    price_zones: [NO_1, NO_2, NO_3, NO_4, NO_5]
-  PL:
-    country: PL
-    price_zones: [PL]
-  FI:
-    country: FI
-    price_zones: [FI]
-# No country-wide DK price is silently labelled as DK2.
-spreads:
-  - [DK, DE]
-  - [SE, DE]
-# Optional flow observations: UTC hourly CSV, columns like DK->DE, positive exports
-# from the first region, MW measured at that region's network boundary.
-# Missing configured borders are errors, not zeros. For ENTSO-E retrieval see docs.
+network: results/hindcast-build-2023/network.nc
+bus_zones: data/hindcast/bus_zones_2023.csv
+prices: data/hindcast/prices_zonal_2023.csv
+loads: null
+output: results/hindcast-europe-zonal-2023
+expected_countries: [AL, AT, BA, BE, BG, CH, CZ, DE, DK, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT, LT, LU, LV, ME, MK, NL, 'NO', PL, PT, RO, RS, SE, SI, SK, XK]
+required_zones: [DK_1, DK_2, NO_1, NO_2, NO_3, NO_4, NO_5, SE_1, SE_2, SE_3, SE_4]
+# All electricity buses must be mapped; all inter-zone Lines/DC Links are included.
+# Spreads and border directions are derived from those same connections.
 flows: null
 flow_kind: physical
-borders:
-  - [DK, DE]
-  - [DK, SE]
-  - [SE, PL]
-# Score raw paired observations; no price clipping or interpolation.
 min_aggregate_coverage: 1.0

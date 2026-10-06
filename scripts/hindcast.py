@@ -176,6 +176,65 @@ def region_buses(n, regions):
     return mapping
 
 
+def zonal_configuration(n, cfg):
+    """Map the entire electricity network using explicit historical zone codes.
+
+    A bus cannot be split into multiple bidding zones by postprocessing.
+    """
+    buses = n.buses.index[n.buses.carrier.isin(["AC", "DC", ""])]
+    table = pd.read_csv(cfg["bus_zones"], dtype=str, keep_default_na=False)
+    if not {"bus", "bidding_zone"}.issubset(table.columns):
+        raise ValueError("bus_zones CSV requires bus,bidding_zone columns")
+    if table.bus.duplicated().any() or table.bidding_zone.str.strip().eq("").any():
+        raise ValueError("Each bus needs exactly one explicit bidding zone")
+    if set(table.bus) != set(buses):
+        raise ValueError(
+            "Zone mapping must cover every electricity bus exactly: "
+            f"missing={sorted(set(buses) - set(table.bus))}, "
+            f"unknown={sorted(set(table.bus) - set(buses))}"
+        )
+    missing = set(cfg.get("expected_countries", [])) - set(n.buses.loc[buses, "country"])
+    if missing:
+        raise ValueError(f"European study network is missing countries: {sorted(missing)}")
+    missing = set(cfg.get("required_zones", [])) - set(table.bidding_zone)
+    if missing:
+        raise ValueError(f"Required separate bidding zones are missing: {sorted(missing)}")
+    regions = {
+        zone: {"buses": group.bus.tolist(), "price_zones": [zone]}
+        for zone, group in table.groupby("bidding_zone", sort=True)
+    }
+    zone_of = table.set_index("bus").bidding_zone.to_dict()
+    borders = set()
+    for frame in [n.lines, n.links.loc[n.links.carrier.eq("DC")]]:
+        for branch in frame.itertuples():
+            a, b = zone_of.get(branch.bus0), zone_of.get(branch.bus1)
+            if a is not None and b is not None and a != b:
+                borders.add(tuple(sorted([a, b])))
+    return dict(cfg, regions=regions, borders=sorted(borders), spreads=sorted(borders))
+
+
+def prepare_zonal(network, config, flow_sources):
+    """Create an explicit bus mapping template, then derive all flow query pairs."""
+    import pypsa
+
+    n = pypsa.Network(network)
+    cfg = yaml.safe_load(Path(config).read_text())
+    path = Path(cfg["bus_zones"])
+    if not path.exists():
+        buses = n.buses.loc[n.buses.carrier.isin(["AC", "DC", ""]), ["country"]].copy()
+        buses["bidding_zone"] = ""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        buses.to_csv(path, index_label="bus")
+        print(f"Created {path}. Fill bidding_zone with historical ENTSO-E area codes, then repeat this command.")
+        return
+    cfg = zonal_configuration(n, cfg)
+    path = Path(flow_sources)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sources = {f"{a}->{b}": [[a, b]] for a, b in cfg["borders"]}
+    path.write_text(yaml.safe_dump(sources, sort_keys=True))
+    print(f"Wrote {len(sources)} inter-zone flow query pairs to {path}")
+
+
 def model_prices(n, mapping):
     price = n.buses_t.marginal_price
     load = n.get_switchable_as_dense("Load", "p_set").T.groupby(n.loads.bus).sum().T
@@ -323,6 +382,9 @@ def benchmark(network, cfg, output):
 
     n = pypsa.Network(network)
     report = audit(n)
+    if cfg.get("bus_zones"):
+        cfg = zonal_configuration(n, cfg)
+        report["bus_zones_sha256"] = digest(cfg["bus_zones"])
     mapping = region_buses(n, cfg["regions"])
     model = model_prices(n, mapping)
     year = cfg["year"]
@@ -350,9 +412,21 @@ def benchmark(network, cfg, output):
 
     def compare(kind, key, sim, ref, unit):
         for freq in ["hourly", "daily", "weekly"]:
-            metrics, pair = paired_metrics(
-                sim, ref, freq, cfg.get("min_aggregate_coverage", 1.0)
-            )
+            try:
+                metrics, pair = paired_metrics(
+                    sim, ref, freq, cfg.get("min_aggregate_coverage", 1.0)
+                )
+            except ValueError as exc:
+                if str(exc) != "No valid matched observations at requested resolution":
+                    raise
+                matched = sim.notna() & ref.reindex(sim.index).notna()
+                rows.append({
+                    "kind": kind, "series": key, "resolution": freq, "unit": unit,
+                    "status": "NOT SCORED: insufficient paired observations",
+                    "n_expected_hours": len(sim), "n_matched_hours": int(matched.sum()),
+                    "coverage": float(matched.mean()), "n_scored": 0,
+                })
+                continue
             if kind == "flow" and freq == "hourly":
                 metrics.update(
                     {
@@ -379,6 +453,7 @@ def benchmark(network, cfg, output):
                     "series": key,
                     "resolution": freq,
                     "unit": unit,
+                    "status": "scored",
                     **metrics,
                 }
             )
@@ -516,6 +591,10 @@ def main():
     inspect = sub.add_parser("inspect")
     inspect.add_argument("network")
     inspect.add_argument("--output", default="results/hindcast-inspect.json")
+    prepare = sub.add_parser("prepare-zonal")
+    prepare.add_argument("network")
+    prepare.add_argument("--config", default="config/hindcast/benchmark.yaml")
+    prepare.add_argument("--flow-sources", default="data/hindcast/flow-sources-zonal-2023.yaml")
     run = sub.add_parser("solve")
     run.add_argument("network")
     run.add_argument("--output", required=True)
@@ -531,6 +610,8 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     if args.command == "fetch-reference":
         fetch_reference(args.year, args.directory)
+    elif args.command == "prepare-zonal":
+        prepare_zonal(args.network, args.config, args.flow_sources)
     elif args.command == "inspect":
         import pypsa
 

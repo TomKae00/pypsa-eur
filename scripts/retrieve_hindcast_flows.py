@@ -69,7 +69,7 @@ def main():
     parser.add_argument(
         "--kind", choices=["physical", "scheduled_day_ahead"], default="physical"
     )
-    parser.add_argument("--config", default="config/hindcast/flow-sources.yaml")
+    parser.add_argument("--config", default="data/hindcast/flow-sources-zonal-2023.yaml")
     parser.add_argument("--output")
     args = parser.parse_args()
     key = os.environ.get("ENTSOE_API_KEY")
