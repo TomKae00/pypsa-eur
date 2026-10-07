@@ -21,6 +21,11 @@ energy_islands:
   links: data/energy_islands/bornholm_links.csv
   subtract_generic_potential: true
   length_factor: 1.25
+  # Explicit IDs/MW from a reviewed regional-resource allocation.
+  # Example syntax only: BEI_WIND: {"ACTUAL_GENERIC_GENERATOR_ID": 3000}
+  potential_allocation: {}
+  # Required when mapped overlap is less than 3000 MW, including zero.
+  potential_allocation_notes: {}
 solving:
   solver:
     name: highs

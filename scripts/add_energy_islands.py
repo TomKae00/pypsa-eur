@@ -58,9 +58,7 @@ def _active_in_horizon(frame: pd.DataFrame, horizon: int | None) -> pd.DataFrame
     active = commissioning.isna() | commissioning.le(horizon)
 
     if "decommissioning_year" in frame:
-        decommissioning = pd.to_numeric(
-            frame["decommissioning_year"], errors="coerce"
-        )
+        decommissioning = pd.to_numeric(frame["decommissioning_year"], errors="coerce")
         active &= decommissioning.isna() | decommissioning.gt(horizon)
 
     return frame.loc[active].copy()
@@ -74,9 +72,7 @@ def _haversine_km(x0: Any, y0: Any, x1: Any, y1: Any) -> np.ndarray:
     lat1 = np.radians(np.asarray(y1, dtype=float))
     dlon = lon1 - lon0
     dlat = lat1 - lat0
-    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat0) * np.cos(lat1) * np.sin(
-        dlon / 2.0
-    ) ** 2
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat0) * np.cos(lat1) * np.sin(dlon / 2.0) ** 2
     return 6371.0 * 2.0 * np.arcsin(np.sqrt(a))
 
 
@@ -117,144 +113,137 @@ def _require_unique(frame: pd.DataFrame, column: str, table: str) -> None:
 
 
 def _select_target_bus(n: pypsa.Network, row: pd.Series) -> str:
-    """Select an exact bus or the closest eligible clustered AC bus."""
+    """Require an explicit receiving bus and validate its basic attributes.
+
+    A country and a nearest cluster are not a bidding-zone/landing mapping.
+    Use inspect_energy_islands.py on a composed baseline to find bus IDs.
+    """
     exact = _optional_string(row.get("target_bus"))
-    if exact:
-        if exact not in n.buses.index:
-            raise KeyError(f"Configured target_bus {exact!r} does not exist")
-        return exact
-
-    candidates = n.buses.copy()
-    if "carrier" in candidates:
-        candidates = candidates.loc[candidates.carrier.eq("AC")]
-
-    country = _optional_string(row.get("target_country"))
-    if country:
-        if "country" not in candidates:
-            raise KeyError("Network buses have no country column")
-        candidates = candidates.loc[candidates.country.eq(country)]
-
-    prefix = _optional_string(row.get("target_bus_prefix"))
-    if prefix:
-        candidates = candidates.loc[candidates.index.str.startswith(prefix)]
-
-    candidates = candidates.dropna(subset=["x", "y"])
-    if candidates.empty:
+    if not exact:
         raise ValueError(
-            "No target bus matches "
-            f"country={country!r}, prefix={prefix!r}"
+            f"{row['link_id']}: set target_bus explicitly in the links CSV. "
+            "Run scripts/inspect_energy_islands.py on the composed baseline. "
+            "A link name containing DK2 does not identify the receiving zone."
         )
-
-    target_x = float(row["target_x"])
-    target_y = float(row["target_y"])
-    distance = pd.Series(
-        _haversine_km(candidates.x, candidates.y, target_x, target_y),
-        index=candidates.index,
-    )
-    selected = str(distance.idxmin())
-    logger.info(
-        "Selected mainland bus %s for %s (%.1f km from target coordinate)",
-        selected,
-        row["link_id"],
-        distance.loc[selected],
-    )
-    return selected
+    if exact not in n.buses.index:
+        raise KeyError(f"Configured target_bus {exact!r} does not exist")
+    target = n.buses.loc[exact]
+    if exact == str(row["hub_id"]) or _optional_string(target.get("energy_island")):
+        raise ValueError(
+            f"{row['link_id']}: target_bus must not be an energy-island hub"
+        )
+    if target.get("carrier") != "AC":
+        raise ValueError(f"{row['link_id']}: target_bus {exact!r} must be an AC bus")
+    country = _optional_string(row.get("target_country"))
+    if country and target.get("country") != country:
+        raise ValueError(f"{row['link_id']}: {exact!r} is not in {country}")
+    prefix = _optional_string(row.get("target_bus_prefix"))
+    if prefix and not exact.startswith(prefix):
+        raise ValueError(
+            f"{row['link_id']}: {exact!r} does not match prefix {prefix!r}"
+        )
+    return exact
 
 
 def _select_profile_generator(
     n: pypsa.Network,
     carrier: str,
-    x: float,
-    y: float,
     configured_source: str,
 ) -> str:
-    """Select the configured or nearest existing generator profile."""
-    if configured_source:
-        if configured_source not in n.generators.index:
-            raise KeyError(
-                f"Configured source_generator {configured_source!r} does not exist"
-            )
-        return configured_source
-
-    candidates = n.generators.loc[n.generators.carrier.eq(carrier)].copy()
-    dynamic_profiles = set(n.generators_t.p_max_pu.columns)
-    candidates = candidates.loc[candidates.index.isin(dynamic_profiles)]
-    if candidates.empty:
+    """Use an explicit proxy profile; bus proximity is not wind-site proximity."""
+    if not configured_source:
         raise ValueError(
-            f"No existing {carrier!r} generator has a dynamic p_max_pu profile"
+            "Set source_generator explicitly in the wind CSV. "
+            "The inventory command lists available dynamic profiles. "
+            "This is a documented proxy, not a dedicated Bornholm wind profile."
         )
-
-    coordinates = n.buses.reindex(candidates.bus)[["x", "y"]]
-    coordinates.index = candidates.index
-    valid = coordinates.notna().all(axis=1)
-    candidates = candidates.loc[valid]
-    coordinates = coordinates.loc[valid]
-    if candidates.empty:
-        raise ValueError(f"No {carrier!r} profile source has valid coordinates")
-
-    distance = pd.Series(
-        _haversine_km(coordinates.x, coordinates.y, x, y),
-        index=candidates.index,
-    )
-    selected = str(distance.idxmin())
-    logger.info(
-        "Using profile from %s (associated bus %.1f km from hub)",
-        selected,
-        distance.loc[selected],
-    )
-    return selected
+    if configured_source not in n.generators.index:
+        raise KeyError(
+            f"Configured source_generator {configured_source!r} does not exist"
+        )
+    if n.generators.at[configured_source, "carrier"] != carrier:
+        raise ValueError(
+            f"Profile source {configured_source!r} does not have carrier {carrier!r}"
+        )
+    if configured_source not in n.generators_t.p_max_pu:
+        raise ValueError(f"Profile source {configured_source!r} has no dynamic profile")
+    profile = n.generators_t.p_max_pu[configured_source].reindex(n.snapshots)
+    if not np.isfinite(profile).all() or not profile.between(0.0, 1.0).all():
+        raise ValueError(
+            f"Profile {configured_source!r} must cover every snapshot and lie in [0, 1]"
+        )
+    logger.warning("Using explicitly selected proxy profile %s", configured_source)
+    return configured_source
 
 
 def _subtract_generic_potential(
     n: pypsa.Network,
     carrier: str,
     capacity_mw: float,
-    x: float,
-    y: float,
     protected_generators: set[str],
+    allocation: Mapping[str, float] | None = None,
+    country: str | None = None,
+    allocation_note: str = "",
 ) -> None:
-    """Remove dedicated project capacity from nearby generic wind potential."""
-    candidates = n.generators.loc[
-        n.generators.carrier.eq(carrier)
-        & n.generators.p_nom_extendable.fillna(False).astype(bool)
-        & ~n.generators.index.isin(protected_generators)
-    ].copy()
-    p_nom_max = pd.to_numeric(candidates.p_nom_max, errors="coerce")
-    candidates = candidates.loc[p_nom_max.notna() & np.isfinite(p_nom_max)]
-    if candidates.empty:
-        raise ValueError(f"No finite generic {carrier!r} potential can be reduced")
+    """Apply a reviewed allocation; never spill into a neighbouring country.
 
-    coordinates = n.buses.reindex(candidates.bus)[["x", "y"]]
-    coordinates.index = candidates.index
-    valid = coordinates.notna().all(axis=1)
-    candidates = candidates.loc[valid]
-    coordinates = coordinates.loc[valid]
-    distance = pd.Series(
-        _haversine_km(coordinates.x, coordinates.y, x, y),
-        index=candidates.index,
-    ).sort_values()
-
-    remaining = float(capacity_mw)
-    for generator in distance.index:
-        upper = float(n.generators.at[generator, "p_nom_max"])
-        lower_raw = n.generators.at[generator, "p_nom_min"]
-        lower = 0.0 if pd.isna(lower_raw) else float(lower_raw)
-        reducible = max(0.0, upper - lower)
-        reduction = min(remaining, reducible)
-        if reduction:
-            n.generators.at[generator, "p_nom_max"] = upper - reduction
-            remaining -= reduction
-            logger.info(
-                "Reduced generic potential %s by %.1f MW", generator, reduction
-            )
-        if remaining <= 1e-6:
-            break
-
-    if remaining > 1e-6:
+    This is capacity bookkeeping, not a geographic project-area exclusion.
+    All rows are validated before any potential is changed.
+    """
+    if not isinstance(allocation, Mapping):
         raise ValueError(
-            f"Could not subtract {capacity_mw:.1f} MW of {carrier} potential; "
-            f"{remaining:.1f} MW remains"
+            "Provide energy_islands.potential_allocation.<generator_id> as "
+            "a mapping of generic generator IDs to MW. No automatic subtraction "
+            "is performed. Do not disable subtraction to bypass this check."
         )
+    reductions = {str(key): float(value) for key, value in allocation.items()}
+    if any(not np.isfinite(value) or value <= 0 for value in reductions.values()):
+        raise ValueError(
+            "Every potential allocation must be finite and strictly positive"
+        )
+    removed = sum(reductions.values())
+    if removed > capacity_mw + 1e-6:
+        raise ValueError(
+            f"Potential allocation exceeds project capacity {capacity_mw:g} MW"
+        )
+    if (
+        not np.isclose(removed, capacity_mw, rtol=0, atol=1e-6)
+        and not allocation_note.strip()
+    ):
+        raise ValueError(
+            f"Allocation removes {removed:g} of {capacity_mw:g} MW. "
+            "Set potential_allocation_notes.<generator_id> to document why only "
+            "this overlap is represented (or why it has already been excluded). "
+            "Do not fill the difference with unrelated potential."
+        )
+    for generator, reduction in reductions.items():
+        if generator not in n.generators.index or generator in protected_generators:
+            raise ValueError(f"Invalid generic potential source {generator!r}")
+        source = n.generators.loc[generator]
+        if source.carrier != carrier or not bool(source.p_nom_extendable):
+            raise ValueError(f"{generator!r} must be an extendable {carrier} generator")
+        if country and n.buses.at[source.bus, "country"] != country:
+            raise ValueError(
+                f"{generator!r} is outside project country {country}; review the resource mapping"
+            )
+        upper = float(source.p_nom_max)
+        floor = max(float(source.p_nom_min), float(source.p_nom))
+        if (
+            not np.isfinite(upper)
+            or not np.isfinite(floor)
+            or upper - reduction < floor - 1e-6
+        ):
+            raise ValueError(
+                f"{generator!r}: cannot remove {reduction:g} MW from p_nom_max={upper:g}; "
+                f"existing/minimum capacity is {floor:g} MW. Review the resource representation."
+            )
+    for generator, reduction in reductions.items():
+        n.generators.at[generator, "p_nom_max"] -= reduction
+        logger.info(
+            "Reduced explicitly mapped potential %s by %.1f MW", generator, reduction
+        )
+    if allocation_note:
+        logger.info("Potential allocation basis: %s", allocation_note)
 
 
 def _add_hubs(n: pypsa.Network, hubs: pd.DataFrame) -> None:
@@ -281,8 +270,9 @@ def _add_wind(
     hubs: pd.DataFrame,
     costs: pd.DataFrame,
     subtract_potential: bool,
+    potential_allocation: Mapping[str, Mapping[str, float]] | None = None,
+    potential_allocation_notes: Mapping[str, str] | None = None,
 ) -> None:
-    hub_coordinates = hubs.set_index("hub_id")[["x", "y"]]
     added_generators: set[str] = set()
 
     for _, row in wind.iterrows():
@@ -293,15 +283,11 @@ def _add_wind(
         if hub_id not in n.buses.index:
             raise KeyError(f"Unknown hub_id {hub_id!r} for {generator_id}")
 
-        x = float(hub_coordinates.at[hub_id, "x"])
-        y = float(hub_coordinates.at[hub_id, "y"])
         carrier = str(row["carrier"])
         capacity_mw = float(row["capacity_mw"])
         source = _select_profile_generator(
             n,
             carrier,
-            x,
-            y,
             _optional_string(row.get("source_generator")),
         )
         profile = n.generators_t.p_max_pu[source].copy()
@@ -311,9 +297,12 @@ def _add_wind(
                 n,
                 carrier,
                 capacity_mw,
-                x,
-                y,
                 protected_generators=added_generators,
+                allocation=(potential_allocation or {}).get(generator_id),
+                country=str(hubs.set_index("hub_id").at[hub_id, "country"]),
+                allocation_note=_optional_string(
+                    (potential_allocation_notes or {}).get(generator_id)
+                ),
             )
 
         cost_technology = _optional_string(
@@ -348,11 +337,14 @@ def _link_capital_cost(
     underwater_fraction: float,
     length_factor: float,
 ) -> float:
-    cable_cost = length_km * length_factor * (
-        (1.0 - underwater_fraction)
-        * float(costs.at["HVDC overhead", "capital_cost"])
-        + underwater_fraction
-        * float(costs.at["HVDC submarine", "capital_cost"])
+    cable_cost = (
+        length_km
+        * length_factor
+        * (
+            (1.0 - underwater_fraction)
+            * float(costs.at["HVDC overhead", "capital_cost"])
+            + underwater_fraction * float(costs.at["HVDC submarine", "capital_cost"])
+        )
     )
     converter_cost = float(costs.at["HVDC inverter pair", "capital_cost"])
     return cable_cost + converter_cost
@@ -374,15 +366,33 @@ def _add_links(
 
         target_bus = _select_target_bus(n, row)
         hub = n.buses.loc[hub_id]
-        target = n.buses.loc[target_bus]
-
         configured_length = pd.to_numeric(row.get("length_km"), errors="coerce")
         if pd.isna(configured_length):
-            length_km = float(
-                _haversine_km(hub.x, hub.y, target.x, target.y)
+            # Estimate from the physical landing point, never a cluster centroid.
+            coordinates = np.array(
+                [hub.x, hub.y, row["target_x"], row["target_y"]], dtype=float
+            )
+            if (
+                not np.isfinite(coordinates).all()
+                or not np.isfinite(length_factor)
+                or length_factor < 1
+            ):
+                raise ValueError(
+                    f"{link_id}: finite coordinates and length_factor >= 1 are required"
+                )
+            length_km = float(_haversine_km(*coordinates)) * length_factor
+            length_source = "landing_distance_times_factor"
+            logger.warning(
+                "%s: estimated cable route %.1f km; supply length_km for an actual route",
+                link_id,
+                length_km,
             )
         else:
+            # An explicit length is the full route length: do not multiply again.
             length_km = float(configured_length)
+            length_source = "configured_route"
+        if not np.isfinite(length_km) or length_km <= 0:
+            raise ValueError(f"{link_id}: route length must be finite and positive")
 
         underwater_fraction = float(row.get("underwater_fraction", 1.0))
         if not 0.0 <= underwater_fraction <= 1.0:
@@ -407,7 +417,7 @@ def _add_links(
             costs,
             length_km,
             underwater_fraction,
-            length_factor,
+            1.0,
         )
 
         n.add(
@@ -424,6 +434,7 @@ def _add_links(
         )
         n.links.loc[link_id, "underwater_fraction"] = underwater_fraction
         n.links.loc[link_id, "energy_island"] = hub_id
+        n.links.loc[link_id, "length_source"] = length_source
         n.links.loc[link_id, "target_coordinate"] = (
             f"{float(row['target_x']):.5f},{float(row['target_y']):.5f}"
         )
@@ -482,7 +493,9 @@ def main(
         return n
 
     unknown_wind_hubs = set(wind.hub_id.astype(str)).difference(hubs.hub_id.astype(str))
-    unknown_link_hubs = set(links.hub_id.astype(str)).difference(hubs.hub_id.astype(str))
+    unknown_link_hubs = set(links.hub_id.astype(str)).difference(
+        hubs.hub_id.astype(str)
+    )
     if unknown_wind_hubs or unknown_link_hubs:
         raise ValueError(
             "Unknown hub references: "
@@ -504,6 +517,8 @@ def main(
         hubs,
         costs,
         subtract_potential=bool(config.get("subtract_generic_potential", True)),
+        potential_allocation=config.get("potential_allocation", {}),
+        potential_allocation_notes=config.get("potential_allocation_notes", {}),
     )
     _add_links(
         n,

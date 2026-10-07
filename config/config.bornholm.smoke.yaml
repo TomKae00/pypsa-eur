@@ -17,10 +17,13 @@ energy_islands:
   enabled: false
   case: hybrid
   hubs: data/energy_islands/bornholm_hubs.csv
-  wind: data/energy_islands/bornholm_wind.csv
-  links: data/energy_islands/bornholm_links.csv
+  wind: data/energy_islands/bornholm_wind.smoke.csv
+  links: data/energy_islands/bornholm_links.smoke.csv
   subtract_generic_potential: true
   length_factor: 1.25
+  # IDs depend on this configuration's clustering; inspect its baseline first.
+  potential_allocation: {}
+  potential_allocation_notes: {}
 solving:
   solver:
     name: highs
