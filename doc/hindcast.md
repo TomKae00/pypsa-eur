@@ -126,7 +126,80 @@ be reconstructed from those files. In 2024 it retains all 8,784 observation hour
 the model currently omits 29 February and benchmarks against its own 8,760 timestamps.
 
 These are observed day-ahead electricity prices, not generator fuel/CO2 inputs.
-The latter still need independent historical series for every simulated year.
+Retrieve the latter independently as described next.
+
+### 1b. Retrieve historical fuel and CO2 source data
+
+```bash
+pixi run python scripts/retrieve_hindcast_market_data.py
+```
+
+The defaults in `config/hindcast/market-data.yaml` retrieve 2022–2025, plus
+December 2021 so that a later, explicit carry-forward policy can cover the
+beginning of 2022. This step does not build or solve a network. It uses existing
+environment dependencies and public endpoints, without an ENTSO-E token,
+market-data account, `yfinance` installation or Trading Economics subscription.
+
+| Input | Retrieved source | Quoted units and convention |
+| --- | --- | --- |
+| Gas | Yahoo Finance `TTF=F`, daily close | EUR/MWh as quoted; exchange-local trading date |
+| Coal | Investing.com Rotterdam coal futures, instrument 1112838, daily close | USD/metric tonne |
+| CO2 | Investing.com ICE carbon-emissions futures, instrument 8848, daily close | EUR/tCO2 |
+| Oil products | Commission Weekly Oil Bulletin history, `Prices wo taxes`, all six EU aggregate products | EUR/tonne for fuel oils; EUR/1000 litres for petrol, diesel, heating oil and LPG |
+| Currency | ECB euro foreign-exchange reference history | USD per EUR |
+
+Coal uses the provider and market page cited in the paper. For gas, the analyzer
+repository's plotting script uses `TTF=F`, while the paper cites `NG=F`; the exact
+model-input contract and rolling convention remain unconfirmed. The CO2 source
+is an **explicit substitution** for the paper's Trading Economics series. It is
+an EUA futures price history, not a primary-market auction-price substitution.
+Both futures histories retain the provider's continuous-series convention;
+the workflow does not reconstruct individual delivery contracts or their rolls.
+
+The output directory is `data/hindcast/market-data-2022-2025/`, containing:
+
+- `gas_ttf_daily.csv`: `date,gas_eur_mwh_quoted`;
+- `coal_rotterdam_daily.csv`: `date,coal_usd_t`;
+- `co2_eua_daily.csv`: `date,co2_eur_tco2`;
+- `oil_eu_weekly.csv`: dates and six separately named EU oil-product columns;
+- `fx_daily.csv`: `date,usd_per_eur`;
+- `raw/`: original response bytes and download receipts;
+- `manifest.json`: configuration snapshot, instrument identity, source URLs,
+  retrieval times, SHA256 hashes and per-year observation counts/date ranges.
+
+Downloads and normalized tables are ignored by Git. Running the command in
+another checkout retrieves that machine's own collection. Sources can revise
+their histories; retain the raw files and manifest used for any published run.
+An interrupted retrieval reuses downloaded sources with matching receipts and
+hashes. A completed collection is not overwritten: choose a new `--directory`
+for a refresh. `--years` can select another set of completed historical years.
+Provider schema/access failures stop retrieval; no alternative ticker or provider
+is substituted automatically.
+
+These are **source histories, not the hourly CSVs consumed by
+`build_hindcast_costs.py`**. Retrieval keeps missing source values and non-trading
+days, without interpolating, filling, rounding CO2, converting currencies,
+deflating prices or selecting an oil fuel. The `date` column is an observation
+date, not an assertion that the closing quote was available at midnight.
+
+The preparation step must still explicitly define:
+
+- which oil product represents the native model's oil generators, and its
+  lower-heating-value/density conversion;
+- gas's quoted versus generator-efficiency energy basis, and any HHV/LHV factor;
+- coal's calorific value and date alignment with the ECB rate (USD prices are
+  divided by USD/EUR rates, not multiplied);
+- a lignite proxy convention, which is not a separately observed market price;
+- daily/weekly-to-hourly holding rules, treatment of long gaps and the year-start
+  seed observation, with no look-ahead filling;
+- native variable operating costs and treatment of other fuels/emitters.
+
+The inspected 2023 archive suggests lignite was 0.8911423821 times the coal fuel
+price, but retrieval does not silently adopt this inferred factor. The original
+paper's precise oil choice, fuel conversions and source preprocessing remain
+unavailable. Its statement of weekly coal prices also differs from the frequent
+weekday changes in the inspected 2023 model input. Native capacities and network
+data are not calibrated or replaced in this retrieval work.
 
 ### 2. Construct the independent yearly systems
 
