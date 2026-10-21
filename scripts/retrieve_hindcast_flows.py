@@ -69,7 +69,7 @@ def main():
     parser.add_argument(
         "--kind", choices=["physical", "scheduled_day_ahead"], default="physical"
     )
-    parser.add_argument("--config", default="data/hindcast/flow-sources-zonal-2023.yaml")
+    parser.add_argument("--config")
     parser.add_argument("--output")
     args = parser.parse_args()
     key = os.environ.get("ENTSOE_API_KEY")
@@ -79,7 +79,8 @@ def main():
         )
     from entsoe import EntsoePandasClient
 
-    cfg = yaml.safe_load(Path(args.config).read_text())
+    config = args.config or f"data/hindcast/flow-sources-zonal-{args.year}.yaml"
+    cfg = yaml.safe_load(Path(config).read_text())
     output = Path(args.output or f"data/hindcast/flows_{args.kind}_{args.year}.csv")
     if output.exists():
         parser.error(f"{output} exists; choose another --output to refresh")

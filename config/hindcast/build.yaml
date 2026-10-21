@@ -1,0 +1,125 @@
+# Shared historical build settings. Annual fields come from scenarios.yaml.
+# Each year is an independent overnight dispatch case, never a multi-period investment.
+# Standard PyPSA-Eur input assignment is retained; no observed-capacity calibration.
+# Build composed_YEAR.nc, then apply historical fuel/CO2 costs with hindcast.py solve.
+run:
+  name: all
+  scenarios:
+    enable: true
+    file: config/hindcast/scenarios.yaml
+  shared_resources:
+    policy: false
+  prefix: ''
+foresight: overnight
+countries:
+- AL
+- AT
+- BA
+- BE
+- BG
+- CH
+- CZ
+- DE
+- DK
+- EE
+- ES
+- FI
+- FR
+- GB
+- GR
+- HR
+- HU
+- IE
+- IT
+- LT
+- LU
+- LV
+- ME
+- MK
+- NL
+- 'NO'
+- PL
+- PT
+- RO
+- RS
+- SE
+- SI
+- SK
+- XK
+sector:
+  enabled: false
+enable:
+  drop_leap_day: true
+co2_budget:
+  relative: false
+  upper: null
+  lower: null
+electricity:
+  transmission_limit: v1.0
+  extendable_carriers:
+    Generator: []
+    StorageUnit: []
+    Store: []
+    Link: []
+  everywhere_powerplants: []
+  renewable_carriers:
+  - solar
+  - onwind
+  - offwind-ac
+  - offwind-dc
+  - hydro
+  estimate_renewable_capacities:
+    enable: true
+    from_powerplantmatching: false
+    from_irenastat: true
+load:
+  scaling_factor: 1.0
+conventional:
+  unit_commitment: false
+  dynamic_fuel_price: false
+costs:
+  year: 2020
+  emission_prices:
+    enable: false
+    dynamic: false
+    co2: 0.0
+lines:
+  under_construction: remove
+links:
+  under_construction: remove
+transmission_projects:
+  enable: false
+clustering:
+  mode: administrative
+  administrative:
+    level: bz
+  build_bidding_zones:
+    aggregate_to_tyndp: false
+  cluster_network:
+    allow_ac_dc_mixing_in_bus_clusters: true
+  copperplate_regions:
+  - - DE00
+    - LUG1
+  - - IE00
+    - GBNI
+  temporal:
+    averaging: false
+    segmentation: false
+    representative: false
+renewable:
+  onwind:
+    resource_classes: 3
+  offwind-ac:
+    resource_classes: 3
+  offwind-dc:
+    resource_classes: 3
+  solar:
+    resource_classes: 3
+solving:
+  options:
+    rolling_horizon: false
+    noisy_costs: false
+    transmission_losses: 0
+  solver:
+    name: highs
+    options: highs-default

@@ -1,8 +1,8 @@
 # Exact aliases for native four-character zone IDs; no country-prefix inference.
 # These names follow scripts/build_bidding_zones.py in the pinned PyPSA-Eur base.
-# This is a naming map, NOT evidence that current shapes match 2023 boundaries.
+# This is a naming map, NOT evidence that current shapes match each historical year's boundaries.
 # prepare-zonal leaves any other generated bus blank for explicit review.
-year: 2023
+valid_years: [2022, 2023, 2024, 2025]
 aliases:
   AL00: AL
   AT00: AT

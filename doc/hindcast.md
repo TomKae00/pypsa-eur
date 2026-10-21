@@ -18,10 +18,10 @@ for this migration.
 
 ## What is implemented
 
-The main case is a **Europe-wide historical network represented by bidding
-zones**, before Bornholm scenario runs. `build-2023.yaml` explicitly includes
-PyPSA-Eur's default 34-country study footprint, with bidding-zone clustering and
-hourly 2023 inputs. It does not inherit the four-country smoke-case selection.
+The main workflow is **four independent European bidding-zone hindcasts for
+2022, 2023, 2024 and 2025**, before Bornholm scenario runs. `build.yaml` contains
+shared assumptions and enables native PyPSA-Eur scenarios in `scenarios.yaml`.
+Each case includes the default 34-country study footprint and hourly inputs. It does not inherit the four-country smoke-case selection.
 This footprint does not literally include every European state: extensions to
 Ukraine, Moldova or Turkey require corresponding historical network and input
 data. Keep the build and benchmark country lists consistent if extending it.
@@ -83,60 +83,155 @@ the reported price, and an hour is missing if any member's price is unavailable.
 The optional archived country-reference comparison keeps its explicitly labelled
 demand-weighted aggregation.
 
-`zone-aliases-2023.yaml` supplies exact native-ID-to-price-area aliases for the
+`zone-aliases.yaml` supplies exact native-ID-to-price-area aliases for the
 mapping template. It is a naming aid, not a certified historical shape catalogue.
 Pin/review the source shapes and reconcile boundaries with 2023 before claiming
 historical spatial fidelity. No tests or model construction were run for this
 revision.
 
-## Main Europe-wide bidding-zone workflow
+## Multi-year workflow: 2022–2025
 
-1. Build the composed network using `build-2023.yaml` as described below.
-2. Create the bus mapping template from that actual network:
+Each year is solved independently, with its own snapshots, demand year, ERA5
+cutout, standard plant-date filter and IRENA capacity year. Countries, technology
+assumptions, model formulation and native copperplate settings are shared.
+The native grid datasets are used as supplied; no year-specific reconstruction
+of every transmission asset or observed-capacity calibration is introduced.
+There is no investment or storage-state coupling between the annual cases.
+Do not put all four years into one `planning_horizons` list in overnight mode.
 
-```bash
-pixi run python scripts/hindcast.py prepare-zonal \
-  resources/hindcast-build-2023/networks/composed_2023.nc
-```
-
-The command creates `data/hindcast/bus_zones_2023.csv` and prefills recognised
-native IDs using `zone-aliases-2023.yaml`, such as `DK_1`, `DK_2`, `SE_4`, `DE_LU`
-and `IT_NORD`. Review **every** assignment and fill any remaining blanks from
-the actual generated shapes/bus maps. Existing mappings are never overwritten.
-Multiple buses may share a market zone only when joined by native copperplate
-links; one bus cannot represent multiple zones. Both DE/LU buses must map to
-`DE_LU`, and IE/Northern Ireland to `IE_SEM`. Current boundaries need historical
-review. No country-prefix guessing is applied. Re-run after reviewing the CSV;
-it generates `data/hindcast/flow-sources-zonal-2023.yaml` for **all** modelled zonal
-borders. Their canonical direction is alphabetical zone order.
-
-3. Build hourly historical marginal costs and solve the complete network using
-   the commands below. Changing the reporting selection never changes the solve.
-4. Export zonal price observations from the ENTSO-E pipeline as
-   `data/hindcast/prices_zonal_2023.csv`: UTC hourly index and one column per exact
-   `bidding_zone` code in the mapping. Do not use country-averaged DK/SE/NO prices.
-   Retain unavailable zones as all-missing columns; they remain in the network
-   and are explicitly unscored. The pinned analyzer CSV is incomplete for this
-   full zonal scope and has different identifiers, so it is not the default here.
-5. Retrieve physical flows using the generated list of all zonal borders:
+### 1. Prepare observed electricity prices
 
 ```bash
-pixi run python scripts/retrieve_hindcast_flows.py --year 2023 --kind physical
+pixi run python scripts/hindcast.py fetch-prices --years 2022 2023 2024 2025
 ```
 
-Set `flows: data/hindcast/flows_physical_2023.csv` in `benchmark.yaml`, then run:
+This downloads only `day_ahead_price_*.csv` from Marta's pinned repository commit
+`ad89e2d8e8c0c8b1c7e717dded8ebd43d52b3beb`. It does not run the ENTSO-E query
+script or require an API key. Source files are cached once under
+`data/hindcast/source/COMMIT/`. One wide UTC-hourly table and a provenance/coverage
+JSON are written for each year:
+
+- `data/hindcast/prices_zonal_2022.csv` and `.json`;
+- `data/hindcast/prices_zonal_2023.csv` and `.json`;
+- `data/hindcast/prices_zonal_2024.csv` and `.json`;
+- `data/hindcast/prices_zonal_2025.csv` and `.json`.
+
+No interpolation, clipping or neighbouring-zone substitution is performed.
+Model zones absent from the source (for example IT_CALA or GB in this pinned
+folder) remain all-missing columns. Each JSON reports source-file presence,
+observed hours and coverage separately by zone and year. Existing annual outputs
+are not overwritten; choose another `--directory` for a separately pinned refresh.
+The importer uses already-hourly published data: underlying subhourly gaps cannot
+be reconstructed from those files. In 2024 it retains all 8,784 observation hours;
+the model currently omits 29 February and benchmarks against its own 8,760 timestamps.
+
+These are observed day-ahead electricity prices, not generator fuel/CO2 inputs.
+The latter still need independent historical series for every simulated year.
+
+### 2. Construct the independent yearly systems
+
+Use the native scenario configuration, targeting composed networks explicitly:
 
 ```bash
-pixi run python scripts/hindcast.py benchmark --config config/hindcast/benchmark.yaml
+pixi run snakemake --cores 4 \
+  --configfile config/hindcast/build.yaml \
+  resources/hindcast-build-2022/networks/composed_2022.nc \
+  resources/hindcast-build-2023/networks/composed_2023.nc \
+  resources/hindcast-build-2024/networks/composed_2024.nc \
+  resources/hindcast-build-2025/networks/composed_2025.nc
 ```
 
-Existing pipeline observations may be supplied directly in the same format.
-For unsupported directional API queries the flow downloader stops explicitly;
-provide a documented alternate source or missing columns rather than inventing
-zero exchange. All-missing borders are reported as unscored in the benchmark.
-The European network, reviewed historical-zone mapping, price/flow observations
-and historical costs still need to be supplied; these instructions are not a
-claim that that full workflow has already been executed.
+This command is for when inputs and assumptions are ready; it has not been run
+here. `build-2023.yaml` remains the earlier standalone 2023 example. Make future
+shared changes in `build.yaml`; annual changes belong in `scenarios.yaml`.
+Weather cutouts and any required CDS credentials use the normal PyPSA-Eur pipeline.
+
+**2025 input availability is not assumed.** The branch's native
+`data/nuclear_p_max_pu.csv` currently ends in 2024; its nuclear availability loader
+selects the model year. A 2025 run therefore needs a supplied 2025 column from the
+upstream data/source or a separately documented explicit assumption. No 2024
+values have been silently substituted. Likewise, availability of 2025 demand,
+IRENA capacities and processed fuel/CO2 prices must be established before solving.
+This is an input-coverage requirement, not calibration to observed prices or
+replacement of the native plant database. The paper's downloadable solved
+reference networks cover 2020–2024, so `fetch-reference` deliberately has no 2025 case.
+
+### 3. Prepare a market mapping for each year
+
+```bash
+for year in 2022 2023 2024 2025; do
+  pixi run python scripts/hindcast.py prepare-zonal \
+    "resources/hindcast-build-${year}/networks/composed_${year}.nc" --year "$year"
+done
+```
+
+The first invocation for each year creates `data/hindcast/bus_zones_YEAR.csv`
+using exact aliases in `zone-aliases.yaml`. Review every assignment and fill any
+unknown IDs from that year's generated shapes/bus maps. Existing mappings are
+never overwritten. Native shared-market groups must have the same benchmark zone:
+DE/LU maps to DE_LU, and IE/Northern Ireland maps to IE_SEM. Re-run after review
+to generate `data/hindcast/flow-sources-zonal-YEAR.yaml` for every modelled border.
+The alias file accepts 2022–2025 as a naming convention; it does not certify that
+source geometries reproduce the historical boundaries in every year.
+
+### 4. Apply annual costs and solve each case
+
+Repeat the following commands for each selected year after supplying its actual
+fuel/CO2 prices and explicit VOM assumptions. The example uses 2023:
+
+```bash
+year=2023
+pixi run python scripts/build_hindcast_costs.py \
+  "resources/hindcast-build-${year}/networks/composed_${year}.nc" \
+  --fuel-prices "data/hindcast/fuel_${year}_hourly.csv" \
+  --co2-prices "data/hindcast/co2_${year}_hourly.csv" \
+  --vom data/hindcast/vom.yaml \
+  --output "data/hindcast/marginal_costs_${year}.csv"
+
+pixi run python scripts/hindcast.py solve \
+  "resources/hindcast-build-${year}/networks/composed_${year}.nc" \
+  --marginal-costs "data/hindcast/marginal_costs_${year}.csv" \
+  --output "results/hindcast-build-${year}/network.nc" --solver gurobi --threads 4
+```
+
+No own-network solve is run by the price importer or benchmark. On Sophia use
+an allocated job and your established Pixi/Gurobi wrapper as described below.
+
+### 5. Compare annual prices and errors
+
+```bash
+pixi run python scripts/hindcast.py benchmark-years --years 2022 2023 2024 2025
+```
+
+The shared `benchmark.yaml` expands `{year}` in network, mapping, observation
+and output paths. The command requires all selected annual inputs, compares each
+year separately and writes `results/hindcast-europe-zonal/scores_all_years.csv`.
+The table retains year, zone, resolution, MAE/RMSE/SMAPE, bias, correlation and
+coverage, including explicitly unscored observations. Annual errors are not
+pooled into one four-year score, so gaps or high-price years are not hidden.
+All selected annual comparisons must finish before a combined table is written.
+
+For a single case:
+
+```bash
+pixi run python scripts/hindcast.py benchmark --year 2024
+```
+
+The default for single-year commands remains 2023. Existing archived-reference
+configs continue to work without a year override. The European aggregate and
+generation-comparison extensions discussed separately remain pending.
+
+Physical flows are optional and do not gate price comparison. Retrieval now
+selects the matching `flow-sources-zonal-YEAR.yaml` automatically with `--year`.
+To enable annual flow scoring set this template in `benchmark.yaml`:
+
+```yaml
+flows: data/hindcast/flows_physical_{year}.csv
+flow_kind: physical
+```
+
+Missing configured flow inputs are errors. Leave `flows: null` for the price-only
+work package. Unsupported directional API queries are not replaced with zero.
 
 ## Sources and provenance
 
@@ -291,7 +386,8 @@ absolute errors, because percentage errors are sensitive near zero.
 
 ## Rebuild using this PyPSA-Eur branch
 
-`config/hindcast/build-2023.yaml` is a separately labelled starting point. It fixes
+`config/hindcast/build.yaml` and its annual scenarios are the main starting point.
+`build-2023.yaml` retains the earlier standalone example. It fixes
 existing capacities, disables planned grid projects, uses hourly
 2023 demand/weather and annual 2023 renewable capacity estimates, and clusters by
 bidding zones. It uses 2020 technology assumptions (the source does not provide a 2023 cost
@@ -402,3 +498,11 @@ check. No tests, schema checks, network builds, solves or benchmark validation
 were run for this revision, as requested. Generated IDs and historical shape
 boundaries still need review during construction; a completed historical price
 reconstruction is not claimed.
+
+## Multi-year revision (2026-10-21)
+
+Added native annual scenarios for 2022–2025, a pinned Marta price importer,
+year-expanded benchmark paths and a combined annual score table. No data
+retrieval, tests, schema checks, network builds, solves or benchmark validation
+were run for this revision. Completing these configuration/helpers does not
+establish that all 2025 upstream model inputs are currently available.

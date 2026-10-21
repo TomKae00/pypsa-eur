@@ -24,6 +24,8 @@ LOG = logging.getLogger(__name__)
 ARCHIVE = "https://api.figshare.com/v2/articles/31248568/versions/1"
 ANALYZER_COMMIT = "fd282cc8b1705b68aad0edd286d6b8f1c612ac5d"
 ANALYZER_RAW = f"https://raw.githubusercontent.com/marco-saretta/pypsa-network-analyzer/{ANALYZER_COMMIT}"
+PRICE_REPOSITORY = "martavp/pv_wind_historical_timeseries"
+PRICE_COMMIT = "ad89e2d8e8c0c8b1c7e717dded8ebd43d52b3beb"
 CAPACITIES = {
     "generators": "p_nom",
     "links": "p_nom",
@@ -99,6 +101,118 @@ def utc_index(index):
     if not result.is_monotonic_increasing:
         raise ValueError("Timestamps must be sorted")
     return result
+
+
+def benchmark_config(path, year=None):
+    """Expand annual paths without changing the shared benchmark settings."""
+    cfg = yaml.safe_load(Path(path).read_text())
+    year = int(cfg["year"] if year is None else year)
+
+    def expand(value):
+        if isinstance(value, str):
+            return value.replace("{year}", str(year))
+        if isinstance(value, dict):
+            return {key: expand(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [expand(item) for item in value]
+        return value
+
+    return dict(expand(cfg), year=year)
+
+
+def zone_aliases(path, year):
+    names = yaml.safe_load(Path(path).read_text())
+    if year not in names.get("valid_years", [names.get("year")]):
+        raise ValueError(
+            f"Zone aliases do not cover {year}; review historical zone definitions"
+        )
+    return names["aliases"]
+
+
+def fetch_prices(years, directory, commit, aliases_path):
+    """Prepare annual observed prices from Marta's pinned, already-hourly CSVs.
+
+    No ENTSO-E token, interpolation, clipping or replacement-zone prices.
+    Source gaps and whole missing zones remain NaN and are reported by year.
+    """
+    years = sorted(set(years))
+    if not years:
+        raise ValueError("Select at least one observation year")
+    if len(commit) != 40 or any(c not in "0123456789abcdef" for c in commit):
+        raise ValueError("Use a full immutable Git commit SHA for observed prices")
+    directory = Path(directory)
+    outputs = [directory / f"prices_zonal_{year}.csv" for year in years]
+    if any(path.exists() or path.with_suffix(".json").exists() for path in outputs):
+        raise ValueError("Annual price outputs already exist; choose a new --directory")
+    aliases = {year: zone_aliases(aliases_path, year) for year in years}
+    api = f"https://api.github.com/repos/{PRICE_REPOSITORY}/contents/data/entsoe?ref={commit}"
+    with urllib.request.urlopen(api, timeout=60) as response:
+        entries = json.load(response)
+    files = {
+        f["name"][len("day_ahead_price_") : -len(".csv")]: f
+        for f in entries
+        if f["type"] == "file"
+        and f["name"].startswith("day_ahead_price_")
+        and f["name"].endswith(".csv")
+    }
+    if not files:
+        raise ValueError("The pinned repository contains no day-ahead price CSVs")
+    observed, sources = {}, []
+    for zone, entry in sorted(files.items()):
+        url = f"https://raw.githubusercontent.com/{PRICE_REPOSITORY}/{commit}/data/entsoe/{entry['name']}"
+        path = directory / "source" / commit / entry["name"]
+        record = download(url, path)
+        record["zone"] = zone
+        record["git_blob_sha"] = entry["sha"]
+        sources.append(record)
+        raw = pd.read_csv(path)
+        if not {"utc_timestamp", "price_eur_mwh"}.issubset(raw.columns):
+            raise ValueError(f"Unexpected observed-price columns in {path}")
+        idx = utc_index(raw["utc_timestamp"])
+        if not idx.equals(idx.floor("h")):
+            raise ValueError(f"{path}: hourly source expected; resample explicitly")
+        values = pd.to_numeric(raw["price_eur_mwh"], errors="raise").to_numpy()
+        series = pd.Series(values, index=idx).replace([np.inf, -np.inf], np.nan)
+        observed[zone] = series[series.index.year.isin(years)]
+    for year, output in zip(years, outputs):
+        index = pd.date_range(
+            f"{year}-01-01",
+            f"{year + 1}-01-01",
+            freq="h",
+            tz="UTC",
+            inclusive="left",
+        )
+        zones = sorted(set(files) | set(aliases[year].values()))
+        frame = pd.DataFrame(index=index, columns=zones, dtype=float)
+        for zone, series in observed.items():
+            frame[zone] = series.reindex(index)
+        frame.to_csv(output, index_label="utc_timestamp")
+        coverage = {
+            zone: {
+                "expected_hours": len(index),
+                "observed_hours": int(frame[zone].notna().sum()),
+                "coverage": float(frame[zone].notna().mean()),
+                "source_file_present": zone in files,
+            }
+            for zone in zones
+        }
+        write_json(
+            output.with_suffix(".json"),
+            {
+                "year": year,
+                "repository": PRICE_REPOSITORY,
+                "commit": commit,
+                "sources": sources,
+                "zone_aliases_sha256": digest(aliases_path),
+                "output_sha256": digest(output),
+                "unit": "EUR/MWh",
+                "coverage": coverage,
+                "missing_data": "not filled; missing zones retained",
+                "leap_day_policy": "retain all observed calendar hours; benchmark aligns model timestamps",
+                "source_resolution": "published hourly means; raw subhourly completeness cannot be recovered",
+            },
+        )
+        print(f"Wrote {output}; coverage and missing zones: {output.with_suffix('.json')}")
 
 
 def read_hourly(path):
@@ -263,21 +377,20 @@ def zonal_configuration(n, cfg):
     )
 
 
-def prepare_zonal(network, config, flow_sources):
+def prepare_zonal(network, config, flow_sources=None, year=None):
     """Create an explicit bus mapping template, then derive all flow query pairs."""
     import pypsa
 
     n = pypsa.Network(network)
-    cfg = yaml.safe_load(Path(config).read_text())
+    cfg = benchmark_config(config, year)
+    if not (utc_index(n.snapshots).year == cfg["year"]).all():
+        raise ValueError("The mapping year must match every snapshot in the annual network")
     path = Path(cfg["bus_zones"])
     if not path.exists():
         buses = n.buses.loc[n.buses.carrier.isin(["AC", "DC", ""]), ["country"]].copy()
         aliases = {}
         if cfg.get("zone_aliases"):
-            names = yaml.safe_load(Path(cfg["zone_aliases"]).read_text())
-            if names["year"] != cfg["year"]:
-                raise ValueError("Zone aliases and benchmark must refer to the same year")
-            aliases = names["aliases"]
+            aliases = zone_aliases(cfg["zone_aliases"], cfg["year"])
         buses["bidding_zone"] = [aliases.get(bus, "") for bus in buses.index]
         path.parent.mkdir(parents=True, exist_ok=True)
         buses.to_csv(path, index_label="bus")
@@ -289,7 +402,7 @@ def prepare_zonal(network, config, flow_sources):
         )
         return
     cfg = zonal_configuration(n, cfg)
-    path = Path(flow_sources)
+    path = Path(flow_sources or f"data/hindcast/flow-sources-zonal-{cfg['year']}.yaml")
     path.parent.mkdir(parents=True, exist_ok=True)
     sources = {f"{a}->{b}": [[a, b]] for a, b in cfg["borders"]}
     path.write_text(yaml.safe_dump(sources, sort_keys=True))
@@ -525,6 +638,7 @@ def benchmark(network, cfg, output):
                 matched = sim.notna() & ref.reindex(sim.index).notna()
                 rows.append({
                     "kind": kind, "series": key, "resolution": freq, "unit": unit,
+                    "year": year,
                     "status": "NOT SCORED: insufficient paired observations",
                     "n_expected_hours": len(sim), "n_matched_hours": int(matched.sum()),
                     "coverage": float(matched.mean()), "n_scored": 0,
@@ -553,6 +667,7 @@ def benchmark(network, cfg, output):
             rows.append(
                 {
                     "kind": kind,
+                    "year": year,
                     "series": key,
                     "resolution": freq,
                     "unit": unit,
@@ -595,6 +710,44 @@ def benchmark(network, cfg, output):
     print(
         f"Price benchmark written to {output}; {report.get('flow_validation', 'no borders requested')}"
     )
+
+
+def benchmark_years(config, years=None, output=None):
+    """Run identical annual comparisons and concatenate scores without pooling years."""
+    base = benchmark_config(config)
+    selected = years if years is not None else base.get("years", [base["year"]])
+    years = sorted(set(selected))
+    if not years:
+        raise ValueError("Select at least one annual benchmark case")
+    cases = [benchmark_config(config, year) for year in years]
+    if len({cfg["output"] for cfg in cases}) != len(cases):
+        raise ValueError("Use {year} in annual output paths to avoid overwriting results")
+    missing = []
+    for cfg in cases:
+        for key in ["network", "bus_zones", "zone_aliases", "prices", "loads", "flows"]:
+            path = cfg.get(key)
+            if path and not Path(path).is_file():
+                missing.append(f"{cfg['year']}: {key}={path}")
+    if missing:
+        raise ValueError("Annual benchmark inputs are not ready:\n" + "\n".join(missing))
+    scores = []
+    for cfg in cases:
+        benchmark(cfg["network"], cfg, cfg["output"])
+        frame = pd.read_csv(Path(cfg["output"]) / "scores.csv")
+        frame["year"] = cfg["year"]
+        scores.append(frame)
+    output = Path(output or base.get("summary_output", "results/hindcast-europe-zonal"))
+    output.mkdir(parents=True, exist_ok=True)
+    pd.concat(scores, ignore_index=True).to_csv(output / "scores_all_years.csv", index=False)
+    write_json(
+        output / "years.json",
+        {
+            "years": years,
+            "aggregation": "annual scores retained; errors are not pooled across years",
+            "annual_outputs": {str(cfg["year"]): cfg["output"] for cfg in cases},
+        },
+    )
+    print(f"Annual comparison table: {output / 'scores_all_years.csv'}")
 
 
 def solve(
@@ -691,13 +844,19 @@ def main():
     fetch = sub.add_parser("fetch-reference")
     fetch.add_argument("--year", type=int, choices=range(2020, 2025), default=2023)
     fetch.add_argument("--directory", default="data/hindcast/reference")
+    prices = sub.add_parser("fetch-prices")
+    prices.add_argument("--years", type=int, nargs="+", default=[2022, 2023, 2024, 2025])
+    prices.add_argument("--directory", default="data/hindcast")
+    prices.add_argument("--commit", default=PRICE_COMMIT)
+    prices.add_argument("--zone-aliases", default="config/hindcast/zone-aliases.yaml")
     inspect = sub.add_parser("inspect")
     inspect.add_argument("network")
     inspect.add_argument("--output", default="results/hindcast-inspect.json")
     prepare = sub.add_parser("prepare-zonal")
     prepare.add_argument("network")
     prepare.add_argument("--config", default="config/hindcast/benchmark.yaml")
-    prepare.add_argument("--flow-sources", default="data/hindcast/flow-sources-zonal-2023.yaml")
+    prepare.add_argument("--flow-sources")
+    prepare.add_argument("--year", type=int)
     run = sub.add_parser("solve")
     run.add_argument("network")
     run.add_argument("--output", required=True)
@@ -709,12 +868,21 @@ def main():
     bench.add_argument("--config", default="config/hindcast/benchmark.yaml")
     bench.add_argument("--network")
     bench.add_argument("--output")
+    bench.add_argument("--year", type=int)
+    annual = sub.add_parser("benchmark-years")
+    annual.add_argument("--config", default="config/hindcast/benchmark.yaml")
+    annual.add_argument("--years", type=int, nargs="+")
+    annual.add_argument("--output")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     if args.command == "fetch-reference":
         fetch_reference(args.year, args.directory)
+    elif args.command == "fetch-prices":
+        fetch_prices(args.years, args.directory, args.commit, args.zone_aliases)
     elif args.command == "prepare-zonal":
-        prepare_zonal(args.network, args.config, args.flow_sources)
+        prepare_zonal(args.network, args.config, args.flow_sources, args.year)
+    elif args.command == "benchmark-years":
+        benchmark_years(args.config, args.years, args.output)
     elif args.command == "inspect":
         import pypsa
 
@@ -729,7 +897,7 @@ def main():
             args.transmission_losses,
         )
     else:
-        cfg = yaml.safe_load(Path(args.config).read_text())
+        cfg = benchmark_config(args.config, args.year)
         benchmark(args.network or cfg["network"], cfg, args.output or cfg["output"])
 
 

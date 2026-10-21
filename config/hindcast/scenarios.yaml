@@ -1,0 +1,123 @@
+# Native PyPSA-Eur scenarios: independent annual systems using standard datasets.
+# All fields tied to a historical year are explicit here.
+# Availability of 2025 upstream demand, capacities and nuclear factors is NOT assumed.
+hindcast-build-2022:
+  planning_horizons:
+  - 2022
+  snapshots:
+    start: '2022-01-01'
+    end: '2023-01-01'
+    inclusive: left
+  load:
+    fixed_year: 2022
+  electricity:
+    powerplants_filter: (DateOut >= 2022 or DateOut != DateOut) and (DateIn <= 2022
+      or DateIn != DateIn)
+    estimate_renewable_capacities:
+      year: 2022
+  atlite:
+    default_cutout: europe-2022-era5
+    cutouts:
+      europe-2022-era5:
+        module: era5
+        x:
+        - -12.0
+        - 42.0
+        y:
+        - 33.0
+        - 72.0
+        dx: 0.3
+        dy: 0.3
+        time:
+        - '2022'
+        - '2022'
+hindcast-build-2023:
+  planning_horizons:
+  - 2023
+  snapshots:
+    start: '2023-01-01'
+    end: '2024-01-01'
+    inclusive: left
+  load:
+    fixed_year: 2023
+  electricity:
+    powerplants_filter: (DateOut >= 2023 or DateOut != DateOut) and (DateIn <= 2023
+      or DateIn != DateIn)
+    estimate_renewable_capacities:
+      year: 2023
+  atlite:
+    default_cutout: europe-2023-era5
+    cutouts:
+      europe-2023-era5:
+        module: era5
+        x:
+        - -12.0
+        - 42.0
+        y:
+        - 33.0
+        - 72.0
+        dx: 0.3
+        dy: 0.3
+        time:
+        - '2023'
+        - '2023'
+hindcast-build-2024:
+  planning_horizons:
+  - 2024
+  snapshots:
+    start: '2024-01-01'
+    end: '2025-01-01'
+    inclusive: left
+  load:
+    fixed_year: 2024
+  electricity:
+    powerplants_filter: (DateOut >= 2024 or DateOut != DateOut) and (DateIn <= 2024
+      or DateIn != DateIn)
+    estimate_renewable_capacities:
+      year: 2024
+  atlite:
+    default_cutout: europe-2024-era5
+    cutouts:
+      europe-2024-era5:
+        module: era5
+        x:
+        - -12.0
+        - 42.0
+        y:
+        - 33.0
+        - 72.0
+        dx: 0.3
+        dy: 0.3
+        time:
+        - '2024'
+        - '2024'
+hindcast-build-2025:
+  planning_horizons:
+  - 2025
+  snapshots:
+    start: '2025-01-01'
+    end: '2026-01-01'
+    inclusive: left
+  load:
+    fixed_year: 2025
+  electricity:
+    powerplants_filter: (DateOut >= 2025 or DateOut != DateOut) and (DateIn <= 2025
+      or DateIn != DateIn)
+    estimate_renewable_capacities:
+      year: 2025
+  atlite:
+    default_cutout: europe-2025-era5
+    cutouts:
+      europe-2025-era5:
+        module: era5
+        x:
+        - -12.0
+        - 42.0
+        y:
+        - 33.0
+        - 72.0
+        dx: 0.3
+        dy: 0.3
+        time:
+        - '2025'
+        - '2025'
