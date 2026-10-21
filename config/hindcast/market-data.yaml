@@ -1,0 +1,70 @@
+# Raw market inputs for the historical price benchmark. This is a retrieval
+# convention, not a conversion to generator marginal costs.
+years: [2022, 2023, 2024, 2025]
+
+gas:
+  provider: Yahoo Finance
+  symbol: TTF=F
+  endpoint: https://query1.finance.yahoo.com/v8/finance/chart/{symbol}
+  reference: https://finance.yahoo.com/quote/TTF%3DF/history/
+  field: close
+  units: EUR/MWh as quoted by the provider
+  convention: >-
+    Use the provider's exchange-local trading date, not its midnight timestamp
+    as an intraday observation. Keep the quoted energy basis; no HHV/LHV
+    adjustment is made during retrieval.
+  paper_relation: >-
+    The analyzer's gas-price plot uses TTF=F. The paper cites NG=F instead.
+    This does not establish the original model's precise contract-roll policy.
+
+coal:
+  provider: Investing.com
+  instrument_id: 1112838
+  endpoint: https://api.investing.com/api/financialdata/historical/{instrument_id}
+  reference: https://www.investing.com/commodities/rotterdam-coal-futures-historical-data
+  field: last_closeRaw
+  units: USD/metric tonne
+  convention: Provider continuous Rotterdam coal futures history, Daily timeframe
+  paper_relation: Same provider and market page cited for coal in the paper
+
+co2:
+  provider: Investing.com
+  instrument_id: 8848
+  endpoint: https://api.investing.com/api/financialdata/historical/{instrument_id}
+  reference: https://www.investing.com/commodities/carbon-emissions-historical-data
+  field: last_closeRaw
+  units: EUR/tCO2
+  convention: Provider continuous ICE carbon-emissions futures history, Daily timeframe
+  paper_relation: >-
+    Explicit provider substitution for the paper's Trading Economics EU Carbon
+    Permits series. This is a futures series, not an EUA auction clearing price.
+    Provider roll conventions and historical revisions may differ.
+
+oil:
+  provider: European Commission, DG ENER
+  url: https://energy.ec.europa.eu/document/download/906e60ca-8b6a-44e7-8589-652854d2fd3f_en?filename=Weekly_Oil_Bulletin_Prices_History_maticni_4web.xlsx
+  reference: https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en
+  sheet: Prices wo taxes
+  convention: >-
+    Retain all six EU aggregate product series, without duties and taxes.
+    No product is selected as the model's oil fuel during retrieval.
+  columns:
+    EU_price_wo_tax_euro95: {name: petrol_eur_1000l, units: EUR/1000 litres}
+    EU_price_wo_tax_diesel: {name: diesel_eur_1000l, units: EUR/1000 litres}
+    EU_price_wo_tax_heating_oil: {name: heating_oil_eur_1000l, units: EUR/1000 litres}
+    EU_price_wo_tax_fuel_oil_1: {name: fuel_oil_low_sulphur_eur_t, units: EUR/metric tonne}
+    EU_price_wo_tax_fuel_oil_2: {name: fuel_oil_high_sulphur_eur_t, units: EUR/metric tonne}
+    EU_price_wo_tax_LPG: {name: lpg_eur_1000l, units: EUR/1000 litres}
+  paper_relation: >-
+    Same source workbook cited in the paper. Its precise country/product/tax
+    selection and energy conversion are not specified by the paper.
+
+fx:
+  provider: European Central Bank
+  endpoint: https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A
+  reference: https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html
+  units: USD per EUR
+  convention: Daily reference rate; divide USD prices by this rate to obtain EUR
+
+# Lignite is not an independently retrieved market series. Its proxy convention
+# must be selected when preparing model inputs, rather than hidden in retrieval.

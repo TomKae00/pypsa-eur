@@ -1,0 +1,39 @@
+# Annual overlay: use after config/hindcast/build.yaml in --configfile.
+# Independent overnight case; native scenarios cannot change planning_horizons.
+run:
+  name: hindcast-build-2022
+  scenarios:
+    enable: false
+planning_horizons:
+- 2022
+snapshots:
+  start: '2022-01-01'
+  end: '2023-01-01'
+  inclusive: left
+load:
+  fixed_year: 2022
+electricity:
+  powerplants_filter: (DateOut >= 2022 or DateOut != DateOut) and (DateIn <= 2022
+    or DateIn != DateIn)
+  estimate_renewable_capacities:
+    year: 2022
+atlite:
+  default_cutout: europe-2022-era5
+  cutouts:
+    europe-2022-era5:
+      module: era5
+      x:
+      - -12.0
+      - 42.0
+      y:
+      - 33.0
+      - 72.0
+      dx: 0.3
+      dy: 0.3
+      time:
+      - '2022'
+      - '2022'
+      chunks:
+        time: 500
+      prepare_kwargs:
+        monthly_requests: true

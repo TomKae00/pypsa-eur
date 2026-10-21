@@ -61,6 +61,7 @@ from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_unif
 
 from scripts._helpers import (
     PYPSA_V1,
+    read_hourly_prices,
     rename_techs,
     update_p_nom_max,
 )
@@ -673,6 +674,13 @@ def attach_conventional_generators(
                     df.columns = df.columns.astype(int)
                     year = n.snapshots[0].year
                     values = df[year]
+                except KeyError as exc:
+                    raise ValueError(
+                        f"Missing {year} {carrier} {attr} in "
+                        f"{conventional_inputs[f'conventional_{carrier}_{attr}']}; "
+                        f"available years: {list(df.columns)}. Supply the annual "
+                        "input explicitly; no previous-year fallback was applied."
+                    ) from exc
                 except (ValueError, TypeError):
                     values = df.iloc[:, -1]  # take last column if year selection fails
                 bus_values = n.buses.country.map(values)
@@ -956,6 +964,12 @@ def estimate_renewable_capacities(
         return
 
     capacities = pm.data.IRENASTAT().powerplant.convert_country_to_alpha2()
+    if year not in capacities.Year.unique():
+        raise ValueError(
+            f"IRENASTAT has no data for {year}; available years: "
+            f"{sorted(capacities.Year.unique())}. Missing annual data must not "
+            "be interpreted as zero renewable capacity."
+        )
     capacities = capacities.query(
         "Year == @year and Technology in @tech_map and Country in @countries"
     )
@@ -1231,10 +1245,15 @@ def main(
         unit_commitment = None
 
     if params.conventional["dynamic_fuel_price"]:
-        fuel_price = pd.read_csv(
-            inputs.fuel_price, index_col=0, header=0, parse_dates=True
-        )
-        fuel_price = fuel_price.reindex(n.snapshots).ffill()
+        if params.conventional.get("fuel_price_file"):
+            fuel_price = read_hourly_prices(
+                inputs.fuel_price, n.snapshots, required_columns=("gas",)
+            )
+        else:
+            fuel_price = pd.read_csv(
+                inputs.fuel_price, index_col=0, header=0, parse_dates=True
+            )
+            fuel_price = fuel_price.reindex(n.snapshots).ffill()
     else:
         fuel_price = None
 

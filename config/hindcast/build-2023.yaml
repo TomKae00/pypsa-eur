@@ -1,0 +1,116 @@
+# Standalone historical build on master; NOT an exact paper replica.
+# Build ONLY composed_2023.nc with native historical fuel/CO2 inputs, then use
+# scripts/hindcast.py solve without --marginal-costs (see doc/hindcast.md).
+run:
+  name: hindcast-build-2023
+  scenarios:
+    enable: false
+  shared_resources:
+    policy: false
+# Annual ERA5 names are local builds, not filenames guaranteed in the archive.
+data:
+  cutout:
+    source: build
+    version: latest
+foresight: overnight
+# Explicit full study footprint; never inherit a Bornholm smoke-run subset.
+# This is PyPSA-Eur's 34-country footprint, not every geographical European state.
+countries: [AL, AT, BA, BE, BG, CH, CZ, DE, DK, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT, LT, LU, LV, ME, MK, NL, 'NO', PL, PT, RO, RS, SE, SI, SK, XK]
+planning_horizons: [2023]
+sector:
+  enabled: false
+snapshots:
+  start: '2023-01-01'
+  end: '2024-01-01'
+  inclusive: left
+enable:
+  drop_leap_day: true
+co2_budget:
+  relative: false
+  upper: null
+  lower: null
+electricity:
+  transmission_limit: v1.0
+  extendable_carriers:
+    Generator: []
+    StorageUnit: []
+    Store: []
+    Link: []
+  powerplants_filter: '(DateOut >= 2023 or DateOut != DateOut) and (DateIn <= 2023 or DateIn != DateIn)'
+  everywhere_powerplants: []
+  renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, hydro]
+  estimate_renewable_capacities:
+    enable: true
+    from_powerplantmatching: false
+    from_irenastat: true
+    year: 2023
+load:
+  fixed_year: 2023
+  scaling_factor: 1.0
+conventional:
+  unit_commitment: false
+  dynamic_fuel_price: true
+  fuel_price_file: data/hindcast/paper-procedure/fuel_{horizon}_hourly.csv
+costs:
+  # Technology-data is available in five-year steps; native VOM/efficiencies are retained.
+  year: 2020
+  emission_prices:
+    enable: true
+    dynamic: true
+    co2: 0.0
+    price_file: data/hindcast/paper-procedure/co2_{horizon}_hourly.csv
+lines:
+  under_construction: remove
+links:
+  under_construction: remove
+transmission_projects:
+  enable: false
+clustering:
+  mode: administrative
+  administrative:
+    level: bz
+  build_bidding_zones:
+    aggregate_to_tyndp: false
+  cluster_network:
+    allow_ac_dc_mixing_in_bus_clusters: true
+  # Native cluster IDs from build_bidding_zones.format_names; countries stay separate.
+  # If upstream shape IDs differ, clustering fails and lists the missing buses.
+  copperplate_regions:
+    - [DE00, LUG1]  # Germany-Luxembourg: DE_LU
+    - [IE00, GBNI]  # Ireland-Northern Ireland: IE_SEM
+  temporal:
+    averaging: false
+    segmentation: false
+    representative: false
+renewable:
+  onwind:
+    resource_classes: 3
+  offwind-ac:
+    resource_classes: 3
+  offwind-dc:
+    resource_classes: 3
+  solar:
+    resource_classes: 3
+atlite:
+  default_cutout: europe-2023-era5
+  cutouts:
+    europe-2023-era5:
+      module: era5
+      x: [-12.0, 42.0]
+      y: [33.0, 72.0]
+      dx: 0.3
+      dy: 0.3
+      time: ['2023', '2023']
+      chunks:
+        time: 500
+      prepare_kwargs:
+        monthly_requests: true
+# ERA5 solar differs from the paper's SARAH3; documented explicitly.
+solving:
+  options:
+    rolling_horizon: false
+    noisy_costs: false
+    transmission_losses: 0
+  solver:
+    name: gurobi
+    options: gurobi-default

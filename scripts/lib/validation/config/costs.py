@@ -26,7 +26,11 @@ class _EmissionPricesConfig(ConfigModel):
     )
     dynamic: bool = Field(
         False,
-        description="Add time-varying cost for a carbon-dioxide price based on historical values built by the rule `build_co2_prices`.",
+        description="Add time-varying carbon-dioxide costs using build_co2_prices or a prepared hourly CSV supplied with price_file.",
+    )
+    price_file: str | None = Field(
+        None,
+        description="Optional hourly CSV with a co2 column in EUR/tCO2. Requires dynamic; supports {horizon}. Bypasses historical CO2 price building and smoothing.",
     )
     rolling_window: int = Field(
         90,
