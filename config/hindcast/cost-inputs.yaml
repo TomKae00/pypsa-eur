@@ -1,0 +1,78 @@
+# Retrospective, full-foresight hindcast inputs; no price-error calibration.
+years: [2022, 2023, 2024, 2025]
+source_directory: data/hindcast/market-data-2022-2025-offline
+output_directory: data/hindcast
+drop_leap_day: false
+
+time:
+  # Daily closes are assigned to their labelled observation day, as a
+  # retrospective daily cost approximation. These are NOT publication times.
+  # This convention is unsuitable for a causal/real-time trading backtest.
+  effective_lag_days: {gas: 0, coal: 0, co2: 0, oil: 0, fx: 0}
+  daily_max_age_days: 10
+  weekly_max_age_days: 21
+  holding: previous_observation
+
+gas:
+  file: gas_ttf_daily.csv
+  column: gas_eur_mwh_quoted
+  quoted_basis_assumption: HHV
+  model_basis: LHV
+  lhv_over_hhv: 0.9
+  formula: gas_EUR_per_MWh_LHV = quoted_EUR_per_MWh_HHV / lhv_over_hhv
+  rationale: >-
+    Assume the TTF quote uses gross energy and the generator efficiency uses
+    net energy. NCV/GCV=0.9 is a generic approximation, not a measured gas
+    composition or an assertion about metadata supplied by Yahoo. The paper's
+    exact basis conversion is unknown. Change this explicit assumption if a
+    contract-specific basis is established; do not apply it twice.
+  reference: https://ec.europa.eu/eurostat/documents/3859598/5885369/NRG-2004-EN.PDF/b3c4b86f-8e88-4ca6-9188-b95320900b3f
+  reference_detail: Energy Statistics Manual, Annex 3, Table A3.12
+
+coal:
+  file: coal_rotterdam_daily.csv
+  column: coal_usd_t
+  net_calorific_value_kcal_kg: 6000
+  kcal_to_kj: 4.1868
+  formula: coal_EUR_per_MWh_LHV = coal_USD_per_t / usd_per_eur / coal_MWh_per_t
+  fx_convention: >-
+    Convert each coal quote using the latest ECB observation available on or
+    before its effective date; hold the converted price until the next coal
+    quote. Missing future ECB observations are never used to backfill a quote.
+  rationale: API2 coal benchmark quality, net as received; 6.978 MWh per tonne
+  references:
+    - https://www.cmegroup.com/education/files/thermal-coal-derivatives-discussion.pdf
+    - https://ec.europa.eu/eurostat/documents/3859598/5885369/NRG-2004-EN.PDF/b3c4b86f-8e88-4ca6-9188-b95320900b3f
+
+oil:
+  file: oil_eu_weekly.csv
+  column: fuel_oil_low_sulphur_eur_t
+  net_calorific_value_gj_t: 40.4
+  formula: oil_EUR_per_MWh_LHV = oil_EUR_per_t / (net_calorific_value_GJ_per_t / 3.6)
+  rationale: >-
+    Use untaxed EU aggregate low-sulphur residual fuel oil as one common proxy
+    for the native oil carrier. This is not a plant-specific fuel procurement
+    reconstruction. Native oil assets, efficiencies and emission intensities
+    remain unchanged. The paper does not identify its exact oil-product choice.
+  reference: https://www.ipcc-nggip.iges.or.jp/public/2006gl/pdf/2_Volume2/V2_1_Ch1_Introduction.pdf
+  reference_detail: 2006 IPCC Guidelines, Volume 2, Table 1.2, Residual Fuel Oil
+
+lignite:
+  coal_price_factor: 0.8911423821185138
+  formula: lignite_EUR_per_MWh_LHV = coal_price_factor * coal_EUR_per_MWh_LHV
+  rationale: >-
+    Constant ratio inferred from the published hindcast-dyn-wy2023 network,
+    applied to all four years as a declared proxy assumption. It is an
+    energy-price ratio, not a tonnes or heating-value conversion, and is not
+    an independently observed lignite price or a fitted electricity-price correction.
+  reference: https://data.dtu.dk/articles/media/31248568/1
+
+co2:
+  file: co2_eua_daily.csv
+  column: co2_eur_tco2
+  formula: unchanged EUR/tCO2; no integer rounding
+
+fx:
+  file: fx_daily.csv
+  column: usd_per_eur
+  quote: USD per EUR; divide USD prices by the rate
