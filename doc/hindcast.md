@@ -291,6 +291,9 @@ pixi run python scripts/hindcast.py benchmark \
   --output results/hindcast-resolved-2023/benchmark
 ```
 
+Gurobi is the default for the native build configurations (`gurobi-default`)
+and for `hindcast.py solve`. The standalone helper uses barrier with crossover
+disabled and accepts an explicit `--threads` value (default 1).
 Use `--solver highs --threads 1` if Gurobi is unavailable. On Sophia replace
 `pixi run` with your existing `~/bin/pixi-sophia run` inside an allocated job,
 using no more threads than allocated. The script uses full-year perfect foresight,

@@ -121,5 +121,5 @@ solving:
     noisy_costs: false
     transmission_losses: 0
   solver:
-    name: highs
-    options: highs-default
+    name: gurobi
+    options: gurobi-default

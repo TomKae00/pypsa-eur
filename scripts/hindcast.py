@@ -860,7 +860,7 @@ def main():
     run = sub.add_parser("solve")
     run.add_argument("network")
     run.add_argument("--output", required=True)
-    run.add_argument("--solver", choices=["highs", "gurobi"], default="highs")
+    run.add_argument("--solver", choices=["highs", "gurobi"], default="gurobi")
     run.add_argument("--threads", type=int, default=1)
     run.add_argument("--marginal-costs")
     run.add_argument("--transmission-losses", type=int, default=None)
