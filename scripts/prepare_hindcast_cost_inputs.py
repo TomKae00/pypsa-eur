@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: MIT
 """Prepare hourly fuel/CO2 inputs from a retrieved market-data collection.
 
-All fuel outputs use EUR/MWh of net thermal energy; CO2 uses EUR/tCO2.
+Fuel outputs follow the price convention recovered from the 2023 archive;
+their physical HHV/LHV basis is not independently established. CO2 uses EUR/tCO2.
 This step does not modify generation capacities, build a network or solve one.
 """
 
@@ -25,6 +26,95 @@ def positive(value, name):
     return value
 
 
+def observations(dates, values, name, config):
+    dates = pd.DatetimeIndex(pd.to_datetime(dates, errors="raise", utc=True))
+    if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
+        raise ValueError(f"Source dates must be unique and increasing: {name}")
+    if not dates.equals(dates.normalize()):
+        raise ValueError(f"Expected daily observation labels: {name}")
+    values = np.asarray(pd.to_numeric(values, errors="raise"), dtype=float)
+    if not np.isfinite(values[~np.isnan(values)]).all():
+        raise ValueError(f"Non-finite source values: {name}")
+    series = pd.Series(values, index=dates, name=name).dropna()
+    if series.empty:
+        raise ValueError(f"No usable observations: {name}")
+    lag = config["time"]["effective_lag_days"][name]
+    if isinstance(lag, bool) or not isinstance(lag, int) or lag < 0:
+        raise ValueError(f"Effective lag for {name} must be a non-negative integer")
+    frame = pd.DataFrame({
+        "value": series.to_numpy(), "observation_date": series.index,
+    }, index=series.index + pd.Timedelta(days=lag))
+    frame.index.name = "effective_date"
+    return frame
+
+
+def weighted_oil(directory, manifest, config):
+    spec = config["oil"]
+    if spec["missing_consumption"] != "exclude_country" or spec["missing_price"] != "renormalize_available_weights":
+        raise ValueError("Unsupported oil missing-data convention")
+    candidates = [item for item in manifest["raw_sources"] if item["name"] == spec["workbook_source"]]
+    if len(candidates) != 1:
+        raise ValueError("Expected one original Commission workbook in the collection")
+    record = candidates[0]
+    path = directory / "raw" / Path(record["path"]).name
+    if digest(path) != record["sha256"]:
+        raise ValueError(f"Raw oil workbook differs from its collection manifest: {path}")
+    countries = spec["countries"]
+    if len(set(countries)) != len(countries):
+        raise ValueError("Oil-weight countries must not be duplicated")
+    price_columns = [country + spec["price_column_suffix"] for country in countries]
+    weight_columns = [country + spec["consumption_column_suffix"] for country in countries]
+    prices = pd.read_excel(path, sheet_name=spec["price_sheet"], header=0, skiprows=[1, 2])
+    footer = prices.iloc[:, 0].astype(str).str.strip().eq("Notes:")
+    if footer.any():
+        prices = prices.iloc[:np.flatnonzero(footer.to_numpy())[0]]
+    prices = prices.loc[prices.iloc[:, 0].notna()].copy()
+    dates = pd.DatetimeIndex(pd.to_datetime(prices.iloc[:, 0], errors="raise", utc=True))
+    if not set(price_columns).issubset(prices):
+        raise ValueError("Oil workbook is missing configured national price columns")
+    prices = prices[price_columns].apply(pd.to_numeric, errors="raise")
+    prices.index = dates
+    prices = prices.sort_index().loc[
+        pd.Timestamp(manifest["download_start_date"], tz="UTC"):
+        pd.Timestamp(manifest["download_end_date"], tz="UTC")
+    ]
+    consumption = pd.read_excel(path, sheet_name=spec["consumption_sheet"], header=0, skiprows=[1, 2])
+    weight_year = spec["consumption_weight_year"]
+    year_rows = consumption.loc[pd.to_numeric(consumption.iloc[:, 0], errors="coerce").eq(weight_year)]
+    if len(year_rows) != 1 or not set(weight_columns).issubset(consumption):
+        raise ValueError(f"Expected national oil consumption weights for {weight_year}")
+    reported_weights = pd.to_numeric(year_rows.iloc[0][weight_columns], errors="raise").to_numpy(dtype=float)
+    weights = np.nan_to_num(reported_weights, nan=0.0, posinf=np.inf, neginf=-np.inf)
+    if not np.isfinite(weights).all() or (weights < 0).any() or weights.sum() <= 0:
+        raise ValueError("Oil consumption weights must be finite, non-negative and non-zero in total")
+    values = prices.to_numpy(dtype=float)
+    if not np.isfinite(values[~np.isnan(values)]).all():
+        raise ValueError("National oil prices contain non-finite values")
+    available = np.isfinite(values) & (weights[None, :] > 0)
+    denominator = np.where(available, weights[None, :], 0).sum(axis=1)
+    numerator = np.where(available, values * weights[None, :], 0).sum(axis=1)
+    aggregate = np.divide(numerator, denominator, out=np.full(len(prices), np.nan), where=denominator > 0)
+    frame = observations(prices.index, aggregate, "oil", config)
+    frame["countries_used"] = pd.Series(available.sum(axis=1), index=prices.index).reindex(
+        pd.DatetimeIndex(frame["observation_date"])
+    ).to_numpy()
+    provenance = {
+        "path": str(path), "sha256": digest(path), "source_url": record["url"],
+        "retrieved_at_utc": record["retrieved_at_utc"], "price_sheet": spec["price_sheet"],
+        "consumption_sheet": spec["consumption_sheet"], "weight_year": int(weight_year),
+        "national_consumption_weights": {
+            country: float(weight) for country, weight in zip(countries, weights)
+            if weight > 0
+        },
+        "countries_without_reported_consumption": [
+            country for country, weight in zip(countries, reported_weights) if np.isnan(weight)
+        ],
+        "usable_observations": len(frame), "missing_source_rows": int(np.isnan(aggregate).sum()),
+        "aggregation": "Sum(price * consumption) / sum(consumption), over available positively weighted countries",
+    }
+    return frame, provenance
+
+
 def read_sources(directory, config, years):
     manifest_path = directory / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -32,36 +122,19 @@ def read_sources(directory, config, years):
         raise ValueError("Selected years are not covered by the source collection")
     records = {Path(item["path"]).name: item for item in manifest["outputs"]}
     result, provenance = {}, {}
-    for name in ["gas", "coal", "co2", "oil", "fx"]:
+    for name in ["gas", "coal", "co2"]:
         spec = config[name]
         path = directory / spec["file"]
         if path.name not in records or digest(path) != records[path.name]["sha256"]:
             raise ValueError(f"Source file does not match its collection manifest: {path}")
         frame = pd.read_csv(path)
-        dates = pd.DatetimeIndex(pd.to_datetime(frame["date"], errors="raise", utc=True))
-        if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
-            raise ValueError(f"Source dates must be unique and increasing: {path}")
-        if not dates.equals(dates.normalize()):
-            raise ValueError(f"Expected daily observation labels: {path}")
         values = pd.to_numeric(frame[spec["column"]], errors="raise").to_numpy(dtype=float)
-        if not np.isfinite(values[~np.isnan(values)]).all():
-            raise ValueError(f"Non-finite source values: {path}")
-        series = pd.Series(values, index=dates, name=name).dropna()
-        if series.empty:
-            raise ValueError(f"No usable observations: {path}")
-        lag = config["time"]["effective_lag_days"][name]
-        if isinstance(lag, bool) or not isinstance(lag, int) or lag < 0:
-            raise ValueError(f"Effective lag for {name} must be a non-negative integer")
-        result[name] = pd.DataFrame({
-            "value": series.to_numpy(), "observation_date": series.index,
-        }, index=series.index + pd.Timedelta(days=lag))
-        result[name].index.name = "effective_date"
+        result[name] = observations(frame["date"], values, name, config)
         provenance[name] = {
             "path": str(path), "sha256": digest(path), "column": spec["column"],
-            "usable_observations": len(series), "missing_source_rows": int(np.isnan(values).sum()),
+            "usable_observations": len(result[name]), "missing_source_rows": int(np.isnan(values).sum()),
         }
-    if (result["fx"]["value"] <= 0).any():
-        raise ValueError("USD/EUR rates must be positive")
+    result["oil"], provenance["oil"] = weighted_oil(directory, manifest, config)
     provenance["collection_manifest"] = {
         "path": str(manifest_path), "sha256": digest(manifest_path),
     }
@@ -91,38 +164,34 @@ def previous(frame, target, max_age, name):
 
 
 def convert(sources, config):
+    if config["procedure"] != "archive_2023_inferred":
+        raise ValueError("Unsupported cost-input procedure")
     if config["time"]["holding"] != "previous_observation":
         raise ValueError("Only previous_observation holding is implemented")
     daily_age = positive(config["time"]["daily_max_age_days"], "Daily maximum age")
     weekly_age = positive(config["time"]["weekly_max_age_days"], "Weekly maximum age")
-    gas = config["gas"]
-    if gas["model_basis"] != "LHV" or gas["quoted_basis_assumption"] not in {"LHV", "HHV"}:
-        raise ValueError("Gas basis must be HHV or LHV, with LHV output")
-    ratio = positive(gas["lhv_over_hhv"], "Gas LHV/HHV ratio")
-    if ratio > 1:
-        raise ValueError("LHV/HHV cannot exceed one")
-    gas_factor = 1 / ratio if gas["quoted_basis_assumption"] == "HHV" else 1.0
-    coal_mwh_t = (
-        positive(config["coal"]["net_calorific_value_kcal_kg"], "Coal NCV")
-        * positive(config["coal"]["kcal_to_kj"], "kcal conversion") / 3600
-    )
-    oil_mwh_t = positive(config["oil"]["net_calorific_value_gj_t"], "Oil NCV") / 3.6
+    gas_factor = positive(config["gas"]["price_multiplier"], "Gas multiplier")
+    co2_factor = positive(config["co2"]["price_multiplier"], "CO2 multiplier")
+    decimals = config["coal"]["source_price_decimals"]
+    if isinstance(decimals, bool) or not isinstance(decimals, int) or decimals < 0:
+        raise ValueError("Coal source-price decimals must be a non-negative integer")
+    coal_factor = positive(config["coal"]["combined_price_factor"], "Coal combined conversion factor")
+    oil_divisor = positive(config["oil"]["eur_per_tonne_divisor"], "Oil energy-price divisor")
     lignite_factor = positive(config["lignite"]["coal_price_factor"], "Lignite factor")
 
-    # Convert on the coal quote's effective date, then hold the converted quote.
-    # A day with only a new FX observation does not create a new coal quote.
-    fx, fx_dates, fx_ages = previous(sources["fx"], sources["coal"].index, daily_age, "Coal FX")
-    converted = {name: frame.copy() for name, frame in sources.items() if name != "fx"}
+    # This is the empirically recovered combined coal factor. Applying ECB
+    # rates here too would introduce another currency conversion.
+    converted = {name: frame.copy() for name, frame in sources.items()}
     converted["gas"]["value"] *= gas_factor
-    converted["coal"]["value"] /= fx["value"].to_numpy() * coal_mwh_t
-    converted["coal"]["fx_effective_date"] = fx_dates
-    converted["coal"]["fx_observation_date"] = fx["observation_date"].to_numpy()
-    converted["oil"]["value"] /= oil_mwh_t
+    converted["coal"]["value"] = converted["coal"]["value"].round(decimals) * coal_factor
+    converted["oil"]["value"] /= oil_divisor
+    converted["co2"]["value"] *= co2_factor
     factors = {
-        "gas_price_multiplier": gas_factor, "gas_lhv_over_hhv_assumption": ratio,
-        "coal_mwh_lhv_per_tonne": coal_mwh_t, "oil_mwh_lhv_per_tonne": oil_mwh_t,
+        "gas_price_multiplier": gas_factor, "co2_price_multiplier": co2_factor,
+        "coal_source_price_decimals": decimals, "coal_combined_price_factor": coal_factor,
+        "additional_ecb_conversion": False, "oil_eur_per_tonne_divisor": oil_divisor,
+        "oil_consumption_weight_year": config["oil"]["consumption_weight_year"],
         "lignite_coal_energy_price_ratio": lignite_factor,
-        "maximum_fx_age_at_coal_quote_days": float(fx_ages.max()),
     }
     return converted, factors, daily_age, weekly_age
 
@@ -144,9 +213,8 @@ def annual(year, converted, config, factors, daily_age, weekly_age):
             fuel[name] = frame["value"]
         dates[name + "_observation_date"] = frame["observation_date"]
         dates[name + "_effective_date"] = effective
-        if name == "coal":
-            dates["coal_fx_observation_date"] = frame["fx_observation_date"]
-            dates["coal_fx_effective_date"] = frame["fx_effective_date"]
+        if name == "oil":
+            dates["oil_countries_used"] = frame["countries_used"].astype(int)
         summary[name] = {
             "first_observation_used": str(frame["observation_date"].iloc[0]),
             "last_observation_used": str(frame["observation_date"].iloc[-1]),
@@ -196,17 +264,36 @@ def main():
         for year in years
     }
     directory.mkdir(parents=True, exist_ok=True)
+    print(
+        "Using the procedure inferred from the 2023 archive. "
+        "CO2 provider and eight reference oil dates remain unresolved; "
+        "parameters/weights in other years are explicit extensions.", flush=True,
+    )
     for year, (fuel, co2, dates, report) in prepared.items():
         year_paths = paths[year]
         for key, frame in [("fuel", fuel), ("co2", co2), ("source_dates", dates)]:
             frame.to_csv(year_paths[key], date_format="%Y-%m-%dT%H:%M:%SZ")
         write_json(year_paths["audit"], {
             "year": year, "hours": len(fuel),
-            "units": {"fuel": "EUR/MWh_th, LHV", "co2": "EUR/tCO2"},
+            "units": {
+                "fuel": "EUR/MWh_th, implemented archive price convention",
+                "fuel_basis_note": "Physical HHV/LHV basis not independently established for all quotes/factors",
+                "co2": "EUR/tCO2",
+            },
             "money_basis": "Nominal observation-year prices; no deflation",
             "time_convention": "Retrospective observation-day UTC blocks; not publication timestamps",
             "config": {"path": str(args.config), "sha256": digest(args.config), "contents": config},
             "input_files": provenance, "conversion_factors": factors,
+            "alignment": {
+                **config["alignment"],
+                "year_has_verified_parameters": year in config["alignment"]["verified_parameter_years"],
+                "co2_source_status": config["co2"]["alignment_status"],
+                "oil_unresolved_intervals_in_this_year": [
+                    interval for interval in config["alignment"]["oil_unresolved_reference_dates"]
+                    if pd.Timestamp(interval["start"]).year == year
+                ],
+                "manual_oil_patches_applied": False,
+            },
             "outputs": {
                 key: {"path": str(path), "sha256": digest(path)}
                 for key, path in year_paths.items() if key != "audit"

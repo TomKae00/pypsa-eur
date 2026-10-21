@@ -206,83 +206,101 @@ days, without interpolating, filling, rounding CO2, converting currencies,
 deflating prices or selecting an oil fuel. The `date` column is an observation
 date, not an assertion that the closing quote was available at midnight.
 
-### 1c. Convert the source histories to hourly cost inputs
+### 1c. Apply the procedure recovered from the paper's 2023 archive
 
 ```bash
 pixi run python scripts/prepare_hindcast_cost_inputs.py
 ```
 
-`config/hindcast/cost-inputs.yaml` records the conversion convention and defaults
-to the offline collection just imported. Use `--source-directory` for another
-collection, `--years` for a subset and `--directory` for another output location.
-The source CSVs must match the SHA256 hashes in their collection manifest.
+The default in `config/hindcast/cost-inputs.yaml` now follows the implemented
+fuel-price procedure inferred from `hindcast-dyn-wy2023.nc`. It replaces the
+previous additional gas HHV/LHV adjustment, daily ECB coal conversion and
+40.4 GJ/tonne oil conversion. Output goes to **`data/hindcast/paper-procedure/`**,
+so earlier files under `data/hindcast/` are preserved and must not be mixed into
+these revised runs. Use `--source-directory` for another source collection,
+`--years` for a subset and `--directory` for a different output location.
 
-| Input | Default conversion | Status of the assumption |
+| Input | Implemented procedure | Evidence and limits |
 | --- | --- | --- |
-| Gas | Divide the TTF quote by 0.9 to express EUR/MWh on an LHV basis | Assume the quote uses HHV; NCV/GCV=0.9 is a generic gas approximation, not contract-specific composition data |
-| Coal | USD/tonne divided by USD/EUR and by 6.978 MWh/tonne | 6,000 kcal/kg net as received, with 1 kcal=4.1868 kJ |
-| Oil | EU low-sulphur fuel oil without taxes, EUR/tonne divided by 40.4/3.6 MWh/tonne | IPCC residual-fuel-oil NCV; one declared proxy for the native generic oil carrier |
-| Lignite | Converted coal energy price multiplied by 0.8911423821185138 | Inferred 2023 archive ratio, explicitly extended to all four years |
-| CO2 | Retain EUR/tCO2 and decimal precision | No rounding, currency or energy conversion |
+| Gas | Unmodified Yahoo TTF close; multiplier 1.0 | All 8,760 hours match the recovered 2023 input; no additional division by 0.9 |
+| Coal | Rotterdam USD/tonne quote rounded to two decimals, multiplied by 0.1141439205955335 | All 8,760 hours match the recovered 2023 input; this is one combined currency/energy factor |
+| Oil | National untaxed low-sulphur fuel-oil prices aggregated with published 2023 consumption weights, divided by 10.83 | Matches 357 of 365 reference days, or 8,568 of 8,760 hours |
+| Lignite | Converted coal price multiplied by 0.8911423821185138 | Constant ratio across every hour of the 2023 archive |
+| CO2 | Investing.com EUA futures retained without scaling or integer rounding | Explicit provider substitution; the original Trading Economics series remains unresolved |
 
-The gas price multiplier is therefore about 1.1111. If the input quote is
-established to be LHV-based, set `quoted_basis_assumption: LHV` to use a
-multiplier of one. Do not apply an HHV/LHV adjustment twice. Neither Yahoo's
-stored metadata nor the paper specifies the exact historical model-input energy
-basis. This is a visible modelling assumption, not an asserted paper replica.
+The gas match establishes equality to the quote, not an independently certified
+HHV/LHV basis. The combined coal factor must not be interpreted as a standalone
+calorific value, and **ECB rates are not applied in addition to it**. The raw ECB
+history remains in the retrieved collection, but is unused by this procedure.
+These choices reproduce input-cost behaviour; they are not fitted to electricity
+prices and do not change native generation assets, efficiencies or intensities.
 
-The physical conversion references are the
-[Energy Statistics Manual](https://ec.europa.eu/eurostat/documents/3859598/5885369/NRG-2004-EN.PDF/b3c4b86f-8e88-4ca6-9188-b95320900b3f)
-(Annex 3, Table A3.12 for gas and Table A3.4 for energy units),
-[CME's thermal-coal discussion](https://www.cmegroup.com/education/files/thermal-coal-derivatives-discussion.pdf)
-(6,000 kcal/kg NAR European coal), and the
-[2006 IPCC Guidelines](https://www.ipcc-nggip.iges.or.jp/public/2006gl/pdf/2_Volume2/V2_1_Ch1_Introduction.pdf)
-(Volume 2, Table 1.2, residual fuel oil 40.4 GJ/tonne).
-Native oil assets, efficiencies and emission intensities remain unchanged;
-choosing this common oil-price proxy does not reclassify their actual fuels.
+The oil calculation reads the **original Commission workbook** from the
+collection's `raw/` directory. Using its already published EU aggregate would
+not reproduce the identified weighting procedure. For each observation date:
 
-Each coal quote is converted at the latest ECB observation on or before its
-effective date. The resulting EUR/MWh price is held until the next coal quote;
-an FX-only trading day does not create a new coal observation. Source rows with
-missing prices are not new observations. For hourly expansion, only the latest
-past/current effective observation is used, with no interpolation or backward
-filling from a future date. December observations seed the year start. A daily
-observation older than 10 calendar days, or an oil observation older than 21 days,
-stops preparation; the limit includes the end of the last allowed calendar day.
-The output includes the actual observation/effective dates used in every hour.
+1. Read national `*_price_wo_tax_fuel_oil_1` prices from `Prices wo taxes`.
+2. Read the fixed 2023 `*_consumption_fuel_oil_1` weights from `Consumption`.
+3. Over the configured EU-27 countries with positive reported consumption and
+   an available price, compute `sum(price * consumption) / sum(consumption)`.
+4. Divide that aggregate EUR/tonne quote by 10.83 and hold it until the next
+   usable observation.
 
-**This is a retrospective full-foresight convention:** daily closing quotes and
-weekly observations are assigned to 00:00 UTC on their labelled observation
-dates by default (`effective_lag_days: 0`). Those timestamps are not publication
-times, and this dataset must not be presented as a causal real-time trading
-backtest. Weekly oil publication can follow its observation date. A study of
-limited information would need explicit release-time alignment instead. Setting
-a configured non-negative lag moves an observation's effective date forward;
-the importer does not infer publication dates.
+Countries with unreported consumption are excluded; weights are renormalized
+when a national price is missing. The workbook's source hash, actual weights,
+omitted countries and number of countries contributing to each hourly value
+are recorded. No future national price is used to fill another country's gap.
 
-The command creates, for each selected year:
+The unresolved 2023 oil dates are **1 January and 27 November–3 December**.
+They remain generated from the source-based procedure: no hand-picked patches
+or values copied from network outputs are introduced. The data comparison
+establishes the preceding match counts, but does not establish the reason for
+those eight dates. Likewise, the recovered CO2 series contains whole-euro
+values, but rounding or shifting the retrieved Investing.com series does not
+reproduce it. The script therefore keeps that provider substitution explicit
+instead of inventing a correction to force a match.
 
-- `data/hindcast/fuel_YEAR_hourly.csv`: `utc_timestamp,gas,coal,lignite,oil`,
-  nominal EUR/MWh of net thermal energy;
-- `data/hindcast/co2_YEAR_hourly.csv`: `utc_timestamp,co2`, nominal EUR/tCO2;
-- `data/hindcast/cost_source_dates_YEAR_hourly.csv`: observation/effective dates,
-  including the exchange rate used for coal;
-- `data/hindcast/cost-inputs_YEAR.json`: source/configuration hashes, conversion
-  factors, holding ages, annual price statistics and output hashes.
+**Parameter evidence is currently limited to 2023.** The same recovered coal
+and lignite factors, oil divisor and fixed 2023 oil-consumption weights are
+applied to 2022, 2024 and 2025 as an explicit extension. Their exact equivalence
+to the authors' other archived years has not been established, and no archived
+2025 case exists. Every annual JSON records this distinction and sets
+`exact_replica: false`, together with the CO2 source difference and unresolved
+oil intervals. This is an alignment of the known fuel procedure, not a claim
+that every paper input or parameter has been replicated.
 
+Daily and weekly prices are expanded using only the latest observation with an
+effective date on or before each model hour. Missing source rows are not new
+observations. There is no interpolation or backward filling from a future date;
+December observations seed the year start. Daily prices expire after 10 calendar
+days and weekly oil after 21 days, including the end of the last allowed day.
+Missing seed observations or excessively long gaps stop preparation.
+
+This is a **retrospective full-foresight convention**: daily closes and weekly
+observations are assigned to 00:00 UTC on their labelled observation dates
+(`effective_lag_days: 0`). Those timestamps are not publication times; the
+result must not be presented as a causal real-time backtest. No publication
+dates are inferred. Explicit non-negative lags can move effective dates forward
+for a separately defined timing convention.
+
+Each selected year produces the following under `data/hindcast/paper-procedure/`:
+
+- `fuel_YEAR_hourly.csv`: `utc_timestamp,gas,coal,lignite,oil`, nominal
+  EUR/MWh thermal following the implemented archive price convention;
+- `co2_YEAR_hourly.csv`: `utc_timestamp,co2`, nominal EUR/tCO2;
+- `cost_source_dates_YEAR_hourly.csv`: observation/effective dates and the
+  number of contributing oil-price countries;
+- `cost-inputs_YEAR.json`: source/configuration hashes, conversion factors,
+  national oil weights, holding ages, annual statistics, output hashes and
+  the remaining alignment limitations.
+
+The source CSVs and raw workbook must match their collection-manifest hashes.
 There are 8,760 hours in 2022, 2023 and 2025, and 8,784 in 2024. Preparation
-retains leap day by default; the cost helper subsequently selects the actual
-network timestamps, so the model's omitted 29 February causes no date shift.
-Existing output files are never overwritten. All selected years are prepared
-before export, so source-gap errors do not leave apparently complete input sets.
-These files provide the four traded fuels and CO2. Native VOM and the handling
-of other carriers still belong to the network-cost application step below.
-
-The original paper's precise oil choice, fuel conversions and source
-preprocessing remain unavailable. Its statement of weekly coal prices also
-differs from the frequent weekday changes in the inspected 2023 archive.
-None of the conversion factors is fitted to historical electricity-price errors.
-No native capacities or grid data are calibrated or replaced.
+retains leap day; the network-cost helper subsequently selects the network's
+actual timestamps, so omitting 29 February in the build causes no date shift.
+Existing outputs are never overwritten, and every selected year is prepared
+before export. These files supply the four traded fuels and CO2; native VOM
+and other-carrier handling belong to the network-cost application step below.
 
 ### 2. Construct the independent yearly systems
 
@@ -339,8 +357,8 @@ fuel/CO2 prices and explicit VOM assumptions. The example uses 2023:
 year=2023
 pixi run python scripts/build_hindcast_costs.py \
   "resources/hindcast-build-${year}/networks/composed_${year}.nc" \
-  --fuel-prices "data/hindcast/fuel_${year}_hourly.csv" \
-  --co2-prices "data/hindcast/co2_${year}_hourly.csv" \
+  --fuel-prices "data/hindcast/paper-procedure/fuel_${year}_hourly.csv" \
+  --co2-prices "data/hindcast/paper-procedure/co2_${year}_hourly.csv" \
   --vom data/hindcast/vom.yaml \
   --output "data/hindcast/marginal_costs_${year}.csv"
 
@@ -583,8 +601,8 @@ CO2 prices, network efficiencies/emission intensities and explicit VOM:
 ```bash
 pixi run python scripts/build_hindcast_costs.py \
   resources/hindcast-build-2023/networks/composed_2023.nc \
-  --fuel-prices data/hindcast/fuel_2023_hourly.csv \
-  --co2-prices data/hindcast/co2_2023_hourly.csv \
+  --fuel-prices data/hindcast/paper-procedure/fuel_2023_hourly.csv \
+  --co2-prices data/hindcast/paper-procedure/co2_2023_hourly.csv \
   --vom data/hindcast/vom.yaml \
   --output data/hindcast/marginal_costs_2023.csv
 
@@ -600,9 +618,13 @@ maps carriers such as `CCGT: 3.0` in EUR/MWh_el (illustrative, not an assumption
 Costs are `VOM + (fuel + CO2_price * emissions_per_MWh_th) / efficiency`.
 Non-fuel technologies retain their input costs. The CSV **replaces** total
 marginal costs, so emissions charges are not added twice. Source fuel/CO2 data
-are not fabricated or substituted with monthly defaults. Obtain the authors'
-processed daily/weekly inputs for close methodological replication, document
-hourly expansion and currency basis, and retain their provenance.
+are not fabricated or substituted with monthly defaults. The four traded-fuel
+and CO2 files now come from the source-based procedure in section 1c, including
+its explicit alignment limitations. Native VOM and any required non-traded
+fuel/carrier handling must still be supplied before this network-cost step;
+the four-column fuel file alone does not provide biomass or waste prices.
+Obtaining the authors' original CO2 series and resolving the eight oil dates
+remains necessary before claiming exact source replication.
 
 ## Tests
 
