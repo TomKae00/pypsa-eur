@@ -14,8 +14,10 @@ import json
 from datetime import date, datetime, timezone
 from io import StringIO
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
+from zipfile import BadZipFile, ZipFile
 
 import numpy as np
 import pandas as pd
@@ -31,19 +33,48 @@ def write_json(path, value):
 
 
 class Sources:
-    def __init__(self, directory):
+    def __init__(self, directory, bundle=None):
         self.directory = directory
         directory.mkdir(parents=True, exist_ok=True)
         self.records = []
+        self.bundle = Path(bundle).expanduser() if bundle else None
+        self.bundle_sha256 = sha256(self.bundle) if self.bundle else None
+
+    def bundled(self, filename, url):
+        with ZipFile(self.bundle) as archive:
+            names = [f"raw/{filename}", f"raw/{filename}.json"]
+            for name in names:
+                if name not in archive.namelist():
+                    raise ValueError(
+                        f"Source bundle is missing {name}. Its date range and sources "
+                        "must match --years and --config; no live fallback is attempted."
+                    )
+                if archive.getinfo(name).file_size > 50 * 1024 * 1024:
+                    raise ValueError(f"Unexpectedly large bundled source: {name}")
+            payload, receipt = (archive.read(name) for name in names)
+        record = json.loads(receipt)
+        if (
+            record["url"] != url
+            or record["sha256"] != hashlib.sha256(payload).hexdigest()
+            or record["bytes"] != len(payload)
+        ):
+            raise ValueError(f"Bundle URL, size or checksum mismatch: {filename}")
+        return payload, record
 
     def get(self, name, url, suffix, headers=None):
         fingerprint = hashlib.sha256(url.encode()).hexdigest()[:12]
         path = self.directory / f"{name}-{fingerprint}{suffix}"
         receipt = path.with_suffix(path.suffix + ".json")
+        imported = self.bundled(path.name, url) if self.bundle else None
         if path.exists() and receipt.exists():
             record = json.loads(receipt.read_text())
             if record["url"] != url or record["sha256"] != sha256(path):
                 raise ValueError(f"Cached source or checksum changed: {path}")
+            if imported and record["sha256"] != imported[1]["sha256"]:
+                raise ValueError(
+                    f"Cached source differs from the bundle: {path}. "
+                    "Use a new --directory to keep both source versions."
+                )
         else:
             if path.exists():
                 raise ValueError(f"Source exists without a receipt: {path}")
@@ -53,14 +84,30 @@ class Sources:
             )
             temporary = path.with_suffix(path.suffix + ".part")
             try:
-                with urlopen(request, timeout=60) as response:
-                    temporary.write_bytes(response.read())
-                    record = {
-                        "name": name,
-                        "url": url,
-                        "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
-                        "last_modified": response.headers.get("Last-Modified"),
-                    }
+                if imported:
+                    payload, record = imported
+                    temporary.write_bytes(payload)
+                    record = dict(record)
+                else:
+                    try:
+                        with urlopen(request, timeout=60) as response:
+                            temporary.write_bytes(response.read())
+                            record = {
+                                "name": name,
+                                "url": url,
+                                "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
+                                "last_modified": response.headers.get("Last-Modified"),
+                            }
+                    except HTTPError as error:
+                        if error.code in {401, 403, 429}:
+                            raise RuntimeError(
+                                f"{name}: provider returned HTTP {error.code}. Live access "
+                                "is not guaranteed. Cached downloads are preserved. "
+                                "Import an existing, permitted source bundle with "
+                                "--source-bundle /path/to/hindcast-market-sources-2022-2025.zip. "
+                                "No alternate provider was substituted."
+                            ) from error
+                        raise
                 record.update(
                     path=str(path), sha256=sha256(temporary), bytes=temporary.stat().st_size
                 )
@@ -69,8 +116,12 @@ class Sources:
                 temporary.replace(path)
             finally:
                 temporary.unlink(missing_ok=True)
+        record = dict(record, path=str(path))
+        if self.bundle:
+            record["imported_from_bundle_sha256"] = self.bundle_sha256
         self.records.append(record)
-        print(f"Source: {name} ({record['bytes']:,} bytes)", flush=True)
+        mode = "Offline source" if self.bundle else "Source"
+        print(f"{mode}: {name} ({record['bytes']:,} bytes)", flush=True)
         return path
 
 
@@ -82,7 +133,7 @@ def source_series(dates, values, name, start, end):
     present = series.dropna()
     if not np.isfinite(present.to_numpy()).all():
         raise ValueError(f"Non-finite source prices: {name}")
-    series = series.sort_index().loc[start:end]
+    series = series.sort_index().loc[pd.Timestamp(start):pd.Timestamp(end)]
     series.index.name = "date"
     if series.dropna().empty:
         raise ValueError(f"No source observations in the requested period: {name}")
@@ -199,6 +250,10 @@ def main():
     parser.add_argument("--config", default="config/hindcast/market-data.yaml")
     parser.add_argument("--years", nargs="+", type=int)
     parser.add_argument("--directory", type=Path)
+    parser.add_argument(
+        "--source-bundle", type=Path,
+        help="Import original raw responses and receipts from a ZIP without network requests",
+    )
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text())
     years = sorted(set(args.years or config["years"]))
@@ -209,7 +264,10 @@ def main():
         parser.error(f"Collection already exists: {directory}. Choose a new --directory to refresh it.")
     # Preserve December observations for later, explicit carry-forward at Jan 1.
     start, end = date(years[0] - 1, 12, 1), date(years[-1], 12, 31)
-    sources = Sources(directory / "raw")
+    try:
+        sources = Sources(directory / "raw", args.source_bundle)
+    except OSError as error:
+        parser.exit(1, f"Cannot open source bundle: {error}\n")
     jobs = [
         ("gas_ttf_daily.csv", "gas", lambda: yahoo(config["gas"], sources, start, end)),
         ("coal_rotterdam_daily.csv", "coal", lambda: investing(
@@ -223,7 +281,10 @@ def main():
     # Collect and parse all sources before exporting any normalized tables.
     # Failed downloads retain only source caches for a subsequent retry.
     for filename, name, retrieve in jobs:
-        frame, identity = retrieve()
+        try:
+            frame, identity = retrieve()
+        except (RuntimeError, ValueError, KeyError, OSError, URLError, BadZipFile) as error:
+            parser.exit(1, f"Market-data retrieval stopped ({name}): {error}\n")
         outputs.append((filename, name, frame, identity))
     manifest = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -239,6 +300,9 @@ def main():
             "money_basis": "Nominal prices in each observation year; no deflation",
         },
         "raw_sources": sources.records, "outputs": [],
+        "source_bundle": {
+            "path": str(sources.bundle), "sha256": sources.bundle_sha256,
+        } if sources.bundle else None,
     }
     for filename, name, frame, identity in outputs:
         path = directory / filename

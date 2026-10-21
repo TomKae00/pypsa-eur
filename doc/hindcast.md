@@ -139,6 +139,8 @@ December 2021 so that a later, explicit carry-forward policy can cover the
 beginning of 2022. This step does not build or solve a network. It uses existing
 environment dependencies and public endpoints, without an ENTSO-E token,
 market-data account, `yfinance` installation or Trading Economics subscription.
+Live endpoint access is not guaranteed: Investing.com can return HTTP 403 from
+some connections even when the same public request succeeds elsewhere.
 
 | Input | Retrieved source | Quoted units and convention |
 | --- | --- | --- |
@@ -175,6 +177,28 @@ hashes. A completed collection is not overwritten: choose a new `--directory`
 for a refresh. `--years` can select another set of completed historical years.
 Provider schema/access failures stop retrieval; no alternative ticker or provider
 is substituted automatically.
+
+For an existing source collection, an offline ZIP bundle can transfer the
+original responses and their download receipts without querying any provider:
+
+```bash
+pixi run python scripts/retrieve_hindcast_market_data.py \
+  --source-bundle "$HOME/Downloads/hindcast-market-sources-2022-2025.zip" \
+  --directory data/hindcast/market-data-2022-2025-offline
+```
+
+The bundle contains `raw/` entries using the same URL-derived filenames and
+SHA256 receipts as the source cache. Source URLs, sizes and hashes are checked
+before import, and original retrieval dates are retained. Files are read by
+their exact expected names, without extracting archive paths. All five inputs
+must be present for the configured range; offline mode never falls back to live
+requests or another provider. The manifest records the bundle SHA256 too.
+Matching cached files are reused. If an existing cache has different source
+bytes, choose a new `--directory` to preserve both versions.
+
+The 403 error now reports this offline option directly instead of displaying a
+Python traceback. The pandas date slice uses explicit timestamps for pandas 3
+and later. These changes do not alter source prices or their units.
 
 These are **source histories, not the hourly CSVs consumed by
 `build_hindcast_costs.py`**. Retrieval keeps missing source values and non-trading
