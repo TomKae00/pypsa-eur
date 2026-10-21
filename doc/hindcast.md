@@ -361,7 +361,35 @@ These commands are for when inputs and assumptions are ready; they have not been
 run here. Make shared changes in `build.yaml` and annual changes in the matching
 `build-YEAR.yaml`. The standalone `build-2023.yaml` also contains shared settings,
 so keep it aligned when changing those assumptions.
-Weather cutouts and any required CDS credentials use the normal PyPSA-Eur pipeline.
+
+### Historical weather cutouts
+
+The hindcast configurations explicitly set `data.cutout.source: build` (version
+`latest`) and use PyPSA-Eur's native `build_cutout` rule with atlite. Annual names
+such as `europe-2023-era5` describe the local cutout configuration; they are not
+promises that matching files exist in the default download archive. Leaving the
+source at its default `archive` causes a `MissingInputException` for the remote
+`.../cutout/v1.0/europe-2023-era5.nc` URL before any build starts.
+
+The native version registry currently resolves local build output to
+`data/cutout/build/unknown/europe-YEAR-era5.nc`. Monthly ERA5 requests are enabled
+and the time chunk size is 500. All ERA5 features are prepared: the hindcast does
+not restrict preparation to the default example's temperature/height/runoff
+subset, which would omit weather variables needed by wind and solar.
+
+Building requires CDS API access configured on the machine running the workflow;
+see [PyPSA-Eur's weather-data instructions](data-cutouts.md). The first full-Europe
+annual build downloads and prepares weather data before generation profiles can
+be built. Completed cutouts are reused by later workflow runs.
+
+To prepare just the 2023 cutout before continuing the composed-network build:
+
+```bash
+pixi run snakemake data/cutout/build/unknown/europe-2023-era5.nc \
+  --cores 4 --configfile config/hindcast/build-2023.yaml
+```
+
+No cutout download, weather preparation or model run was performed for this fix.
 
 **2025 input availability is not assumed.** The branch's native
 `data/nuclear_p_max_pu.csv` currently ends in 2024; its nuclear availability loader

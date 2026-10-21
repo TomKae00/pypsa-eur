@@ -32,6 +32,10 @@ hindcast-build-2022:
         time:
         - '2022'
         - '2022'
+        chunks:
+          time: 500
+        prepare_kwargs:
+          monthly_requests: true
 hindcast-build-2023:
   planning_horizons:
   - 2023
@@ -62,6 +66,10 @@ hindcast-build-2023:
         time:
         - '2023'
         - '2023'
+        chunks:
+          time: 500
+        prepare_kwargs:
+          monthly_requests: true
 hindcast-build-2024:
   planning_horizons:
   - 2024
@@ -92,6 +100,10 @@ hindcast-build-2024:
         time:
         - '2024'
         - '2024'
+        chunks:
+          time: 500
+        prepare_kwargs:
+          monthly_requests: true
 hindcast-build-2025:
   planning_horizons:
   - 2025
@@ -122,3 +134,7 @@ hindcast-build-2025:
         time:
         - '2025'
         - '2025'
+        chunks:
+          time: 500
+        prepare_kwargs:
+          monthly_requests: true

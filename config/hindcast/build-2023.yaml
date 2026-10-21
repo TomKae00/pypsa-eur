@@ -7,6 +7,11 @@ run:
     enable: false
   shared_resources:
     policy: false
+# Annual ERA5 names are local builds, not filenames guaranteed in the archive.
+data:
+  cutout:
+    source: build
+    version: latest
 foresight: overnight
 # Explicit full study footprint; never inherit a Bornholm smoke-run subset.
 # This is PyPSA-Eur's 34-country footprint, not every geographical European state.
@@ -96,6 +101,10 @@ atlite:
       dx: 0.3
       dy: 0.3
       time: ['2023', '2023']
+      chunks:
+        time: 500
+      prepare_kwargs:
+        monthly_requests: true
 # ERA5 solar differs from the paper's SARAH3; documented explicitly.
 solving:
   options:

@@ -9,6 +9,11 @@ run:
   shared_resources:
     policy: false
   prefix: ''
+# Annual ERA5 names are local builds, not filenames guaranteed in the archive.
+data:
+  cutout:
+    source: build
+    version: latest
 foresight: overnight
 countries:
 - AL

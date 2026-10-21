@@ -33,3 +33,7 @@ atlite:
       time:
       - '2025'
       - '2025'
+      chunks:
+        time: 500
+      prepare_kwargs:
+        monthly_requests: true
