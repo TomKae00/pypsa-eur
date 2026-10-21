@@ -8,6 +8,10 @@ helper scripts, documentation and existing test file were transferred from the
 previous draft branch. It does not import energy-island scripts or modify the
 standard composition rules. Bornholm's feature branch remains separate.
 
+The market-price convention now uses the native `cluster_network` copperplate
+option; its existing helper has guards for invalid bus groups. There is no
+separate network-merging script.
+
 The build config does not need an `energy_islands` switch: that feature is not
 installed in this branch. No tests, simulations or benchmark validation were run
 for this migration.
@@ -41,6 +45,50 @@ or re-solving an archived country-level network does not validate that new build
 The CLI reports raw hourly/daily/weekly MAE, RMSE, SMAPE, bias, correlation, coverage,
 price spreads, border flows and load shedding without arbitrary pass thresholds.
 
+## Native market-zone convention
+
+The goal is **one hourly market price per zone**, not necessarily one physical
+bus. Native bidding-zone clustering is retained with
+`allow_ac_dc_mixing_in_bus_clusters: true`. Native `copperplate_regions` connects
+the following expected clustered IDs:
+
+| Market price area | Native cluster IDs | National bus information retained |
+| --- | --- | --- |
+| Germany–Luxembourg (`DE_LU`) | `DE00`, `LUG1` | DE and LU |
+| Ireland/Northern Ireland (`IE_SEM`) | `IE00`, `GBNI` | IE and GB |
+
+These IDs follow `build_bidding_zones.format_names` in this branch. They are
+configuration expectations, not inspected outputs from an executed 2023 build.
+If the actual shape/network combination uses different IDs, clustering raises
+an error listing the unknown and available buses. Adjust the group IDs and exact
+aliases together; a misspelt group must not silently leave a market separated.
+Other islands or exceptional regions need explicit historical assignment;
+country-prefix matching is not used.
+
+Copperplating retains buses and their countries, removes their internal branches,
+and connects them by fixed, infinite-capacity, bidirectional, lossless, zero-cost
+`copper` links. Existing national input assignment is retained. Inter-zone AC
+lines and DC links remain in the standard pipeline. These represent aggregated
+electrical constraints, not a reconstruction of historical NTC or flow-based
+market capacity allocation. Internal congestion and redispatch are not modelled.
+
+The main benchmark requires buses sharing an observed price to be connected by
+these native copperplate links. A copperplate group cannot be split across
+different benchmark zones. After solving, bus-price spread within a zone must
+be no larger than `price_atol + price_rtol * max(abs(bus prices))` per hour.
+Defaults are 0.01 EUR/MWh absolute and 1e-6 relative. Disagreement is an error;
+prices are never averaged to conceal it. The lexicographically first bus supplies
+the reported price, and an hour is missing if any member's price is unavailable.
+`audit.json` records the representative buses and maximum within-zone spreads.
+The optional archived country-reference comparison keeps its explicitly labelled
+demand-weighted aggregation.
+
+`zone-aliases-2023.yaml` supplies exact native-ID-to-price-area aliases for the
+mapping template. It is a naming aid, not a certified historical shape catalogue.
+Pin/review the source shapes and reconcile boundaries with 2023 before claiming
+historical spatial fidelity. No tests or model construction were run for this
+revision.
+
 ## Main Europe-wide bidding-zone workflow
 
 1. Build the composed network using `build-2023.yaml` as described below.
@@ -51,13 +99,14 @@ pixi run python scripts/hindcast.py prepare-zonal \
   resources/hindcast-build-2023/networks/composed_2023.nc
 ```
 
-Fill `data/hindcast/bus_zones_2023.csv` with the historical ENTSO-E area code for
-**every** bus, for example `DK_1`, `DK_2`, `SE_4`, `DE_LU`, `IT_NORD`. Use the
-actual bus names written by the command, not illustrative names. Multiple buses
-may share a market zone, including shared zones spanning countries, but one bus
-cannot represent multiple zones. Refer to the generated bidding-zone shapes and
-bus maps; current shape data must be reconciled with the target historical year.
-No country-prefix guessing is applied. Re-run the command after filling the CSV;
+The command creates `data/hindcast/bus_zones_2023.csv` and prefills recognised
+native IDs using `zone-aliases-2023.yaml`, such as `DK_1`, `DK_2`, `SE_4`, `DE_LU`
+and `IT_NORD`. Review **every** assignment and fill any remaining blanks from
+the actual generated shapes/bus maps. Existing mappings are never overwritten.
+Multiple buses may share a market zone only when joined by native copperplate
+links; one bus cannot represent multiple zones. Both DE/LU buses must map to
+`DE_LU`, and IE/Northern Ireland to `IE_SEM`. Current boundaries need historical
+review. No country-prefix guessing is applied. Re-run after reviewing the CSV;
 it generates `data/hindcast/flow-sources-zonal-2023.yaml` for **all** modelled zonal
 borders. Their canonical direction is alphabetical zone order.
 
@@ -85,7 +134,7 @@ Existing pipeline observations may be supplied directly in the same format.
 For unsupported directional API queries the flow downloader stops explicitly;
 provide a documented alternate source or missing columns rather than inventing
 zero exchange. All-missing borders are reported as unscored in the benchmark.
-The European network, manual historical-zone mapping, price/flow observations
+The European network, reviewed historical-zone mapping, price/flow observations
 and historical costs still need to be supplied; these instructions are not a
 claim that that full workflow has already been executed.
 
@@ -224,8 +273,9 @@ regions:
 ```
 
 Replace placeholders with actual bus names. Inspect `buses` and the benchmark
-price CSV headers before mapping. Multi-bus model prices use demand weighting;
-this is an aggregation statistic, not an implementation of zonal market clearing.
+price CSV headers before mapping. This separate diagnostic uses demand-weighted
+multi-bus prices by default; it is not zonal market clearing. The main `bus_zones`
+workflow always requires native copperplating and checks common prices.
 Marta's individual price files have `utc_timestamp,price_eur_mwh`; pivot/rename
 them into the wide zonal table before using them here.
 
@@ -342,3 +392,13 @@ The Europe-wide zonal configuration, complete bus mapping and all-border
 reporting were added after the recorded implementation check above. No tests,
 model solves or benchmark validation were run for this revision, as requested.
 The earlier 11-test result does not describe the revised code.
+
+## Native copperplate revision (2026-10-21)
+
+Enabled native AC/DC cluster mixing and configured DE–LU and IE/NI copperplate
+groups. Added exact native-ID aliases, structural guards for shared-market
+mappings and representative-bus price extraction with a numerical agreement
+check. No tests, schema checks, network builds, solves or benchmark validation
+were run for this revision, as requested. Generated IDs and historical shape
+boundaries still need review during construction; a completed historical price
+reconstruction is not claimed.

@@ -64,6 +64,13 @@ clustering:
     level: bz
   build_bidding_zones:
     aggregate_to_tyndp: false
+  cluster_network:
+    allow_ac_dc_mixing_in_bus_clusters: true
+  # Native cluster IDs from build_bidding_zones.format_names; countries stay separate.
+  # If upstream shape IDs differ, clustering fails and lists the missing buses.
+  copperplate_regions:
+    - [DE00, LUG1]  # Germany-Luxembourg: DE_LU
+    - [IE00, GBNI]  # Ireland-Northern Ireland: IE_SEM
   temporal:
     averaging: false
     segmentation: false

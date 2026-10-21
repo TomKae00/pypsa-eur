@@ -3,11 +3,16 @@
 year: 2023
 network: results/hindcast-build-2023/network.nc
 bus_zones: data/hindcast/bus_zones_2023.csv
+zone_aliases: config/hindcast/zone-aliases-2023.yaml
+# Multiple buses in a market zone must be natively copperplated and agree in price.
+price_mode: common
+price_atol: 0.01  # EUR/MWh, absolute solver tolerance for a common market price
+price_rtol: 0.000001
 prices: data/hindcast/prices_zonal_2023.csv
 loads: null
 output: results/hindcast-europe-zonal-2023
 expected_countries: [AL, AT, BA, BE, BG, CH, CZ, DE, DK, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT, LT, LU, LV, ME, MK, NL, 'NO', PL, PT, RO, RS, SE, SI, SK, XK]
-required_zones: [DK_1, DK_2, NO_1, NO_2, NO_3, NO_4, NO_5, SE_1, SE_2, SE_3, SE_4]
+required_zones: [DE_LU, IE_SEM, DK_1, DK_2, NO_1, NO_2, NO_3, NO_4, NO_5, SE_1, SE_2, SE_3, SE_4]
 # All electricity buses must be mapped; all inter-zone Lines/DC Links are included.
 # Spreads and border directions are derived from those same connections.
 flows: null

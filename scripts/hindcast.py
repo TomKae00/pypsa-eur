@@ -176,6 +176,49 @@ def region_buses(n, regions):
     return mapping
 
 
+def check_market_connections(n, mapping):
+    """Shared market buses must be connected by the native copperplate links."""
+    zone_of = {bus: zone for zone, buses in mapping.items() for bus in buses}
+    neighbours = {bus: set() for bus in zone_of}
+    for name, link in n.links.loc[n.links.carrier.eq("copper")].iterrows():
+        a, b = link.bus0, link.bus1
+        if a not in zone_of or b not in zone_of or zone_of[a] != zone_of[b]:
+            raise ValueError(
+                f"Copperplate link {name} spans different/missing benchmark zones; "
+                "use the same market definition in construction and benchmarking"
+            )
+        if not (
+            np.isposinf(link.p_nom)
+            and not link.p_nom_extendable
+            and link.p_min_pu == -1
+            and link.p_max_pu == 1
+            and link.efficiency == 1
+            and link.marginal_cost == 0
+        ):
+            raise ValueError(
+                f"{name}: expected an unconstrained lossless native copperplate link"
+            )
+        for attr in ["efficiency", "marginal_cost", "p_min_pu", "p_max_pu"]:
+            if name in n.links_t[attr].columns:
+                raise ValueError(f"{name}: time-varying {attr} is not a native copperplate")
+        neighbours[a].add(b)
+        neighbours[b].add(a)
+    for zone, buses in mapping.items():
+        remaining, visited = [buses[0]], set()
+        while remaining:
+            bus = remaining.pop()
+            if bus in visited:
+                continue
+            visited.add(bus)
+            remaining.extend(neighbours[bus] - visited)
+        if set(buses) != visited:
+            raise ValueError(
+                f"{zone}: multiple buses are not connected by native copperplate links. "
+                "Configure clustering.copperplate_regions and rebuild; "
+                "a reporting mapping cannot create a common market price"
+            )
+
+
 def zonal_configuration(n, cfg):
     """Map the entire electricity network using explicit historical zone codes.
 
@@ -203,6 +246,7 @@ def zonal_configuration(n, cfg):
         zone: {"buses": group.bus.tolist(), "price_zones": [zone]}
         for zone, group in table.groupby("bidding_zone", sort=True)
     }
+    check_market_connections(n, {zone: spec["buses"] for zone, spec in regions.items()})
     zone_of = table.set_index("bus").bidding_zone.to_dict()
     borders = set()
     for frame in [n.lines, n.links.loc[n.links.carrier.eq("DC")]]:
@@ -210,7 +254,13 @@ def zonal_configuration(n, cfg):
             a, b = zone_of.get(branch.bus0), zone_of.get(branch.bus1)
             if a is not None and b is not None and a != b:
                 borders.add(tuple(sorted([a, b])))
-    return dict(cfg, regions=regions, borders=sorted(borders), spreads=sorted(borders))
+    return dict(
+        cfg,
+        regions=regions,
+        borders=sorted(borders),
+        spreads=sorted(borders),
+        price_mode="common",
+    )
 
 
 def prepare_zonal(network, config, flow_sources):
@@ -222,10 +272,21 @@ def prepare_zonal(network, config, flow_sources):
     path = Path(cfg["bus_zones"])
     if not path.exists():
         buses = n.buses.loc[n.buses.carrier.isin(["AC", "DC", ""]), ["country"]].copy()
-        buses["bidding_zone"] = ""
+        aliases = {}
+        if cfg.get("zone_aliases"):
+            names = yaml.safe_load(Path(cfg["zone_aliases"]).read_text())
+            if names["year"] != cfg["year"]:
+                raise ValueError("Zone aliases and benchmark must refer to the same year")
+            aliases = names["aliases"]
+        buses["bidding_zone"] = [aliases.get(bus, "") for bus in buses.index]
         path.parent.mkdir(parents=True, exist_ok=True)
         buses.to_csv(path, index_label="bus")
-        print(f"Created {path}. Fill bidding_zone with historical ENTSO-E area codes, then repeat this command.")
+        unresolved = buses.index[buses.bidding_zone.eq("")].tolist()
+        print(
+            f"Created {path} using exact native zone aliases. "
+            f"Unmapped buses: {unresolved}. Review every assignment and fill blanks, "
+            "then repeat this command. Existing files are never overwritten."
+        )
         return
     cfg = zonal_configuration(n, cfg)
     path = Path(flow_sources)
@@ -235,13 +296,44 @@ def prepare_zonal(network, config, flow_sources):
     print(f"Wrote {len(sources)} inter-zone flow query pairs to {path}")
 
 
-def model_prices(n, mapping):
+def model_prices(n, mapping, *, mode="load_weighted", atol=0.01, rtol=1e-6, checks=None):
+    """Read a common zonal price, or explicitly aggregate the legacy reference case."""
+    if mode not in ["common", "load_weighted"]:
+        raise ValueError("price_mode must be common or load_weighted")
+    if not np.isfinite([atol, rtol]).all() or atol < 0 or rtol < 0:
+        raise ValueError("Price tolerances must be finite and non-negative")
     price = n.buses_t.marginal_price
-    load = n.get_switchable_as_dense("Load", "p_set").T.groupby(n.loads.bus).sum().T
+    load = None
+    if mode == "load_weighted":
+        load = n.get_switchable_as_dense("Load", "p_set").T.groupby(n.loads.bus).sum().T
     out = {}
     for name, buses in mapping.items():
         p = price.reindex(index=n.snapshots, columns=buses)
-        if len(buses) == 1:
+        if mode == "common":
+            p = p.replace([np.inf, -np.inf], np.nan)
+            reference_bus = sorted(buses)[0]
+            complete = p.notna().all(axis=1)
+            spread = p.max(axis=1) - p.min(axis=1)
+            allowed = atol + rtol * p.abs().max(axis=1)
+            bad = complete & (spread > allowed)
+            if bad.any():
+                first = bad.index[bad][0]
+                raise ValueError(
+                    f"{name}: no common market price at {first}; "
+                    f"bus price spread {spread.loc[first]:.6g} EUR/MWh. "
+                    "Check native copperplating; prices will not be averaged"
+                )
+            out[name] = p[reference_bus].where(complete)
+            if checks is not None:
+                checks[name] = {
+                    "buses": list(buses),
+                    "reference_bus": reference_bus,
+                    "complete_hours": int(complete.sum()),
+                    "max_bus_price_spread_eur_mwh": (
+                        float(spread[complete].max()) if complete.any() else None
+                    ),
+                }
+        elif len(buses) == 1:
             out[name] = p.iloc[:, 0]
         else:
             d = load.reindex(index=n.snapshots, columns=buses, fill_value=0)
@@ -386,7 +478,16 @@ def benchmark(network, cfg, output):
         cfg = zonal_configuration(n, cfg)
         report["bus_zones_sha256"] = digest(cfg["bus_zones"])
     mapping = region_buses(n, cfg["regions"])
-    model = model_prices(n, mapping)
+    price_checks = {}
+    price_mode = cfg.get("price_mode", "load_weighted")
+    model = model_prices(
+        n,
+        mapping,
+        mode=price_mode,
+        atol=cfg.get("price_atol", 0.01),
+        rtol=cfg.get("price_rtol", 1e-6),
+        checks=price_checks,
+    )
     year = cfg["year"]
     model = model.loc[model.index.year == year]
     if model.empty:
@@ -401,6 +502,8 @@ def benchmark(network, cfg, output):
             "network_sha256": digest(network),
             "config": cfg,
             "region_buses": mapping,
+            "price_mode": price_mode,
+            "common_price_checks": price_checks,
             "prices_sha256": digest(cfg["prices"]),
             "loads_sha256": digest(cfg["loads"]) if cfg.get("loads") else None,
             "leap_day_policy": "Use network timestamps; never shift subsequent hours",

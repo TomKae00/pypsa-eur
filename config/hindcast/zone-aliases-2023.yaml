@@ -1,0 +1,55 @@
+# Exact aliases for native four-character zone IDs; no country-prefix inference.
+# These names follow scripts/build_bidding_zones.py in the pinned PyPSA-Eur base.
+# This is a naming map, NOT evidence that current shapes match 2023 boundaries.
+# prepare-zonal leaves any other generated bus blank for explicit review.
+year: 2023
+aliases:
+  AL00: AL
+  AT00: AT
+  BA00: BA
+  BE00: BE
+  BG00: BG
+  CH00: CH
+  CZ00: CZ
+  DE00: DE_LU
+  LUG1: DE_LU
+  DKW1: DK_1
+  DKE1: DK_2
+  EE00: EE
+  ES00: ES
+  FI00: FI
+  FR00: FR
+  GB00: GB
+  GBNI: IE_SEM
+  IE00: IE_SEM
+  GR00: GR
+  HR00: HR
+  HU00: HU
+  ITN1: IT_NORD
+  ITCN: IT_CNOR
+  ITCS: IT_CSUD
+  ITS1: IT_SUD
+  ITCA: IT_CALA
+  ITSA: IT_SARD
+  ITSI: IT_SICI
+  LT00: LT
+  LV00: LV
+  ME00: ME
+  MK00: MK
+  NL00: NL
+  NOS1: NO_1
+  NOS2: NO_2
+  NOM1: NO_3
+  NON1: NO_4
+  NOS5: NO_5
+  PL00: PL
+  PT00: PT
+  RO00: RO
+  RS00: RS
+  SE01: SE_1
+  SE02: SE_2
+  SE03: SE_3
+  SE04: SE_4
+  SI00: SI
+  SK00: SK
+  XK00: XK
