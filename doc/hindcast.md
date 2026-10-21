@@ -20,7 +20,7 @@ for this migration.
 
 The main workflow is **four independent European bidding-zone hindcasts for
 2022, 2023, 2024 and 2025**, before Bornholm scenario runs. `build.yaml` contains
-shared assumptions and enables native PyPSA-Eur scenarios in `scenarios.yaml`.
+shared assumptions; `build-YEAR.yaml` selects each independent annual case.
 Each case includes the default 34-country study footprint and hourly inputs. It does not inherit the four-country smoke-case selection.
 This footprint does not literally include every European state: extensions to
 Ukraine, Moldova or Turkey require corresponding historical network and input
@@ -200,8 +200,8 @@ The 403 error now reports this offline option directly instead of displaying a
 Python traceback. The pandas date slice uses explicit timestamps for pandas 3
 and later. These changes do not alter source prices or their units.
 
-These are **source histories, not the hourly CSVs consumed by
-`build_hindcast_costs.py`**. Retrieval keeps missing source values and non-trading
+These are **source histories, not the prepared hourly CSVs consumed by
+the native composition workflow**. Retrieval keeps missing source values and non-trading
 days, without interpolating, filling, rounding CO2, converting currencies,
 deflating prices or selecting an oil fuel. The `date` column is an observation
 date, not an assertion that the closing quote was available at midnight.
@@ -296,28 +296,71 @@ Each selected year produces the following under `data/hindcast/paper-procedure/`
 
 The source CSVs and raw workbook must match their collection-manifest hashes.
 There are 8,760 hours in 2022, 2023 and 2025, and 8,784 in 2024. Preparation
-retains leap day; the network-cost helper subsequently selects the network's
+retains leap day; the native input loader subsequently selects the network's
 actual timestamps, so omitting 29 February in the build causes no date shift.
 Existing outputs are never overwritten, and every selected year is prepared
-before export. These files supply the four traded fuels and CO2; native VOM
-and other-carrier handling belong to the network-cost application step below.
+before export. These files supply the four traded fuels and CO2. PyPSA-Eur's
+native composition code retains its own VOM, efficiencies, emission intensities
+and cost-table fuel assumptions for other carriers; no separate VOM YAML or
+biomass/waste price file is required for this build.
 
 ### 2. Construct the independent yearly systems
 
-Use the native scenario configuration, targeting composed networks explicitly:
+Both build configurations enable PyPSA-Eur's native dynamic fuel and emissions
+pathways with these optional external input fields:
 
-```bash
-pixi run snakemake --cores 4 \
-  --configfile config/hindcast/build.yaml \
-  resources/hindcast-build-2022/networks/composed_2022.nc \
-  resources/hindcast-build-2023/networks/composed_2023.nc \
-  resources/hindcast-build-2024/networks/composed_2024.nc \
-  resources/hindcast-build-2025/networks/composed_2025.nc
+```yaml
+conventional:
+  dynamic_fuel_price: true
+  fuel_price_file: data/hindcast/paper-procedure/fuel_{horizon}_hourly.csv
+costs:
+  emission_prices:
+    enable: true
+    dynamic: true
+    co2: 0.0
+    price_file: data/hindcast/paper-procedure/co2_{horizon}_hourly.csv
 ```
 
-This command is for when inputs and assumptions are ready; it has not been run
-here. `build-2023.yaml` remains the earlier standalone 2023 example. Make future
-shared changes in `build.yaml`; annual changes belong in `scenarios.yaml`.
+`{horizon}` resolves to each independent case's year (2022–2025). The files are
+explicit inputs of `compose_network`, so they must exist before composition and
+Snakemake tracks changes to them. Prepared inputs bypass the monthly World Bank
+fuel builder and the Instrat CO2 builder, including their rolling averages. There
+is no additional conversion, smoothing or price filling during composition.
+With these optional fields unset, the standard PyPSA-Eur price pathways remain
+available with their existing behaviour.
+
+The loader converts timestamp labels to UTC, matches network snapshots exactly,
+and rejects gaps, duplicate timestamps and non-finite prices. It selects the
+actual 2024 snapshots without shifting dates when leap day is omitted. Missing
+files or hours cause an error rather than substitution with another source.
+The resolved paths and SHA256 hashes are stored in the composed network's
+`meta.native_price_inputs` and retained by the hindcast solve.
+
+Native generator attachment maps `gas` to CCGT/OCGT and calculates fuel cost
+divided by each generator's efficiency plus its native VOM. Other carrier fuel
+values come from the native processed technology costs. Native network
+preparation then adds the hourly CO2 charge using carrier emission intensities
+and generator efficiencies. Its dynamic/static branch applies CO2 once.
+No marginal-cost formula is reimplemented in the hindcast build.
+
+Use separate native workflow invocations, merging the shared configuration with
+one annual configuration. This branch rejects scenario overrides that change
+`planning_horizons`, so the annual cases cannot be run as entries in one native
+scenario file. `scenarios.yaml` is retained as a reference catalogue only.
+The 2023 configuration also works on its own.
+
+```bash
+for year in 2022 2023 2024 2025; do
+  pixi run snakemake \
+    "resources/hindcast-build-${year}/networks/composed_${year}.nc" \
+    --cores 4 --configfile config/hindcast/build.yaml "config/hindcast/build-${year}.yaml" || break
+done
+```
+
+These commands are for when inputs and assumptions are ready; they have not been
+run here. Make shared changes in `build.yaml` and annual changes in the matching
+`build-YEAR.yaml`. The standalone `build-2023.yaml` also contains shared settings,
+so keep it aligned when changing those assumptions.
 Weather cutouts and any required CDS credentials use the normal PyPSA-Eur pipeline.
 
 **2025 input availability is not assumed.** The branch's native
@@ -348,26 +391,25 @@ to generate `data/hindcast/flow-sources-zonal-YEAR.yaml` for every modelled bord
 The alias file accepts 2022–2025 as a naming convention; it does not certify that
 source geometries reproduce the historical boundaries in every year.
 
-### 4. Apply annual costs and solve each case
+### 4. Solve each case with its native composed costs
 
-Repeat the following commands for each selected year after supplying its actual
-fuel/CO2 prices and explicit VOM assumptions. The example uses 2023:
+After composition and mapping review, solve each selected year's network. The
+example uses 2023:
 
 ```bash
 year=2023
-pixi run python scripts/build_hindcast_costs.py \
-  "resources/hindcast-build-${year}/networks/composed_${year}.nc" \
-  --fuel-prices "data/hindcast/paper-procedure/fuel_${year}_hourly.csv" \
-  --co2-prices "data/hindcast/paper-procedure/co2_${year}_hourly.csv" \
-  --vom data/hindcast/vom.yaml \
-  --output "data/hindcast/marginal_costs_${year}.csv"
-
 pixi run python scripts/hindcast.py solve \
   "resources/hindcast-build-${year}/networks/composed_${year}.nc" \
-  --marginal-costs "data/hindcast/marginal_costs_${year}.csv" \
   --output "results/hindcast-build-${year}/network.nc" --solver gurobi --threads 4
 ```
 
+The composed network already contains historical fuel and CO2 costs calculated
+by PyPSA-Eur. Do not pass `--marginal-costs` for this route: that option replaces
+the total generator costs. `build_hindcast_costs.py` remains an optional manual
+or archived-reference override and is not part of the main build.
+
+Rebuild previously composed networks with the updated build configuration
+before solving; older files may contain static or manually replaced costs.
 No own-network solve is run by the price importer or benchmark. On Sophia use
 an allocated job and your established Pixi/Gurobi wrapper as described below.
 
@@ -563,21 +605,20 @@ absolute errors, because percentage errors are sensitive near zero.
 
 ## Rebuild using this PyPSA-Eur branch
 
-`config/hindcast/build.yaml` and its annual scenarios are the main starting point.
+`config/hindcast/build.yaml` and the annual `build-YEAR.yaml` files are the main starting point.
 `build-2023.yaml` retains the earlier standalone example. It fixes
 existing capacities, disables planned grid projects, uses hourly
 2023 demand/weather and annual 2023 renewable capacity estimates, and clusters by
 bidding zones. It uses 2020 technology assumptions (the source does not provide a 2023 cost
-table), then replaces fuel/CO2 dispatch costs with historical 2023 inputs.
-It disables CO2 quantity caps and both default cost-price pipelines
-so that verified historical total marginal costs can be supplied explicitly.
+table), while historical 2023 fuel and CO2 inputs enter its native cost pathways.
+It disables CO2 quantity caps. The prepared hourly files bypass the standard
+price-source builders; generator cost calculation stays in PyPSA-Eur.
 
 Build the **composed** network, not the ordinary solved target:
 
 ```bash
-pixi run snakemake --cores 4 \
-  --configfile config/hindcast/build-2023.yaml \
-  resources/hindcast-build-2023/networks/composed_2023.nc
+pixi run snakemake resources/hindcast-build-2023/networks/composed_2023.nc \
+  --cores 4 --configfile config/hindcast/build-2023.yaml
 ```
 
 First perform the same command with `--dry-run`. Full construction requires the
@@ -594,37 +635,25 @@ and held its conventional/hydro fleet constant from a 2020 database. The origina
 archive's embedded metadata can be exported with `hindcast.py inspect` to guide
 reconciliation. The standalone workflow does not alter the Bornholm implementation.
 
-To supply total generator costs, use an hourly CSV with one column per exact
-generator name. The helper builds it from hourly historical fuel prices,
-CO2 prices, network efficiencies/emission intensities and explicit VOM:
+The composed network already includes the historical hourly costs. Solve it
+without a total marginal-cost override:
 
 ```bash
-pixi run python scripts/build_hindcast_costs.py \
-  resources/hindcast-build-2023/networks/composed_2023.nc \
-  --fuel-prices data/hindcast/paper-procedure/fuel_2023_hourly.csv \
-  --co2-prices data/hindcast/paper-procedure/co2_2023_hourly.csv \
-  --vom data/hindcast/vom.yaml \
-  --output data/hindcast/marginal_costs_2023.csv
-
 pixi run python scripts/hindcast.py solve \
   resources/hindcast-build-2023/networks/composed_2023.nc \
-  --marginal-costs data/hindcast/marginal_costs_2023.csv \
   --output results/hindcast-build-2023/network.nc --solver gurobi --threads 4
 ```
 
-Required fuel columns depend on the carriers present: gas, coal, lignite, oil,
-biomass and waste. Units are EUR/MWh_th. CO2 column `co2` is EUR/tCO2; VOM YAML
-maps carriers such as `CCGT: 3.0` in EUR/MWh_el (illustrative, not an assumption).
-Costs are `VOM + (fuel + CO2_price * emissions_per_MWh_th) / efficiency`.
-Non-fuel technologies retain their input costs. The CSV **replaces** total
-marginal costs, so emissions charges are not added twice. Source fuel/CO2 data
-are not fabricated or substituted with monthly defaults. The four traded-fuel
-and CO2 files now come from the source-based procedure in section 1c, including
-its explicit alignment limitations. Native VOM and any required non-traded
-fuel/carrier handling must still be supplied before this network-cost step;
-the four-column fuel file alone does not provide biomass or waste prices.
-Obtaining the authors' original CO2 series and resolving the eight oil dates
-remains necessary before claiming exact source replication.
+The native input handling described in section 2 also applies to this standalone
+configuration. Its fuel CSV is in EUR/MWh thermal and its `co2` column is in
+EUR/tCO2. VOM and other fuels use the native processed technology costs.
+The optional `build_hindcast_costs.py` helper and `--marginal-costs` override are
+reserved for workflows that explicitly supply total generator costs; they are
+not needed for the native historical build.
+
+The four traded-fuel and CO2 files follow section 1c, including its explicit
+alignment limitations. Obtaining the authors' original CO2 series and resolving
+the eight oil dates remains necessary before claiming exact source replication.
 
 ## Tests
 

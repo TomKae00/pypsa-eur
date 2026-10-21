@@ -2,6 +2,9 @@
 """
 Build total hourly generator marginal costs from explicit historical inputs.
 
+Optional manual/reference override only. The main hindcast build uses native
+PyPSA-Eur fuel and emissions pathways and does not require this helper or VOM YAML.
+
 Fuel CSV: utc_timestamp,gas,coal,lignite,oil (EUR/MWh_th, same money basis as
 observed prices). CO2 CSV: utc_timestamp,co2 (EUR/tCO2). VOM YAML: mapping from
 thermal generator carrier to EUR/MWh_el. Every emitting generator needs a fuel

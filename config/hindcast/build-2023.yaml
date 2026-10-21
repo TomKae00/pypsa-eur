@@ -1,6 +1,6 @@
 # Standalone historical build on master; NOT an exact paper replica.
-# Build ONLY composed_2023.nc, then apply verified hourly marginal costs using
-# scripts/hindcast.py solve --marginal-costs ... (see doc/hindcast.md).
+# Build ONLY composed_2023.nc with native historical fuel/CO2 inputs, then use
+# scripts/hindcast.py solve without --marginal-costs (see doc/hindcast.md).
 run:
   name: hindcast-build-2023
   scenarios:
@@ -44,14 +44,16 @@ load:
   scaling_factor: 1.0
 conventional:
   unit_commitment: false
-  dynamic_fuel_price: false
+  dynamic_fuel_price: true
+  fuel_price_file: data/hindcast/paper-procedure/fuel_{horizon}_hourly.csv
 costs:
-  # Technology-data is available in five-year steps. Dispatch costs are replaced below.
+  # Technology-data is available in five-year steps; native VOM/efficiencies are retained.
   year: 2020
   emission_prices:
-    enable: false
-    dynamic: false
+    enable: true
+    dynamic: true
     co2: 0.0
+    price_file: data/hindcast/paper-procedure/co2_{horizon}_hourly.csv
 lines:
   under_construction: remove
 links:

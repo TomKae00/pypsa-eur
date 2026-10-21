@@ -61,6 +61,7 @@ from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_unif
 
 from scripts._helpers import (
     PYPSA_V1,
+    read_hourly_prices,
     rename_techs,
     update_p_nom_max,
 )
@@ -1244,10 +1245,15 @@ def main(
         unit_commitment = None
 
     if params.conventional["dynamic_fuel_price"]:
-        fuel_price = pd.read_csv(
-            inputs.fuel_price, index_col=0, header=0, parse_dates=True
-        )
-        fuel_price = fuel_price.reindex(n.snapshots).ffill()
+        if params.conventional.get("fuel_price_file"):
+            fuel_price = read_hourly_prices(
+                inputs.fuel_price, n.snapshots, required_columns=("gas",)
+            )
+        else:
+            fuel_price = pd.read_csv(
+                inputs.fuel_price, index_col=0, header=0, parse_dates=True
+            )
+            fuel_price = fuel_price.reindex(n.snapshots).ffill()
     else:
         fuel_price = None
 

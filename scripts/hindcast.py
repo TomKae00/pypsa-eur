@@ -785,7 +785,8 @@ def solve(
         n.generators_t.marginal_cost = values
     elif report["time_varying_cost_generators"] == 0:
         raise ValueError(
-            "No dynamic generator costs: supply verified hourly --marginal-costs"
+            "No dynamic generator costs: rebuild with native dynamic fuel/CO2 inputs "
+            "or explicitly supply verified hourly --marginal-costs"
         )
     if transmission_losses is None:
         transmission_losses = (

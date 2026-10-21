@@ -1,4 +1,5 @@
-# Native PyPSA-Eur scenarios: independent annual systems using standard datasets.
+# Reference catalogue of annual settings; use build.yaml plus build-YEAR.yaml to run.
+# Not enabled as native scenarios: this version forbids changing planning_horizons.
 # All fields tied to a historical year are explicit here.
 # Availability of 2025 upstream demand, capacities and nuclear factors is NOT assumed.
 hindcast-build-2022:

@@ -6,6 +6,7 @@
 Compose network by combining all electricity and sector components.
 """
 
+import hashlib
 import logging
 
 import pypsa
@@ -120,6 +121,19 @@ if __name__ == "__main__":
     sanitize_carriers(n, config)
     sanitize_locations(n)
     n.meta = dict(config, **dict(wildcards=dict(snakemake.wildcards)))
+    price_inputs = {}
+    for name, configured, path in (
+        ("fuel", params.conventional.get("fuel_price_file"), inputs.fuel_price),
+        ("co2", params.costs["emission_prices"].get("price_file"), inputs.co2_price),
+    ):
+        if configured:
+            with open(path, "rb") as source:
+                price_inputs[name] = {
+                    "path": str(path),
+                    "sha256": hashlib.file_digest(source, "sha256").hexdigest(),
+                }
+    if price_inputs:
+        n.meta["native_price_inputs"] = price_inputs
     if n.investment_periods.empty:
         n.consistency_check()
     else:
