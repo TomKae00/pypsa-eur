@@ -49,6 +49,8 @@ def tables():
     hubs = pd.read_csv("data/energy_islands/bornholm_hubs.csv")
     wind = pd.read_csv("data/energy_islands/bornholm_wind.csv")
     wind["source_generator"] = "DK offshore"
+    wind["carrier"] = "offwind-dc"
+    wind["subtract_potential"] = True
     links = pd.read_csv("data/energy_islands/bornholm_links.csv")
     links["target_bus"] = links.target_country.map({"DK": "DK2_TEST", "DE": "DE_TEST"})
     costs = pd.DataFrame(

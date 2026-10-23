@@ -61,6 +61,7 @@ from pypsa.clustering.spatial import DEFAULT_ONE_PORT_STRATEGIES, normed_or_unif
 
 from scripts._helpers import (
     PYPSA_V1,
+    offshore_connection_cost,
     rename_techs,
     update_p_nom_max,
 )
@@ -508,12 +509,8 @@ def attach_wind_and_solar(
             if supcar == "offwind":
                 distance = ds["average_distance"].to_pandas()
                 distance.index = distance.index.map(flatten)
-                submarine_cost = costs.at[car + "-connection-submarine", "capital_cost"]
-                underground_cost = costs.at[
-                    car + "-connection-underground", "capital_cost"
-                ]
-                connection_cost = line_length_factor * (
-                    distance * submarine_cost + landfall_length * underground_cost
+                connection_cost = offshore_connection_cost(
+                    costs, car, distance, landfall_length, line_length_factor
                 )
 
                 # Take 'offwind-float' capital cost for 'float', and 'offwind' capital cost for the rest ('ac' and 'dc')

@@ -63,6 +63,9 @@ def get_compose_inputs(w):
             energy_island_links=energy_islands["links"],
         )
 
+        if energy_islands.get("profile_mode", "proxy") == "project":
+            inputs["energy_island_profile"] = resources("energy_islands/wind.nc")
+
     # Sector-specific inputs (only when sector coupling is enabled)
     if sector_enabled:
         sector_inputs = dict(
@@ -251,9 +254,7 @@ rule compose_network:
         ),
         co2_budget=config_provider("co2_budget"),
         adjustments=config_provider("adjustments"),
-        energy_islands=config_provider(
-            "energy_islands", default={"enabled": False}
-        ),
+        energy_islands=config_provider("energy_islands", default={"enabled": False}),
     message:
         "Composing network for horizon {wildcards.horizon}"
     script:

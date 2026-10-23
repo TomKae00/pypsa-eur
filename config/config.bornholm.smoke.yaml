@@ -19,11 +19,14 @@ energy_islands:
   hubs: data/energy_islands/bornholm_hubs.csv
   wind: data/energy_islands/bornholm_wind.smoke.csv
   links: data/energy_islands/bornholm_links.smoke.csv
-  subtract_generic_potential: true
+  # Reserved in ALL scenarios, including baseline; assets are enabled separately.
+  project_area: data/energy_islands/bornholm_area.geojson
+  exclude_project_area: true
+  profile_mode: project
+  profile_technology: offwind-ac
+  collection_length_factor: 1.0
+  subtract_generic_potential: false
   length_factor: 1.25
-  # IDs depend on this configuration's clustering; inspect its baseline first.
-  potential_allocation: {}
-  potential_allocation_notes: {}
 solving:
   solver:
     name: highs

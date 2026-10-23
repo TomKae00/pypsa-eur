@@ -1,0 +1,4 @@
+case,link_id,hub_id,target_bus,target_country,target_bus_prefix,target_x,target_y,capacity_mw,build_mode,bidirectional,efficiency,underwater_fraction,length_km,commissioning_year
+hybrid,BEI_TO_DK2,BEI_HUB,DK0 0AC,DK,,12.27,55.6,1200,fixed,True,1.0,1.0,,2035
+hybrid,BEI_TO_DE,BEI_HUB,DE1 1AC,DE,,13.62,54.14,2000,fixed,True,1.0,1.0,,2035
+radial,BEI_TO_DK2_RADIAL,BEI_HUB,DK0 0AC,DK,,12.27,55.6,3000,fixed,True,1.0,1.0,,2035

@@ -23,8 +23,8 @@ from scripts.add_electricity import (
     sanitize_carriers,
     sanitize_locations,
 )
-from scripts.add_existing_baseyear import main as add_existing_capacities
 from scripts.add_energy_islands import main as add_energy_islands
+from scripts.add_existing_baseyear import main as add_existing_capacities
 from scripts.prepare_network import (
     apply_co2_budget_constraints,
     apply_temporal_aggregation,
@@ -84,6 +84,20 @@ if __name__ == "__main__":
     if sector_mode:
         add_sector_components(n, inputs, params, costs, nyears, current_horizon)
 
+    if params.energy_islands.get("enabled", False) and foresight != "overnight":
+        raise ValueError(
+            "Energy-island projects currently support overnight foresight only"
+        )
+    # The native temporal aggregation must see the full-resolution project wind.
+    add_energy_islands(
+        n,
+        inputs,
+        params.energy_islands,
+        costs,
+        current_horizon=current_horizon,
+        stage="generation",
+    )
+
     apply_temporal_aggregation(n, inputs, params)
 
     renewable_carriers = sorted(
@@ -121,6 +135,7 @@ if __name__ == "__main__":
         params.energy_islands,
         costs,
         current_horizon=current_horizon,
+        stage="links",
     )
 
     adjustments = params.adjustments

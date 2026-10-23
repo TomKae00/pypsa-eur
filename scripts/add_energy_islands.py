@@ -14,6 +14,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pypsa
+import xarray as xr
+
+from scripts._helpers import offshore_connection_cost
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +81,7 @@ def _haversine_km(x0: Any, y0: Any, x1: Any, y1: Any) -> np.ndarray:
 
 def _capacity_attributes(capacity_mw: float, build_mode: str) -> dict[str, Any]:
     """Translate a build mode into PyPSA nominal-capacity attributes."""
-    if capacity_mw <= 0:
+    if not np.isfinite(capacity_mw) or capacity_mw <= 0:
         raise ValueError(f"capacity_mw must be positive, got {capacity_mw}")
 
     mode = build_mode.strip().lower()
@@ -113,7 +116,8 @@ def _require_unique(frame: pd.DataFrame, column: str, table: str) -> None:
 
 
 def _select_target_bus(n: pypsa.Network, row: pd.Series) -> str:
-    """Require an explicit receiving bus and validate its basic attributes.
+    """
+    Require an explicit receiving bus and validate its basic attributes.
 
     A country and a nearest cluster are not a bidding-zone/landing mapping.
     Use inspect_energy_islands.py on a composed baseline to find bus IDs.
@@ -185,7 +189,8 @@ def _subtract_generic_potential(
     country: str | None = None,
     allocation_note: str = "",
 ) -> None:
-    """Apply a reviewed allocation; never spill into a neighbouring country.
+    """
+    Apply a reviewed allocation; never spill into a neighbouring country.
 
     This is capacity bookkeeping, not a geographic project-area exclusion.
     All rows are validated before any potential is changed.
@@ -272,6 +277,8 @@ def _add_wind(
     subtract_potential: bool,
     potential_allocation: Mapping[str, Mapping[str, float]] | None = None,
     potential_allocation_notes: Mapping[str, str] | None = None,
+    project_profile: xr.Dataset | None = None,
+    collection_length_factor: float = 1.0,
 ) -> None:
     added_generators: set[str] = set()
 
@@ -285,12 +292,47 @@ def _add_wind(
 
         carrier = str(row["carrier"])
         capacity_mw = float(row["capacity_mw"])
-        source = _select_profile_generator(
-            n,
-            carrier,
-            _optional_string(row.get("source_generator")),
-        )
-        profile = n.generators_t.p_max_pu[source].copy()
+        if project_profile is None:
+            source = _select_profile_generator(
+                n, carrier, _optional_string(row.get("source_generator"))
+            )
+            profile = n.generators_t.p_max_pu[source].copy()
+            collection_cost = 0.0
+        else:
+            ds = project_profile.sel(bus=generator_id, bin=0)
+            if "year" in ds.dims:
+                # Match native overnight attachment: use the first turbine model.
+                ds = ds.sel(year=ds.year.min(), drop=True)
+            profile = ds.profile.to_pandas().reindex(n.snapshots)
+            if not np.isfinite(profile).all() or not profile.between(0, 1).all():
+                raise ValueError(
+                    f"{generator_id}: project profile must cover every snapshot and lie in [0, 1]"
+                )
+            distance = float(ds.average_distance)
+            if not np.isfinite(distance) or distance < 0:
+                raise ValueError(
+                    f"{generator_id}: invalid wind-to-hub collection distance"
+                )
+            if (
+                not np.isfinite(collection_length_factor)
+                or collection_length_factor < 1
+            ):
+                raise ValueError(
+                    "collection_length_factor must be finite and at least one"
+                )
+            collection_technology = "offwind-ac"
+            # Only AC wind-to-hub collection here. HVDC export cables and their
+            # inverter pairs are costed separately on the explicit Links.
+            collection_cost = float(
+                costs.at[collection_technology + "-station", "capital_cost"]
+            )
+            collection_cost += offshore_connection_cost(
+                costs,
+                collection_technology,
+                distance,
+                length_factor=collection_length_factor,
+            )
+            source = f"project_area:{generator_id}"
 
         if subtract_potential and _as_bool(row.get("subtract_potential"), True):
             _subtract_generic_potential(
@@ -319,7 +361,8 @@ def _add_wind(
             generator_id,
             bus=hub_id,
             carrier=carrier,
-            capital_cost=float(costs.at[cost_technology, "capital_cost"]),
+            capital_cost=float(costs.at[cost_technology, "capital_cost"])
+            + collection_cost,
             marginal_cost=float(costs.at[operating_technology, "marginal_cost"]),
             efficiency=float(costs.at[operating_technology, "efficiency"]),
             lifetime=float(costs.at[operating_technology, "lifetime"]),
@@ -328,6 +371,9 @@ def _add_wind(
         )
         n.generators.loc[generator_id, "energy_island"] = hub_id
         n.generators.loc[generator_id, "profile_source"] = source
+        if project_profile is not None:
+            n.generators.loc[generator_id, "collection_distance_km"] = distance
+            n.generators.loc[generator_id, "collection_capital_cost"] = collection_cost
         added_generators.add(generator_id)
 
 
@@ -440,16 +486,56 @@ def _add_links(
         )
 
 
+def _allow_for_forced_links(n: pypsa.Network, link_ids: list[str]) -> None:
+    """
+    Keep the native grid expansion budget unchanged by forced project links.
+
+    PyPSA includes all extendable DC Links in its global constraint, even when
+    added after prepare_network. Add only their mandatory capacity to the RHS;
+    optional project expansion still competes for the native budget.
+    """
+    links = n.links.loc[link_ids]
+    links = links.loc[links.p_nom_extendable]
+    for name, constraint in n.global_constraints.iterrows():
+        column = {
+            "transmission_volume_expansion_limit": "length",
+            "transmission_expansion_cost_limit": "capital_cost",
+        }.get(constraint.type)
+        carriers = {c.strip() for c in str(constraint.carrier_attribute).split(",")}
+        if column and "DC" in carriers:
+            allowance = float(links.p_nom_min @ links[column])
+            n.global_constraints.at[name, "constant"] += allowance
+            n.global_constraints.loc[name, "energy_island_allowance"] = allowance
+
+
 def main(
     n: pypsa.Network,
     inputs: Mapping[str, Any],
     config: Mapping[str, Any],
     costs: pd.DataFrame,
     current_horizon: int | None = None,
+    stage: str = "all",
 ) -> pypsa.Network:
     """Add the configured energy-island case to ``n`` in place."""
     if not config.get("enabled", False):
         return n
+
+    if stage not in {"all", "generation", "links"}:
+        raise ValueError(f"Unknown energy-island composition stage {stage!r}")
+    profile_mode = config.get("profile_mode", "proxy")
+    if profile_mode not in {"proxy", "project"}:
+        raise ValueError(f"Unknown energy-island profile_mode {profile_mode!r}")
+    if config.get("exclude_project_area", False) and (
+        config.get("subtract_generic_potential", True)
+        or config.get("potential_allocation")
+    ):
+        raise ValueError(
+            "Geographic exclusion and manual potential subtraction cannot both be enabled"
+        )
+    if profile_mode == "project" and not config.get("exclude_project_area", False):
+        raise ValueError(
+            "Project profiles require exclude_project_area to prevent resource double counting"
+        )
 
     hubs = _read_csv(
         inputs["energy_island_hubs"],
@@ -510,20 +596,29 @@ def main(
         len(wind),
         len(links),
     )
-    _add_hubs(n, hubs)
-    _add_wind(
-        n,
-        wind,
-        hubs,
-        costs,
-        subtract_potential=bool(config.get("subtract_generic_potential", True)),
-        potential_allocation=config.get("potential_allocation", {}),
-        potential_allocation_notes=config.get("potential_allocation_notes", {}),
-    )
-    _add_links(
-        n,
-        links,
-        costs,
-        length_factor=float(config.get("length_factor", 1.25)),
-    )
+    if stage in {"all", "generation"}:
+        project_profile = None
+        if profile_mode == "project":
+            with xr.open_dataset(inputs["energy_island_profile"]) as ds:
+                project_profile = ds.load()
+        _add_hubs(n, hubs)
+        _add_wind(
+            n,
+            wind,
+            hubs,
+            costs,
+            subtract_potential=bool(config.get("subtract_generic_potential", True)),
+            potential_allocation=config.get("potential_allocation", {}),
+            potential_allocation_notes=config.get("potential_allocation_notes", {}),
+            project_profile=project_profile,
+            collection_length_factor=float(config.get("collection_length_factor", 1.0)),
+        )
+    if stage in {"all", "links"}:
+        _add_links(
+            n,
+            links,
+            costs,
+            length_factor=float(config.get("length_factor", 1.25)),
+        )
+        _allow_for_forced_links(n, links.link_id.tolist())
     return n

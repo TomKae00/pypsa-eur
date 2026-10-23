@@ -75,7 +75,7 @@ if __name__ == "__main__":
     nprocesses = int(snakemake.threads)
     noprogress = snakemake.config["run"].get("disable_progressbar", True)
     noprogress = noprogress or not snakemake.config["atlite"]["show_progress"]
-    technology = snakemake.wildcards.technology
+    technology = snakemake.params.get("technology") or snakemake.wildcards.technology
     params = snakemake.params.renewable[technology]
 
     cutout = load_cutout(snakemake.input.cutout)
@@ -86,6 +86,21 @@ if __name__ == "__main__":
     )
     # do not pull up, set_index does not work if geo dataframe is empty
     regions = regions.set_index("name").rename_axis("bus")
+
+    if snakemake.params.get("project_area", False):
+        if (
+            regions.crs is None
+            or not regions.index.is_unique
+            or not regions.geometry.is_valid.all()
+            or regions.geometry.is_empty.any()
+            or not regions.geom_type.isin(["Polygon", "MultiPolygon"]).all()
+        ):
+            raise ValueError(
+                "Project areas require unique names and valid polygons with a CRS"
+            )
+        footprint = regions.to_crs(cutout.crs).geometry.union_all()
+        if not cutout.grid.geometry.union_all().covers(footprint):
+            raise ValueError("Weather cutout does not cover the entire project area")
 
     res = params.get("excluder_resolution", 100)
     excluder = atlite.ExclusionContainer(crs=3035, res=res)
@@ -148,6 +163,12 @@ if __name__ == "__main__":
         excluder.add_geometry(
             snakemake.input.country_shapes, buffer=buffer, invert=True
         )
+
+    project_exclusion = snakemake.input.get("project_exclusion", [])
+    if project_exclusion:
+        # Intersect at the excluder's fine resolution, before weather-grid
+        # aggregation. Multiplying coarse area fractions is not equivalent.
+        excluder.add_geometry(project_exclusion)
 
     logger.info(f"Calculate landuse availability for {technology}...")
     start = time.time()

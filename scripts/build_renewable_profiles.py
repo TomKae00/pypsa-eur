@@ -101,7 +101,7 @@ if __name__ == "__main__":
     nprocesses = int(snakemake.threads)
     noprogress = snakemake.config["run"].get("disable_progressbar", True)
     noprogress = noprogress or not snakemake.config["atlite"]["show_progress"]
-    technology = snakemake.wildcards.technology
+    technology = snakemake.params.get("technology") or snakemake.wildcards.technology
     params = snakemake.params.renewable[technology]
     resource = params["resource"]  # pv panel params / wind turbine params
     resource["show_progress"] = not noprogress
@@ -129,7 +129,16 @@ if __name__ == "__main__":
     regions = gpd.read_file(snakemake.input.distance_regions)
     # do not pull up, set_index does not work if geo dataframe is empty
     regions = regions.set_index("name").rename_axis("bus")
-    if snakemake.wildcards.technology.startswith("offwind"):
+    if "energy_island_hubs" in snakemake.input.keys():
+        hubs = pd.read_csv(snakemake.input.energy_island_hubs).set_index("hub_id")
+        wind = pd.read_csv(snakemake.input.energy_island_wind).set_index("generator_id")
+        if not hubs.index.is_unique or not wind.index.is_unique:
+            raise ValueError("Energy-island hub and generator IDs must be unique")
+        points = hubs.loc[wind.loc[regions.index, "hub_id"]]
+        regions = gpd.GeoSeries(
+            gpd.points_from_xy(points.x, points.y), index=regions.index, crs=4326
+        )
+    elif technology.startswith("offwind"):
         # for offshore regions, the shortest distance to the shoreline is used
         offshore_regions = availability.coords["bus"].values
         regions = regions.loc[offshore_regions]

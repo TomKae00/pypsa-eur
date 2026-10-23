@@ -19,13 +19,14 @@ energy_islands:
   hubs: data/energy_islands/bornholm_hubs.csv
   wind: data/energy_islands/bornholm_wind.csv
   links: data/energy_islands/bornholm_links.csv
-  subtract_generic_potential: true
+  # Reserved in ALL scenarios, including baseline; assets are enabled separately.
+  project_area: data/energy_islands/bornholm_area.geojson
+  exclude_project_area: true
+  profile_mode: project
+  profile_technology: offwind-ac
+  collection_length_factor: 1.0
+  subtract_generic_potential: false
   length_factor: 1.25
-  # Explicit IDs/MW from a reviewed regional-resource allocation.
-  # Example syntax only: BEI_WIND: {"ACTUAL_GENERIC_GENERATOR_ID": 3000}
-  potential_allocation: {}
-  # Required when mapped overlap is less than 3000 MW, including zero.
-  potential_allocation_notes: {}
 solving:
   solver:
     name: highs

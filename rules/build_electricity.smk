@@ -334,9 +334,33 @@ def input_ua_md_availability_matrix(w):
     return {}
 
 
+def energy_island_area(w):
+    settings = config_provider("energy_islands", default={})(w)
+    if settings.get("exclude_project_area", False):
+        return settings["project_area"]
+    return []
+
+
+def energy_island_technology(w):
+    return config_provider("energy_islands", "profile_technology")(w)
+
+
+def energy_island_renewable(w):
+    # Reuse native turbine, correction factor and weather; one class per project.
+    from copy import deepcopy
+
+    technology = energy_island_technology(w)
+    renewable = deepcopy(config_provider("renewable")(w))
+    renewable[technology]["resource_classes"] = 1
+    return renewable
+
+
 rule determine_availability_matrix:
     input:
         unpack(input_ua_md_availability_matrix),
+        project_exclusion=lambda w: (
+            energy_island_area(w) if w.technology.startswith("offwind") else []
+        ),
         corine=ancient(rules.retrieve_corine.output["tif_file"]),
         natura=lambda w: (
             f"{NATURA_DATASET['folder']}/natura.tiff"
@@ -426,6 +450,65 @@ rule build_renewable_profiles:
         renewable=config_provider("renewable"),
     message:
         "Building renewable profiles for {wildcards.technology} technology"
+    script:
+        scripts("build_renewable_profiles.py")
+
+
+# The project uses the existing eligibility and profile algorithms. Its planning
+# footprint is an exogenous site, so generic depth/shore-distance siting rules do
+# not divide it into alternative AC/DC/floating projects.
+rule determine_energy_island_availability:
+    input:
+        regions=config_provider("energy_islands", "project_area"),
+        cutout=lambda w: input_cutout(
+            w, config_provider("renewable", energy_island_technology(w), "cutout")(w)
+        ),
+    output:
+        nc=resources("energy_islands/availability.nc"),
+    log:
+        logs("determine_energy_island_availability.log"),
+    threads: config["atlite"].get("nprocesses", 4)
+    resources:
+        mem_mb=config["atlite"].get("nprocesses", 4) * 5000,
+    params:
+        technology=energy_island_technology,
+        renewable=lambda w: {
+            energy_island_technology(w): {
+                "natura": False,
+                "excluder_resolution": config_provider(
+                    "renewable", energy_island_technology(w), "excluder_resolution"
+                )(w),
+            }
+        },
+        project_area=True,
+        plot_availability_matrix=False,
+    script:
+        scripts("determine_availability_matrix.py")
+
+
+rule build_energy_island_profiles:
+    input:
+        availability_matrix=resources("energy_islands/availability.nc"),
+        distance_regions=config_provider("energy_islands", "project_area"),
+        resource_regions=config_provider("energy_islands", "project_area"),
+        energy_island_hubs=config_provider("energy_islands", "hubs"),
+        energy_island_wind=config_provider("energy_islands", "wind"),
+        cutout=lambda w: input_cutout(
+            w, config_provider("renewable", energy_island_technology(w), "cutout")(w)
+        ),
+    output:
+        profile=resources("energy_islands/wind.nc"),
+        class_regions=resources("energy_islands/regions_by_class.geojson"),
+    log:
+        logs("build_energy_island_profiles.log"),
+    threads: config["atlite"].get("nprocesses", 4)
+    resources:
+        mem_mb=config["atlite"].get("nprocesses", 4) * 5000,
+    params:
+        technology=energy_island_technology,
+        snapshots=config_provider("snapshots"),
+        drop_leap_day=config_provider("enable", "drop_leap_day"),
+        renewable=energy_island_renewable,
     script:
         scripts("build_renewable_profiles.py")
 

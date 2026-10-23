@@ -1,5 +1,9 @@
 # Bornholm: first code patch
 
+> Historical instructions. The supplied Bornholm configurations now use the
+> [native project-area workflow](bornholm_native_resources.md); do not fill donor
+> allocations or select a regional proxy for those configurations.
+
 Base: `feature/bornholm-energy-island`, commit
 `0194b59cb1e7b6244af1e70133bd82d5ef31b142`.
 

@@ -1165,3 +1165,14 @@ def _load_data_version(file: str | Path, validate: bool = True) -> pd.DataFrame:
         data_versions = VersionsSchema.validate(data_versions)
 
     return data_versions
+
+
+def offshore_connection_cost(
+    costs, carrier, distance, landfall_length=0.0, length_factor=1.0
+):
+    """Annualised offshore connection cost, excluding turbine and station costs."""
+    return length_factor * (
+        distance * costs.at[carrier + "-connection-submarine", "capital_cost"]
+        + landfall_length
+        * costs.at[carrier + "-connection-underground", "capital_cost"]
+    )
