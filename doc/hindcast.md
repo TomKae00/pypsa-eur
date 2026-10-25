@@ -147,6 +147,54 @@ each start after their own weather job. The 2025 build/solve remains pending
 annual input coverage (the configured nuclear table ends at 2024).
 Completed years can be transferred to the laptop and analysed independently.
 
+## Bidding-zone geometry correction
+
+The first solved 2023 network placed Ringhals 3/4 (2,288 MW combined) and
+Oskarshamn 3 (1,450 MW) in `SE04`, while Forsmark 1/2/3 (3,446 MW) were
+assigned to `SE03`. These are capacities in the supplied plant dataset,
+not independently verified historical net capacities. Their regional
+allocation was inconsistent with the intended Swedish bidding zones.
+
+The native build had labelled whole NUTS3 regions by maximum overlap with a
+bidding zone, then dissolved those regions to create administrative bus
+shapes. Boundaries cutting through an administrative region were therefore
+lost. The onshore bus regions used for assigning conventional plants inherited
+that approximation. Changing the final reporting alias cannot fix the resulting
+allocation of assets, demand or grid buses.
+
+For administrative clustering at `level: bz`, `base_network` now receives the
+existing native `bidding_zones.geojson` and uses its polygons directly when
+constructing bus regions. Per-country overrides to `bz` use the same route;
+other administrative levels retain their original NUTS aggregation. National
+IDs and country information remain, and the existing shared-market copperplate
+groups are unchanged. Standard handling of regions with no buses remains in
+place and should be reviewed for small islands or missing zones.
+
+This is a geographic consistency correction, not a change to fuel costs,
+plant capacities, availability factors, hydro policy or solver options.
+It applies to all affected assets and years, rather than special-casing
+Swedish nuclear plants. Native upstream shape accuracy still needs review;
+using the raw zone polygons does not certify every historical boundary.
+
+Before rebuilding, preserve the original solution, audit and mapping as the
+baseline. Check the active Sophia jobs: source affecting network construction
+must not be changed underneath running builds. Weather jobs can retain their
+current preparation, because weather code/configuration is unchanged. Once
+affected build/solve jobs have stopped, pull and rebuild the composed network
+through Snakemake. The new input and changed base-network code invalidate
+the dependent spatial build stages, including bus maps, plant assignment,
+demand and renewable/hydro profiles. Existing annual ERA5 cutouts and unchanged
+retrieved datasets can be reused; a re-solve alone is insufficient.
+
+Export the corrected solve to a separate destination, for example
+`results/hindcast-build-2023-geography-corrected/network.nc`, and select that
+network explicitly for the comparison. First inspect the rebuilt individual
+plant CSV and generator table. For the same input fleet, the intended Swedish
+nuclear allocation is 7,184 MW in SE3 and zero in SE4. Also review DK/NO/SE
+demand, generation allocation and corridor endpoints before interpreting
+changes in regional prices. No geometry checks, tests, builds or solves have
+been executed to confirm the corrected generated outputs.
+
 ## Multi-year workflow: 2022–2025
 
 Each year is solved independently, with its own snapshots, demand year, ERA5
