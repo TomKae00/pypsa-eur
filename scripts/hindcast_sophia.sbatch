@@ -11,7 +11,7 @@ set -euo pipefail
 : "${SLURM_JOB_ID:?Run through sbatch, not on the login node}"
 mode="${1:?Expected weather, build-solve or solve}"
 year="${2:?Expected year or array}"
-expected_revision="${3:?Expected submitted Git revision}"
+submitted_revision="${3:?Expected submitted Git revision}"
 
 if [[ "$year" == array ]]; then
     case "${SLURM_ARRAY_TASK_ID:?Missing array index}" in
@@ -25,16 +25,10 @@ case "$year" in 2022|2023|2024|2025) ;; *) exit 2 ;; esac
 case "$mode" in weather|build-solve|solve) ;; *) exit 2 ;; esac
 
 cd "${SLURM_SUBMIT_DIR:?Submit from the repository root}"
-actual_revision="$(git rev-parse HEAD)"
-if [[ "$actual_revision" != "$expected_revision" ]]; then
-    echo "Repository changed since submission. Expected $expected_revision; got $actual_revision." >&2
-    echo "Resubmit at the intended revision; do not pull while this campaign is running." >&2
-    exit 1
-fi
-if ! git diff --quiet HEAD --; then
-    echo "Tracked source/configuration changes detected; commit them before resubmitting." >&2
-    exit 1
-fi
+# Host Git exists on the login node but is absent on Sophia compute nodes.
+# The submit helper checks the branch/working tree and passes its revision.
+# Record that provenance without requiring Git here. Keep source unchanged
+# while queued/running; workers cannot independently verify the checkout.
 
 cores="${SLURM_CPUS_PER_TASK:-8}"
 export TMPDIR="$PWD/tmp/hindcast-${SLURM_JOB_ID}-$year"
@@ -58,7 +52,7 @@ mapping="data/hindcast/bus_zones_$year.csv"
 configs=(config/hindcast/build.yaml "config/hindcast/build-$year.yaml")
 
 printf 'Stage=%s year=%s job=%s node=%s CPUs=%s revision=%s\n' \
-    "$mode" "$year" "$SLURM_JOB_ID" "$(hostname)" "$cores" "$actual_revision"
+    "$mode" "$year" "$SLURM_JOB_ID" "$(hostname)" "$cores" "$submitted_revision"
 
 if [[ "$mode" == weather ]]; then
     # This native rule has no upstream inputs; annual cutout outputs are disjoint.
@@ -104,7 +98,7 @@ fi
 run_pixi python scripts/hindcast.py prepare-zonal "$network" --year "$year"
 
 mkdir -p "results/hindcast-build-$year"
-printf '%s\n' "$actual_revision" > "results/hindcast-build-$year/submitted-revision.txt"
+printf '%s\n' "$submitted_revision" > "results/hindcast-build-$year/submitted-revision.txt"
 run_pixi python scripts/hindcast.py solve "$network" \
     --output "$output" --solver gurobi --threads "$cores"
 printf 'Completed year=%s; solved network=%s\n' "$year" "$output"

@@ -78,10 +78,13 @@ Python, Snakemake and Gurobi execute inside Slurm allocations. It submits:
 
 The printed IDs are saved in `logs/hindcast-submissions-TIMESTAMP-PID.txt`.
 Do not submit the campaign twice while its jobs remain active. Keep the checkout
-and environment unchanged while the campaign is queued/running. Workers record
-the submitted revision and reject a changed HEAD or tracked working-tree edits.
-To change code, finish/cancel affected jobs and submit replacements at the new
-revision. An unexpected mid-run source edit cannot be prevented by this helper.
+and environment unchanged while the campaign is queued/running. The login-node
+submission helper checks the branch and tracked working-tree edits and passes
+the submitted revision to each worker for recording. Compute nodes do not
+provide host Git, so workers do not invoke it or independently verify that the
+checkout still matches that revision. To change code, finish/cancel affected
+jobs and submit replacements at the new revision. Queued or mid-run source
+edits cannot be prevented by this helper.
 
 The annual worker creates a new mapping template only when none exists, then
 runs `prepare-zonal` again to enforce complete assignments and native shared
