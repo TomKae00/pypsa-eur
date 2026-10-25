@@ -356,10 +356,22 @@ def zonal_configuration(n, cfg):
     missing = set(cfg.get("required_zones", [])) - set(table.bidding_zone)
     if missing:
         raise ValueError(f"Required separate bidding zones are missing: {sorted(missing)}")
-    regions = {
-        zone: {"buses": group.bus.tolist(), "price_zones": [zone]}
-        for zone, group in table.groupby("bidding_zone", sort=True)
-    }
+    model_only = cfg.get("model_only_regions", {})
+    if not isinstance(model_only, dict) or any(
+        not isinstance(reason, str) or not reason.strip()
+        for reason in model_only.values()
+    ):
+        raise ValueError("model_only_regions must map region IDs to explicit reasons")
+    if set(model_only).intersection(cfg.get("required_zones", [])):
+        raise ValueError("Required historical bidding zones cannot be model-only")
+    regions = {}
+    for zone, group in table.groupby("bidding_zone", sort=True):
+        regions[zone] = {
+            "buses": group.bus.tolist(),
+            "price_zones": [] if zone in model_only else [zone],
+        }
+        if zone in model_only:
+            regions[zone]["unscored_reason"] = model_only[zone]
     check_market_connections(n, {zone: spec["buses"] for zone, spec in regions.items()})
     zone_of = table.set_index("bus").bidding_zone.to_dict()
     borders = set()
@@ -404,9 +416,37 @@ def prepare_zonal(network, config, flow_sources=None, year=None):
     cfg = zonal_configuration(n, cfg)
     path = Path(flow_sources or f"data/hindcast/flow-sources-zonal-{cfg['year']}.yaml")
     path.parent.mkdir(parents=True, exist_ok=True)
-    sources = {f"{a}->{b}": [[a, b]] for a, b in cfg["borders"]}
+    sources, unqueried = {}, {}
+    for a, b in cfg["borders"]:
+        key = f"{a}->{b}"
+        reasons = [
+            cfg["regions"][zone]["unscored_reason"]
+            for zone in (a, b)
+            if "unscored_reason" in cfg["regions"][zone]
+        ]
+        if reasons:
+            unqueried[key] = "; ".join(reasons)
+        else:
+            sources[key] = [[a, b]]
     path.write_text(yaml.safe_dump(sources, sort_keys=True))
-    print(f"Wrote {len(sources)} inter-zone flow query pairs to {path}")
+    write_json(
+        path.with_suffix(".audit.json"),
+        {
+            "year": cfg["year"],
+            "bus_zones_sha256": digest(cfg["bus_zones"]),
+            "model_only_regions": {
+                zone: spec["unscored_reason"]
+                for zone, spec in cfg["regions"].items()
+                if "unscored_reason" in spec
+            },
+            "unqueried_model_borders": unqueried,
+        },
+    )
+    print(
+        f"Wrote {len(sources)} inter-zone flow query pairs to {path}; "
+        f"{len(unqueried)} model-only border pairs excluded from historical queries. "
+        "All model regions and borders remain in model reporting."
+    )
 
 
 def model_prices(n, mapping, *, mode="load_weighted", atol=0.01, rtol=1e-6, checks=None):
@@ -466,7 +506,12 @@ def reference_prices(prices, loads, regions):
     result = {}
     for name, spec in regions.items():
         zones = spec["price_zones"]
-        p = prices[zones]  # fail on unknown columns
+        if not zones:
+            if not spec.get("unscored_reason"):
+                raise ValueError(f"{name}: empty price_zones needs an explicit unscored_reason")
+            result[name] = pd.Series(np.nan, index=prices.index)
+            continue
+        p = prices[zones]  # fail on undeclared missing columns
         if len(zones) == 1:
             result[name] = p.iloc[:, 0]
         else:
@@ -617,6 +662,11 @@ def benchmark(network, cfg, output):
             "region_buses": mapping,
             "price_mode": price_mode,
             "common_price_checks": price_checks,
+            "model_only_regions": {
+                zone: spec["unscored_reason"]
+                for zone, spec in cfg["regions"].items()
+                if "unscored_reason" in spec
+            },
             "prices_sha256": digest(cfg["prices"]),
             "loads_sha256": digest(cfg["loads"]) if cfg.get("loads") else None,
             "leap_day_policy": "Use network timestamps; never shift subsequent hours",
@@ -626,8 +676,17 @@ def benchmark(network, cfg, output):
     )
     rows = []
 
-    def compare(kind, key, sim, ref, unit):
+    def compare(kind, key, sim, ref, unit, unscored_reason=None):
         for freq in ["hourly", "daily", "weekly"]:
+            if unscored_reason:
+                rows.append({
+                    "kind": kind, "series": key, "resolution": freq, "unit": unit,
+                    "year": year,
+                    "status": f"NOT SCORED: {unscored_reason}",
+                    "n_expected_hours": len(sim), "n_matched_hours": 0,
+                    "coverage": 0.0, "n_scored": 0,
+                })
+                continue
             try:
                 metrics, pair = paired_metrics(
                     sim, ref, freq, cfg.get("min_aggregate_coverage", 1.0)
@@ -680,10 +739,22 @@ def benchmark(network, cfg, output):
                 pair.to_csv(output / f"{stem}_paired.csv", index_label="utc_timestamp")
                 plot_pair(pair, output / f"{stem}.png", unit)
 
+    def unscored_reason(zones):
+        return "; ".join(
+            f"{zone}: {cfg['regions'][zone]['unscored_reason']}"
+            for zone in zones if cfg["regions"][zone].get("unscored_reason")
+        ) or None
+
     for key in model:
-        compare("price", key, model[key], obs[key], "EUR/MWh")
+        compare(
+            "price", key, model[key], obs[key], "EUR/MWh",
+            unscored_reason([key]),
+        )
     for a, b in cfg.get("spreads", []):
-        compare("spread", f"{a}-{b}", model[a] - model[b], obs[a] - obs[b], "EUR/MWh")
+        compare(
+            "spread", f"{a}-{b}", model[a] - model[b], obs[a] - obs[b],
+            "EUR/MWh", unscored_reason([a, b]),
+        )
     model.to_csv(output / "model_prices_raw.csv", index_label="utc_timestamp")
     shedding = load_shedding(n).reindex(model.index)
     shedding.to_csv(output / "load_shedding_mw.csv", index_label="utc_timestamp")
@@ -697,7 +768,12 @@ def benchmark(network, cfg, output):
                 raise ValueError("Set flow_kind to physical or scheduled_day_ahead")
             observed_flows = read_hourly(cfg["flows"])
             for key in flows:
-                compare("flow", key, flows[key], observed_flows[key], "MW")
+                reason = unscored_reason(key.split("->"))
+                reference = (
+                    pd.Series(np.nan, index=flows.index)
+                    if reason else observed_flows[key]
+                )
+                compare("flow", key, flows[key], reference, "MW", reason)
             report["flow_validation"] = cfg["flow_kind"]
             report["flows_sha256"] = digest(cfg["flows"])
         else:

@@ -17,9 +17,12 @@ aliases:
   DKE1: DK_2
   EE00: EE
   ES00: ES
+  ESMA: ESMA  # Mallorca: separate model region, no reference price assigned
   FI00: FI
   FR00: FR
+  FR15: FR15  # Corsica: separate model region, no reference price assigned
   GB00: GB
+  GBZE: GBZE  # Shetland: separate model region, no reference price assigned
   GBNI: IE_SEM
   IE00: IE_SEM
   GR00: GR

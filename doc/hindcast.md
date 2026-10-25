@@ -27,7 +27,8 @@ Ukraine, Moldova or Turkey require corresponding historical network and input
 data. Keep the build and benchmark country lists consistent if extending it.
 
 `benchmark.yaml` is now the main zonal benchmark. Every electricity bus must be
-mapped to its historical bidding zone. All mapped zones and all modelled
+mapped to its historical bidding zone or an explicitly separate model-only island
+region. All mapped zones and all modelled
 inter-zone AC/DC connections enter the reporting; missing observations are
 reported as unscored, never used to remove a country from the optimisation.
 Separate DK1/DK2, SE1–SE4 and NO1–NO5 are required. Italian and other market zones
@@ -88,6 +89,39 @@ mapping template. It is a naming aid, not a certified historical shape catalogue
 Pin/review the source shapes and reconcile boundaries with 2023 before claiming
 historical spatial fidelity. No tests or model construction were run for this
 revision.
+
+### Island regions without a configured historical price reference
+
+The 2023 build also contains `ESMA` (Mallorca), `FR15` (Corsica) and
+`GBZE` (Shetland). Their native IDs are retained as separate reporting labels;
+they are **not ENTSO-E price-area codes**. The naming follows
+`scripts/build_bidding_zones.py`: ES-IB-MA becomes ESMA, FR-C becomes FR15,
+and GB-ZET becomes GBZE. This does not establish historical market equivalence.
+
+`benchmark.yaml:model_only_regions` explicitly records why these regions have
+no assigned observed price reference. Their assets, demand and connections
+remain in the composed network. They are not merged with mainland markets.
+Raw model prices and border flows include them. Price/spread scores and optional
+historical flow scores involving them are explicitly unscored, with the reason
+in `scores.csv` and `audit.json`. Preparation excludes their border pairs from
+historical API queries and records those exclusions in the flow-source audit.
+Missing ordinary price columns still raise an error; this is not a blanket
+permission to skip unknown mappings.
+
+Existing mapping CSVs are never overwritten. To complete a previously generated
+2023 mapping, fill only the three blank `bidding_zone` cells:
+
+| bus | country | bidding_zone |
+| --- | --- | --- |
+| ESMA | ES | ESMA |
+| FR15 | FR | FR15 |
+| GBZE | GB | GBZE |
+
+Then repeat `prepare-zonal` against the existing composed network. A network
+rebuild is unnecessary for this reporting change. New annual templates use
+these explicit aliases automatically. To benchmark these islands later, first
+establish a matching historical market definition and observation source, then
+update the aliases and model-only declarations together.
 
 ## Multi-year workflow: 2022–2025
 

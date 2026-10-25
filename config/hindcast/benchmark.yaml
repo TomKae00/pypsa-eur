@@ -15,6 +15,13 @@ loads: null
 output: results/hindcast-europe-zonal-{year}
 expected_countries: [AL, AT, BA, BE, BG, CH, CZ, DE, DK, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT, LT, LU, LV, ME, MK, NL, 'NO', PL, PT, RO, RS, SE, SI, SK, XK]
 required_zones: [DE_LU, IE_SEM, DK_1, DK_2, NO_1, NO_2, NO_3, NO_4, NO_5, SE_1, SE_2, SE_3, SE_4]
+# Native island regions remain separate in the optimisation and raw model outputs.
+# These labels are model IDs, not ENTSO-E price-area/query codes. No mainland proxy.
+# Explicitly unscored prices, spreads and optional historical flows involving them.
+model_only_regions:
+  ESMA: "Mallorca: no matching historical price-area series configured"
+  FR15: "Corsica: no matching historical price-area series configured"
+  GBZE: "Shetland: no matching historical price-area series configured"
 # All electricity buses must be mapped; all inter-zone Lines/DC Links are included.
 # Spreads and border directions are derived from those same connections.
 flows: null
