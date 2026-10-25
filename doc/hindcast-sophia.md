@@ -122,6 +122,58 @@ Use `solve 2023` instead of `build-solve 2022` to restart only the 2023 solve.
 Existing solve outputs or audits are not overwritten automatically; inspect any
 partial output before choosing a new destination or removing it yourself.
 
+## Restart after suboptimal barrier termination
+
+The first 2023 solve on Sophia reached Gurobi status 13 (suboptimal) after
+barrier progress stalled. The helper refused to export a solved network.
+This is not an accepted price benchmark result.
+
+The Gurobi solve now uses `Method=2`, `Crossover=-1` (automatic crossover
+strategy) and `NumericFocus=2`, retaining the requested thread count.
+Crossover permits simplex cleanup of the barrier point; NumericFocus requests
+more care in numerical computations and can increase runtime. No feasibility,
+optimality or barrier convergence tolerances are relaxed. Only an
+`ok/optimal` termination is exported. Success of this retry is not established
+by the configuration change.
+
+The helper also explicitly sets PyPSA's `include_objective_constant=False`.
+It already rejects extendable assets, so the fixed-capacity dispatch model has
+no investment-offset term to optimise. This avoids the changing-default warning;
+it is not evidence that an objective constant caused the observed failure.
+The result metadata records the solver options and termination status.
+
+If weather jobs are still active, **do not resubmit the whole campaign**.
+Cancel the old downstream build/solve array before updating source, then attach
+the replacement jobs to the existing weather array:
+
+```bash
+# Example IDs from the first campaign; use your actual array IDs.
+scancel 4907353
+git pull --ff-only
+bash scripts/submit_hindcast_sophia.sh --weather-array 4907352
+squeue -r -u "$USER"
+```
+
+This retries the 2023 solve and submits replacement 2022/2024 build/solve jobs
+using the existing weather-array dependencies. It does not create new weather
+jobs. The old 2023 solve must have stopped and no successful result may already
+exist. Do not cancel an annual job that has already completed successfully;
+submit just the missing individual stages in that case.
+
+Reusing a weather array across this update is appropriate because only
+`hindcast.py`, the submission helper and this guide change. Weather rules,
+`build_cutout.py`, shared helpers, build configurations and the installed
+environment are unchanged. Do not apply this restart pattern to arbitrary
+source changes during active builds. New solve/build workers record the new
+submitted revision, while the already-running weather workers retain theirs.
+The weather array must still be known to Slurm for `aftercorr` to resolve.
+If Slurm has purged a completed array, submit a new campaign: completed cutouts
+are reused by the native workflow rather than downloaded from scratch.
+
+Sources: [Gurobi numerical guidance](https://docs.gurobi.com/projects/optimizer/en/current/concepts/numericguide/numeric_parameters.html),
+[Gurobi crossover parameters](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parametercrossover).
+No tests or cluster solves were run to establish the retry outcome.
+
 ## 2025 is weather-only pending annual inputs
 
 The configured `data/nuclear_p_max_pu.csv` has year columns only through 2024.

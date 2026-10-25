@@ -3,6 +3,17 @@
 # or connects to another machine. Run from your Sophia terminal.
 set -euo pipefail
 
+# Reuse a still-known weather array after changing only solve/reporting code.
+# Caller must first cancel the old downstream build/solve array.
+existing_weather=""
+if [[ "$#" -gt 0 ]]; then
+    if [[ "$#" -ne 2 || "$1" != --weather-array || ! "$2" =~ ^[0-9]+$ ]]; then
+        echo "Usage: bash scripts/submit_hindcast_sophia.sh [--weather-array JOBID]" >&2
+        exit 2
+    fi
+    existing_weather="$2"
+fi
+
 repo_dir="$(git rev-parse --show-toplevel)"
 cd "$repo_dir"
 if [[ "$(git rev-parse --abbrev-ref HEAD)" != feature/historical-hindcast ]]; then
@@ -38,12 +49,17 @@ solve_job="$(sbatch --parsable --job-name=hindcast-solve-2023 \
 solve_job="${solve_job%%;*}"
 printf 'solve_2023=%s\n' "$solve_job" | tee -a "$record"
 
-# Three independent annual weather jobs; existing cutouts are reused by Snakemake.
-weather_job="$(sbatch --parsable --job-name=hindcast-weather \
-    --cpus-per-task=4 --array=0-2%3 \
-    --output=logs/hindcast-weather-%A_%a.log \
-    "$worker" weather array "$revision")"
-weather_job="${weather_job%%;*}"
+# A restart can attach new annual builds to the existing weather array without
+# interrupting downloads. Otherwise submit the three independent cutout jobs.
+if [[ -n "$existing_weather" ]]; then
+    weather_job="$existing_weather"
+else
+    weather_job="$(sbatch --parsable --job-name=hindcast-weather \
+        --cpus-per-task=4 --array=0-2%3 \
+        --output=logs/hindcast-weather-%A_%a.log \
+        "$worker" weather array "$revision")"
+    weather_job="${weather_job%%;*}"
+fi
 printf 'weather_array=%s (0=2022, 1=2024, 2=2025)\n' "$weather_job" | tee -a "$record"
 
 # aftercorr releases each build as soon as its OWN weather task succeeds.

@@ -881,12 +881,17 @@ def solve(
     options = (
         {"threads": threads, "solver": "ipm", "run_crossover": "off"}
         if solver == "highs"
-        else {"Threads": threads, "Method": 2, "Crossover": 0}
+        # Allow simplex cleanup of the barrier point instead of exporting an
+        # interior solution that may fail the optimality tolerances.
+        else {"Threads": threads, "Method": 2, "Crossover": -1, "NumericFocus": 2}
     )
     status, condition = n.optimize(
         solver_name=solver,
         solver_options=options,
         transmission_losses=transmission_losses,
+        # Fixed capacities have no investment offset; avoid a redundant fixed
+        # objective variable if this helper is reused with an archived network.
+        include_objective_constant=False,
     )
     if status != "ok" or condition != "optimal":
         raise RuntimeError(
@@ -899,6 +904,10 @@ def solve(
             "source_sha256": digest(network),
             "pypsa_version": pypsa.__version__,
             "solver": solver,
+            "solver_options": options,
+            "include_objective_constant": False,
+            "solver_status": str(status),
+            "termination_condition": str(condition),
             "transmission_losses": transmission_losses,
             "marginal_costs_sha256": digest(marginal_costs) if marginal_costs else None,
             "scope": "Fixed-capacity full-horizon re-solve; external callbacks not reconstructed",
