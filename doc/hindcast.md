@@ -123,6 +123,15 @@ these explicit aliases automatically. To benchmark these islands later, first
 establish a matching historical market definition and observation source, then
 update the aliases and model-only declarations together.
 
+## Parallel runs on Sophia
+
+See [hindcast-sophia.md](hindcast-sophia.md) for the human-invoked Slurm
+submission helper. It solves the existing 2023 network immediately and prepares
+the other annual cutouts concurrently. The 2022 and 2024 network builds/solves
+each start after their own weather job. The 2025 build/solve remains pending
+annual input coverage (the configured nuclear table ends at 2024).
+Completed years can be transferred to the laptop and analysed independently.
+
 ## Multi-year workflow: 2022–2025
 
 Each year is solved independently, with its own snapshots, demand year, ERA5
