@@ -249,8 +249,15 @@ def copperplate_buses(n: pypsa.Network, copperplate_regions: list[list[str]]):
                     efficiency=1.0,
                     marginal_cost=0.0,
                     underwater_fraction=0.0,
-                    under_construction=0.0,
+                    under_construction=False,
                 )
+
+    # under_construction is a custom Boolean flag inherited from the OSM network.
+    # Appending links can leave a mixed object column (bool/float), which xarray
+    # cannot serialize. New market-internal links are not under construction.
+    if "under_construction" in n.links.columns:
+        flags = n.links["under_construction"]
+        n.links["under_construction"] = flags.where(flags.notna(), False).astype(bool)
 
 
 def get_feature_data_for_hac(fn: str) -> pd.DataFrame:
