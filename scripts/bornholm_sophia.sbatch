@@ -41,7 +41,7 @@ if (( cores < 16 )); then
     echo "The configured Gurobi preset requires at least 16 allocated CPUs." >&2
     exit 2
 fi
-smk=("$pixi_wrapper" run snakemake --cores "$cores" --resources mem_mb=110000
+smk=("$pixi_wrapper" run snakemake --cores "$cores" --resources mem_mb=110000 --rerun-incomplete
      --configfile config/config.bornholm.yaml)
 composed=()
 solved=()

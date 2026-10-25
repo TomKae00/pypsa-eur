@@ -182,6 +182,10 @@ an optimiser checkpoint. Finished network targets are reusable on a subsequent
 submission. Do not start a second job against the same output directories while
 the first is still running.
 
+After a failed or cancelled build, wait for that job to exit before updating the
+checkout and submitting `build` again. The script uses `--rerun-incomplete` to
+regenerate unfinished outputs; completed, up-to-date targets can be reused.
+
 The script refuses all execution outside a Slurm job, including dry-run. `PIXI_SOPHIA` and
 `GRB_LICENSE_FILE` can override the wrapper and licence paths. Record the job ID
 returned by `sbatch`; the combined log is `slurm-bornholm-<jobid>.out`.
