@@ -46,6 +46,21 @@ or re-solving an archived country-level network does not validate that new build
 The CLI reports raw hourly/daily/weekly MAE, RMSE, SMAPE, bias, correlation, coverage,
 price spreads, border flows and load shedding without arbitrary pass thresholds.
 
+## First local notebook
+
+Open [inspect_hindcast.ipynb](../notebooks/inspect_hindcast.ipynb) in the local
+checkout after copying the solved network and annual bus mapping from Sophia.
+Use the PyPSA-Eur Python interpreter and run the cells in order. The first
+settings cell selects the year, focus zone and plot dates.
+
+The notebook uses the existing benchmark mapping, common-price and border-flow
+helpers. It shows zone prices, electricity supply and demand, storage, border
+flows and load shedding. Historical-price comparison is optional and skipped
+when its input CSV is absent. It never solves or rewrites a network and performs
+no automatic downloads. For other completed years, change the settings and
+restart from the top. Notebook outputs are empty; it has not been executed
+against the user's result.
+
 ## Native market-zone convention
 
 The goal is **one hourly market price per zone**, not necessarily one physical
