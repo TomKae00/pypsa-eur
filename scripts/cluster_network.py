@@ -249,7 +249,7 @@ def copperplate_buses(n: pypsa.Network, copperplate_regions: list[list[str]]):
                     efficiency=1.0,
                     marginal_cost=0.0,
                     underwater_fraction=0.0,
-                    under_construction=0.0,
+                    under_construction=False,
                 )
 
 
