@@ -118,13 +118,26 @@ root on the Bornholm branch after applying these changes. If historical jobs are
 still running, use a separate Bornholm checkout or worktree; do not change the
 branch or files in their active checkout.
 
+The wrapper requires a Slurm allocation even for a dry-run. From the login node,
+request an interactive allocation without an explicit memory request:
+
 ```bash
-cd ~/projects/pypsa-eur
+cd ~/projects/pypsa-eur-bornholm
+srun --partition=workq --time=00:30:00 --nodes=1 --ntasks=1 \
+  --cpus-per-task=16 --pty bash -l
+```
+
+Once the compute-node shell opens:
+
+```bash
+cd ~/projects/pypsa-eur-bornholm
 bash scripts/bornholm_sophia.sbatch dry-run
 ```
 
 The dry-run resolves the complete dependency graph, so it may need access to
-remote source-data manifests. To build first without solving:
+remote source-data manifests. After a successful dry-run, use `exit` to release
+the interactive allocation and return to the login node. Build first without
+solving:
 
 ```bash
 sbatch scripts/bornholm_sophia.sbatch build
@@ -153,8 +166,14 @@ is the recommended sequence. The full solve stops before optimisation if
 the actual electricity bus IDs or country assignments differ. Investigate an
 upstream shape/network version mismatch rather than suppressing this check.
 
-The script requests one `workq` node, 16 CPUs, 112 GiB and 24 hours. Gurobi uses
-16 threads; the Snakemake memory budget admits one full solve at a time. The
+The batch script reserves one `workq` node exclusively for 24 hours and configures
+16 CPU workers; Gurobi uses 16 threads. Sophia's observed `workq` configuration
+reports only 1 MB per node to Slurm, which rejects explicit requests such as
+`--mem=16G` or `--mem=112G`. This is scheduler metadata, not the node's physical
+RAM. Omit `--mem` and `--mem-per-cpu`; the exclusive allocation avoids sharing the
+node with another job. Check physical memory with `free -h` on the compute node.
+Snakemake's `mem_mb=110000` is an internal scheduling budget, not a Slurm memory
+reservation or a hard runtime limit. It admits one full solve at a time. The
 selected cases run sequentially within an allocation. Use one full solve per job
 initially, then size the allocation from the pilot. The 24-hour allocation is a starting budget,
 not a measured completion time or memory guarantee. Large sector models may
@@ -163,7 +182,7 @@ an optimiser checkpoint. Finished network targets are reusable on a subsequent
 submission. Do not start a second job against the same output directories while
 the first is still running.
 
-The script refuses non-dry execution outside a Slurm job. `PIXI_SOPHIA` and
+The script refuses all execution outside a Slurm job, including dry-run. `PIXI_SOPHIA` and
 `GRB_LICENSE_FILE` can override the wrapper and licence paths. Record the job ID
 returned by `sbatch`; the combined log is `slurm-bornholm-<jobid>.out`.
 

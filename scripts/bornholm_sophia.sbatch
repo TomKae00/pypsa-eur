@@ -4,10 +4,13 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=112G
+#SBATCH --exclusive
 #SBATCH --time=24:00:00
 #SBATCH --output=slurm-bornholm-%j.out
 
+# Sophia workq reports nominal memory (1 MB) to Slurm, so explicit --mem
+# requests are rejected. Reserve the node exclusively for this large model.
+# The Snakemake mem_mb budget below schedules work; it does not reserve RAM.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 test -f config/config.bornholm.yaml
@@ -28,8 +31,8 @@ case "$stage" in
     all|build|solve|dry-run) ;;
     *) echo "Usage: sbatch scripts/bornholm_sophia.sbatch [build|solve|all|dry-run] [short-scenario-name|all]" >&2; exit 2 ;;
 esac
-if [[ "$stage" != dry-run && -z "${SLURM_JOB_ID:-}" ]]; then
-    echo "Submit this script with sbatch to run on a compute node." >&2
+if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+    echo "Run inside a Slurm allocation on a compute node, including dry-run; use srun or sbatch." >&2
     exit 2
 fi
 

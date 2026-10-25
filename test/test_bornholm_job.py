@@ -96,11 +96,13 @@ def test_selected_build_includes_comparison_baseline(job):
     ]
 
 
-def test_job_rejects_login_node_execution(job):
-    _, script, env = job
+@pytest.mark.parametrize("stage", ["dry-run", "build", "solve", "all"])
+def test_job_rejects_login_node_execution(job, stage):
+    root, script, env = job
     env.pop("SLURM_JOB_ID")
     result = subprocess.run(
-        ["bash", str(script), "build"], env=env, capture_output=True, text=True
+        ["bash", str(script), stage], env=env, capture_output=True, text=True
     )
     assert result.returncode == 2
     assert "compute node" in result.stderr
+    assert not (root / "calls.jsonl").exists()
