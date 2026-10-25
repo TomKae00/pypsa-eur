@@ -1,18 +1,106 @@
+# Full Bornholm study: native bidding zones, hourly 2023 weather, 2035 sectors.
+# Spatial settings match feature/historical-hindcast/config/hindcast/build-2023.yaml.
+# Future investment and sector assumptions are deliberately distinct from hindcast.
 run:
   name: all
   scenarios:
     enable: true
     file: config/scenarios_bornholm.yaml
+  shared_resources:
+    policy: false
+countries: [AL, AT, BA, BE, BG, CH, CZ, DE, DK, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT, LT, LU, LV, ME, MK, NL, 'NO', PL, PT, RO, RS, SE, SI, SK, XK]
 foresight: overnight
 planning_horizons:
 - 2035
+snapshots:
+  start: '2023-01-01'
+  end: '2024-01-01'
+  inclusive: left
+enable:
+  drop_leap_day: true
+data:
+  cutout:
+    source: build
+    version: latest
+atlite:
+  nprocesses: 4
+  default_cutout: europe-2023-era5
+  cutouts:
+    europe-2023-era5:
+      module: era5
+      x: [-12.0, 42.0]
+      y: [33.0, 72.0]
+      dx: 0.3
+      dy: 0.3
+      time: ['2023', '2023']
+      chunks:
+        time: 500
+      prepare_kwargs:
+        monthly_requests: true
 sector:
-  enabled: false
+  enabled: true
+  transport: true
+  heating: true
+  biomass: true
+  industry: true
+  shipping: true
+  aviation: true
+  agriculture: true
+  H2_network: true
+  gas_network: true
+  electricity_transmission_grid: true
+  # Keep the native sector loss formulation, including the project export links.
+  transmission_efficiency:
+    enable: [DC, H2 pipeline, H2 pipeline retrofitted, gas pipeline, electricity distribution grid]
+pypsa_eur:
+  # Native sector cleanup must preserve the DE-LU and IE-NI market connections.
+  Link: [DC, copper]
+load:
+  fixed_year: 2023
+  scaling_factor: 1.0
+energy:
+  energy_totals_year: 2023
+electricity:
+  transmission_limit: vopt
+  powerplants_filter: '(DateOut > 2035 or DateOut != DateOut) and (DateIn <= 2035 or DateIn != DateIn)'
+costs:
+  year: 2035
+  emission_prices:
+    enable: false
+    dynamic: false
+conventional:
+  dynamic_fuel_price: false
+co2_budget:
+  relative: true
+  upper:
+    2035: 0.25
+  lower: null
 clustering:
+  mode: administrative
+  administrative:
+    level: bz
+  build_bidding_zones:
+    aggregate_to_tyndp: false
+    remove_islands: false
   cluster_network:
-    n_clusters: 90
+    # Zone polygons determine the count; n_clusters is not a k-means target here.
+    allow_ac_dc_mixing_in_bus_clusters: true
+  copperplate_regions:
+    - [DE00, LUG1]
+    - [IE00, GBNI]
   temporal:
-    averaging: 3h
+    averaging: false
+    segmentation: false
+    representative: false
+renewable:
+  onwind:
+    resource_classes: 3
+  offwind-ac:
+    resource_classes: 3
+  offwind-dc:
+    resource_classes: 3
+  solar:
+    resource_classes: 3
 energy_islands:
   enabled: false
   case: hybrid
@@ -28,6 +116,20 @@ energy_islands:
   subtract_generic_potential: false
   length_factor: 1.25
 solving:
+  options:
+    rolling_horizon: false
+    noisy_costs: false
+    # Match the hindcast's inter-zone AC formulation; DC uses sector efficiencies.
+    transmission_losses: 0
   solver:
-    name: highs
-    options: highs-default
+    name: gurobi
+    options: gurobi-bornholm
+  solver_options:
+    gurobi-bornholm:
+      threads: 16
+      method: 2
+      crossover: 0
+      BarConvTol: 1.0e-6
+      Seed: 123
+  mem_mb: 110000
+  runtime: 24h

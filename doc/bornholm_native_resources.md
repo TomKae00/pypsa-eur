@@ -98,9 +98,10 @@ energy-island export project.
 The missing smoke CSVs are now included. They use the buses observed in the user's
 20-cluster DK/DE/SE/PL baseline: `DK0 0AC` and `DE1 1AC`. These are explicit nodal
 bindings, not a bidding-zone price model. Recheck them if clustering or network
-inputs change. The regular 90-cluster links CSV deliberately has **blank receiving
-buses**: compose its baseline, inspect the mapping and fill those IDs independently.
-The regular project case will fail clearly until that mapping is supplied.
+inputs change. The full-study configuration now uses the other branch's bidding-zone
+layout, 8,760 hourly snapshots and sector coupling. Its explicit receiving buses are
+`DKE1` (DK2) and `DE00` (Germany). See [the full-study run guide](bornholm_zonal_study.md)
+for the comparison assumptions, historical-network check and Sophia submission.
 
 From the repository root:
 
@@ -149,7 +150,8 @@ that workaround is not part of the repository. A complete dry-run did not finish
 while checking remote source-data availability, so it is not reported as passed.
 No full European build or solve was performed here.
 
-The regular configuration still uses 90 clusters and 3-hour averaging, and the
-smoke configuration uses 20 clusters and 6-hour averaging. Export links remain
-lossless. This change completes the resource/profile integration; it does not
-calibrate the future electricity system or introduce a bidding-zone market model.
+The smoke configuration retains 20 clusters, 6-hour averaging and lossless
+electricity-only export links. The full-study configuration supersedes the old
+90-cluster/3-hour setting and uses the native sector DC loss formulation. Shared
+DE-LU and Ireland-Northern Ireland market links are retained during sector cleanup.
+The full-study guide records the additional tests and remaining validation limits.

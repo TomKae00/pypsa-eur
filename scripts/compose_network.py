@@ -34,6 +34,9 @@ from scripts.prepare_network import main as prepare_network_for_solving
 from scripts.prepare_perfect_foresight import apply_phase_outs
 from scripts.prepare_perfect_foresight import main as prepare_perfect_foresight
 from scripts.prepare_sector_network import (
+    lossy_bidirectional_links,
+)
+from scripts.prepare_sector_network import (
     main as add_sector_components,
 )
 
@@ -129,6 +132,7 @@ if __name__ == "__main__":
 
     # Add exogenous energy-island projects after generic transmission
     # preparation so their fixed capacity bounds are preserved.
+    links_before_project = n.links.index.copy()
     add_energy_islands(
         n,
         inputs,
@@ -137,6 +141,15 @@ if __name__ == "__main__":
         current_horizon=current_horizon,
         stage="links",
     )
+    if sector_mode and "DC" in params.sector["transmission_efficiency"]["enable"]:
+        project_links = n.links.index.difference(links_before_project)
+        project_links = project_links[n.links.loc[project_links, "p_min_pu"] < 0]
+        lossy_bidirectional_links(
+            n,
+            "DC",
+            params.sector["transmission_efficiency"]["DC"],
+            link_indices=project_links,
+        )
 
     adjustments = params.adjustments
     maybe_adjust_costs_and_potentials(n, adjustments["electricity"], current_horizon)

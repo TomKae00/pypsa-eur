@@ -5714,10 +5714,17 @@ def set_temporal_aggregation(n, temporal, snapshot_weightings):
         return m
 
 
-def lossy_bidirectional_links(n, carrier, efficiencies={}):
-    """Split bidirectional links into two unidirectional links to include transmission losses."""
+def lossy_bidirectional_links(n, carrier, efficiencies={}, link_indices=None):
+    """
+    Split bidirectional links using native losses, optionally for selected links.
+
+    A subset allows late-added projects to use the same formulation without
+    splitting the pre-existing transmission links a second time.
+    """
 
     carrier_i = n.links.query("carrier == @carrier").index
+    if link_indices is not None:
+        carrier_i = carrier_i.intersection(link_indices)
 
     if (
         not any((v != 1.0) or (v >= 0) for v in efficiencies.values())
@@ -5749,12 +5756,15 @@ def lossy_bidirectional_links(n, carrier, efficiencies={}):
     rev_links["reversed"] = True
     rev_links.index = rev_links.index.map(lambda x: x + "-reversed")
 
-    n.links["reversed"] = n.links.get("reversed", False)
+    if "reversed" not in n.links:
+        n.links["reversed"] = False
+    else:
+        n.links["reversed"] = n.links["reversed"].fillna(False).astype(bool)
     n.links = pd.concat([n.links, rev_links], sort=False)
     n.links["length_original"] = n.links["length_original"].fillna(n.links.length)
 
     # do compression losses after concatenation to take electricity consumption at bus0 in either direction
-    carrier_i = n.links.query("carrier == @carrier").index
+    carrier_i = carrier_i.append(rev_links.index)
     if compression_per_1000km > 0:
         n.links.loc[carrier_i, "bus2"] = n.links.loc[carrier_i, "bus0"].map(
             n.buses.location

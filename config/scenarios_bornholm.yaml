@@ -1,13 +1,13 @@
-baseline:
+bornholm_zonal_baseline:
   energy_islands:
     enabled: false
 
-radial:
+bornholm_zonal_radial:
   energy_islands:
     enabled: true
     case: radial
 
-hybrid:
+bornholm_zonal_hybrid:
   energy_islands:
     enabled: true
     case: hybrid

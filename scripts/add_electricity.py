@@ -453,6 +453,11 @@ def set_transmission_costs(
         + costs.at["HVDC inverter pair", "capital_cost"]
     )
     n.links.loc[dc_b, "capital_cost"] = costs
+    # Native directional loss modelling charges the physical connection once.
+    # Sector preparation may split DC links before this cost update runs.
+    if "reversed" in n.links:
+        reversed_dc = dc_b & n.links["reversed"].fillna(False).astype(bool)
+        n.links.loc[reversed_dc, "capital_cost"] = 0.0
 
 
 def attach_wind_and_solar(
