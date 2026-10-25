@@ -54,11 +54,39 @@ Use the PyPSA-Eur Python interpreter and run the cells in order. The first
 settings cell selects the year, focus zone and plot dates.
 
 The notebook uses the existing benchmark mapping, common-price and border-flow
-helpers. It shows zone prices, electricity supply and demand, storage, border
-flows and load shedding. Historical-price comparison is optional and skipped
-when its input CSV is absent. It never solves or rewrites a network and performs
-no automatic downloads. For other completed years, change the settings and
-restart from the top. Notebook outputs are empty; it has not been executed
+helpers. Sections 1–8 show zone prices, electricity supply and demand, storage,
+border flows and load shedding. Historical-price comparison is optional and
+skipped when its input CSV is absent.
+
+Sections 9–15 investigate the Nordic discrepancies before another run:
+
+- zonal generation/storage capacity and annual demand;
+- hourly model-versus-observed variation on matched observations, price
+  correlation and the frequency of nearly equal model prices across zones;
+- stored generator costs, availability, dispatch-bound proximity and interior
+  dispatch with a price/cost match, explicitly labelled as price-setting
+  candidates rather than proven marginal generators;
+- individual AC/DC branch directional ratings, utilisation, bound proximity and
+  regional price spreads (physical ratings are not historical market NTC);
+- reservoir energy capacity, fill levels, cyclicity, inflow, electrical
+  discharge, storage-basis water withdrawal and spillage; absent exported
+  water-value duals remain unavailable;
+- nuclear availability ceilings and the known SE4 allocation issue, biomass
+  costs/dispatch, and optional individual-plant/CHP labels;
+- renewable availability/dispatch and local residual demand.
+
+The optional individual-plant input is
+`data/hindcast/powerplants_YEAR.csv`, copied separately from the corresponding
+native build's `resources/hindcast-build-YEAR/powerplants.csv`.
+No geographic shapefiles or extra historical datasets are required for these
+descriptive diagnostics. They do not establish historical capacities,
+outage timing, hydro reservoir levels or market transfer limits.
+
+The cells only read the selected existing NetCDF and local CSVs. A newer
+checkout does not apply geographic corrections to that saved result.
+No optimiser, downloads, source/input edits, network writes or HPC submissions
+are invoked. For other completed years, change the settings and restart from
+the top. Notebook outputs are empty; the extended cells have not been executed
 against the user's result.
 
 ## Native market-zone convention
