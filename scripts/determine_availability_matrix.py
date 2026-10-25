@@ -56,6 +56,7 @@ import numpy as np
 import xarray as xr
 from atlite.gis import shape_availability
 from rasterio.plot import show
+from shapely.geometry import box
 
 from scripts._helpers import configure_logging, load_cutout, set_scenario_config
 
@@ -99,8 +100,15 @@ if __name__ == "__main__":
                 "Project areas require unique names and valid polygons with a CRS"
             )
         footprint = regions.to_crs(cutout.crs).geometry.union_all()
-        if not cutout.grid.geometry.union_all().covers(footprint):
-            raise ValueError("Weather cutout does not cover the entire project area")
+        # Atlite cutouts are rectangular rasters. Unioning individual cells can
+        # leave floating-point slivers on decimal grids (e.g. 0.3 degrees).
+        # Native bounds include the outer half-cells without those false holes.
+        if not box(*cutout.bounds).covers(footprint):
+            raise ValueError(
+                "Weather cutout does not cover the entire project area: "
+                f"cutout bounds={tuple(cutout.bounds)}, "
+                f"project bounds={footprint.bounds} (CRS: {cutout.crs})"
+            )
 
     res = params.get("excluder_resolution", 100)
     excluder = atlite.ExclusionContainer(crs=3035, res=res)

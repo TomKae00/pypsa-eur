@@ -43,6 +43,71 @@ def run_script(script, inputs, outputs, params):
     )
 
 
+@pytest.mark.parametrize("spacing", [0.25, 0.3])
+def test_project_coverage_on_native_weather_grid(tmp_path, spacing):
+    """Decimal grid-cell edges must not create false holes over Bornholm."""
+    cutout = atlite.Cutout(
+        str(tmp_path / "weather.nc"),
+        module="era5",
+        x=slice(13, 16),
+        y=slice(54, 56),
+        dx=spacing,
+        dy=spacing,
+        time=pd.date_range("2013-01-01", periods=2, freq="h"),
+    )
+    cutout.data.to_netcdf(cutout.path)
+    output = str(tmp_path / "availability.nc")
+    run_script(
+        "determine_availability_matrix",
+        {
+            "regions": "data/energy_islands/bornholm_area.geojson",
+            "cutout": str(cutout.path),
+        },
+        {"nc": output},
+        {
+            "technology": "offwind-ac",
+            "renewable": {"offwind-ac": {"natura": False, "excluder_resolution": 200}},
+            "project_area": True,
+            "plot_availability_matrix": False,
+        },
+    )
+    availability = xr.load_dataarray(output).sel(bus="BEI_WIND")
+    assert np.isfinite(availability).all()
+    assert float(availability.sum()) > 0
+
+
+@pytest.mark.parametrize("west,east", [(14.4, 16), (10, 12)])
+def test_project_coverage_rejects_missing_weather(tmp_path, west, east):
+    """Reject both partially covered and completely uncovered project sites."""
+    cutout = atlite.Cutout(
+        str(tmp_path / "weather.nc"),
+        module="era5",
+        x=slice(west, east),
+        y=slice(54, 56),
+        dx=0.3,
+        dy=0.3,
+        time=pd.date_range("2013-01-01", periods=2, freq="h"),
+    )
+    cutout.data.to_netcdf(cutout.path)
+    output = str(tmp_path / "availability.nc")
+    with pytest.raises(ValueError, match="does not cover the entire project area"):
+        run_script(
+            "determine_availability_matrix",
+            {
+                "regions": "data/energy_islands/bornholm_area.geojson",
+                "cutout": str(cutout.path),
+            },
+            {"nc": output},
+            {
+                "technology": "offwind-ac",
+                "renewable": {"offwind-ac": {"natura": False}},
+                "project_area": True,
+                "plot_availability_matrix": False,
+            },
+        )
+    assert not Path(output).exists()
+
+
 @pytest.fixture
 def project_profile(tmp_path):
     """Run real atlite eligibility and native profile code on synthetic weather."""

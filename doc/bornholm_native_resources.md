@@ -48,6 +48,10 @@ The GIS polygon areas in their original projected CRS are approximately 123.15,
 This is the **2024 planning envelope**, not a certified final tender boundary or
 final turbine layout. Updating that input requires a documented boundary review.
 The weather cutout must cover the complete area; otherwise the project rule fails.
+Coverage is checked against atlite's native rectangular raster bounds, including
+the outer half-cells. Unioning individual cell polygons can leave floating-point
+slivers on 0.3-degree grids and falsely report missing coverage. Genuine partial
+or complete non-coverage still raises an error, with both bounds included.
 
 ## Scenario and cost accounting
 
@@ -126,7 +130,7 @@ smoke run with the actual cutouts, clustered buses and cost data.
 
 ### Verification of this change
 
-On 24 October 2026, all **46 tests** in `test_energy_islands.py`,
+On 24 October 2026, all **50 tests** in `test_energy_islands.py`,
 `test_energy_island_resources.py` and the existing `test_compose_network.py`
 passed with PyPSA 1.2.4, atlite 0.6.1 and linopy 0.8.0. The integration cases
 export and reload the composed network before solving, matching the native
@@ -135,6 +139,10 @@ budgets are tested, including objective accounting for mandatory project assets.
 The real workflow's input/parameter expansion was also checked for all three
 smoke scenarios, all three offshore resource categories and onshore wind.
 Python lint/format, Snakemake formatting and diff whitespace checks passed.
+The coverage correction adds four regressions using the committed Bornholm
+polygon: successful availability calculation on 0.25- and 0.3-degree grids,
+and rejection of partially and completely uncovered sites. The 0.3-degree
+regression reproduces the reported error before the correction.
 
 The execution environment required an external psutil process-ID workaround;
 that workaround is not part of the repository. A complete dry-run did not finish
