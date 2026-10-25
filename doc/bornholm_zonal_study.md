@@ -8,12 +8,13 @@ is retained for debugging; it is not the analysis run.
 
 | Setting | Full comparison |
 |---|---|
-| Spatial footprint | Same 34 countries and native bidding-zone polygons as `feature/historical-hindcast/config/hindcast/build-2023.yaml` |
+| Spatial footprint | Native 34-country European footprint, aggregated to bidding-zone polygons |
 | Shared electricity markets | DE00 + LUG1; IE00 + GBNI, with native lossless `copper` links |
-| Time resolution | 8,760 hourly snapshots, 1 January–31 December 2023; no temporal reduction or rolling horizon |
+| Time resolution | Native default year: 8,760 hourly snapshots, 1 January–31 December 2013; no temporal reduction or rolling horizon |
 | Planning and technology-cost year | 2035, overnight capacity expansion |
-| Weather and electricity-load year | 2023; ERA5 at 0.3 degrees, with the same cutout extent as the historical branch |
-| Sector demand base year | 2023 energy totals; native 2035 technology and end-use assumptions |
+| Weather input | Native archived `europe-2013-sarah3-era5` cutout (SARAH-3/ERA5) |
+| Electricity-load profile year | Native `load.fixed_year: false`, using the snapshot year (2013) |
+| Sector demand base year | Native 2023 energy totals; native 2035 technology and end-use assumptions |
 | Sectors | Electricity, heating, transport, industry, biomass, shipping, aviation, agriculture, hydrogen and gas infrastructure |
 | CO2 constraint | Native relative budget: 25% of the configured 1990 reference emissions, covering the enabled sectors |
 | Main electricity grid | Native OSM 0.7 plus the covered TYNDP 2026 project subset for 2035; fixed background (`vfixed`) |
@@ -22,21 +23,24 @@ is retained for debugging; it is not the analysis run.
 | Renewable resource classes | Three for onshore wind, offshore AC/DC wind and solar |
 | Project counterfactual | Project site reserved from generic offshore development in every case |
 
-The historical configuration was checked on 24 October 2026 (GitHub file blob
-`0c5d638d76524174b829e62eeaa6b971055f454a`). Its electricity bus layout is reused;
-its fixed historical generation fleet, historical fuel/CO2 prices and fixed grid
-are not transferred into the 2035 expansion study. Baseline-versus-project
-differences are controlled comparisons within this study. Differences from the
-historical branch also reflect the year, sectors, investment and policy assumptions.
-This is a future scenario, not a calibrated price forecast.
+The comparison is entirely within the Bornholm study. It is independent of the
+historical price/flow benchmark and does not require that branch's built network.
+The weather and electricity-load settings match this checkout's
+`config/config.default.yaml`; the custom 2023 ERA5 cutout has been removed.
+Weather year **2013**, statistical energy-balance base year **2023**, and planning
+year **2035** have different roles. Historical hourly weather supplies a coherent
+wind/solar/temperature year for the future system; it does not turn the study into
+a 2013 system reconstruction. Sector service demands use the native statistical
+data and 2035 assumptions consistently across scenarios. This is a future scenario,
+not a calibrated price forecast.
 
 The native bidding-zone implementation aggregates the electrical network by zone
 and retains AC network constraints between zones. It does not reproduce an NTC or
 flow-based market-clearing model. DE/LU and Ireland/Northern Ireland keep separate
 country buses for sector data while sharing an electricity price through their
 unconstrained links. Sector buses increase the **total** bus count. Radial and
-hybrid also add `BEI_HUB`; the onshore electricity bus IDs must be identical to
-the historical reference. The actual count is printed from the built networks,
+hybrid also add `BEI_HUB`; the onshore electricity bus IDs must be identical across
+the Bornholm scenarios. The actual count is printed from the built networks,
 not inferred from `n_clusters` (which is not a target in administrative mode).
 
 All run names have the prefix `bornholm_zonal_`:
@@ -78,7 +82,7 @@ lengths remain hub-to-landing distance times 1.25 estimates. See
 engineering approximations. The offshore hub receives no heat/hydrogen demand.
 
 The common demand assumption is the native sector-coupled 2035 pathway, with
-2023 energy totals and load shape and unchanged native sector shares/efficiency
+2023 energy totals, the default 2013 electricity-load profile and native sector shares/efficiency
 assumptions across cases. It is not a blanket percentage increase in electricity
 load. The checks compare all exogenous load series and static loads. Electricity
 consumption by heat pumps, electrolysis and other endogenous conversion can
@@ -98,10 +102,12 @@ period remain subsequent financial analysis, using the saved dispatch and prices
 
 See [planned-grid selection, provenance and coverage limits](bornholm_2035_grid.md).
 
-Scenario resources have separate paths so earlier smoke, 90-cluster and historical
-outputs cannot silently stand in for these networks. Native source datasets and
-the annual weather cutout can still be reused. The full Europe 2023 cutout must
-already exist or be built using the user's configured CDS access.
+Scenario resources have separate paths from earlier smoke, 90-cluster and historical
+outputs. The native retrieval rule obtains the default archived weather cutout;
+this configuration does not request a new 2023 ERA5 download. After pulling this
+correction, rerun the workflow build before solving so weather-dependent profiles
+and composed networks are regenerated for 2013. The checker rejects networks with
+the old 2023 snapshots. Native source datasets that remain valid can be reused.
 
 ## Run on Sophia
 
@@ -124,14 +130,11 @@ remote source-data manifests. To build first without solving:
 sbatch scripts/bornholm_sophia.sbatch build
 ```
 
-For the actual solve, point to the **built network from the historical branch**,
-not its YAML file. If it remains at
-`resources/hindcast-build-2023/networks/composed_2023.nc` in this checkout, the
-script finds it automatically. Otherwise set its real absolute path; the path
-below is a placeholder to replace. It must also be visible inside the container.
+After building and passing the within-study comparison checks, solve the
+Bornholm baseline pilot. No historical-benchmark network or `HINDCAST_NETWORK`
+environment variable is required.
 
 ```bash
-export HINDCAST_NETWORK=/absolute/path/to/historical/composed_2023.nc
 sbatch scripts/bornholm_sophia.sbatch solve baseline
 ```
 
@@ -192,7 +195,8 @@ assumptions or future prices are calibrated.
 
 ## Local verification
 
-On 25 October 2026 the expanded regression suite passed all 84 collected tests;
+Before the weather-default correction on 25 October 2026, the expanded regression
+suite passed all 84 collected tests;
 the final job-script rerun passed all eight cases, including two subsequently
 added guards (86 distinct tests overall). Coverage includes the original
 project/resource implementation, native composition and clustering helpers,
@@ -202,6 +206,14 @@ replacement retirement and independent DK/DE/SE/PL cable investment. Tests use
 Python 3.12.14, PyPSA 1.2.4, atlite 0.6.1, linopy 0.8.0 and HiGHS 1.15.1 in a
 development environment. This was not an exact reproduction of Sophia's Pixi
 environment and does not validate full-model Gurobi runtime or memory use.
+
+After restoring the native weather/load defaults, 18 targeted checks passed:
+within-study comparisons, rejection of stale 2023 networks, consistency with
+native default inputs, and job stages without a historical network. Native
+workflow expansion also confirmed 2013 snapshots, the default archived cutout
+for generic solar and project wind, `load.fixed_year: false`, the 2023 sector
+statistical base year, and the 2035 planning horizon. Full European profiles and
+sector networks have not been rebuilt for the corrected weather input here.
 
 ```bash
 pixi run python -m pytest --noconftest -q test/test_energy_islands.py test/test_energy_island_resources.py test/test_compose_network.py test/test_cluster_network.py test/test_add_electricity.py test/test_bornholm_zonal.py test/test_bornholm_grid.py test/test_bornholm_job.py

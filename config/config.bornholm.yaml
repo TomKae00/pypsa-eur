@@ -1,6 +1,5 @@
-# Full Bornholm study: native bidding zones, hourly 2023 weather, 2035 sectors.
-# Spatial settings match feature/historical-hindcast/config/hindcast/build-2023.yaml.
-# Future investment and sector assumptions are deliberately distinct from hindcast.
+# Full Bornholm study: native bidding zones, default weather/load inputs, 2035 sectors.
+# This study compares Bornholm scenarios with each other, independently of hindcast.
 run:
   name: all
   scenarios:
@@ -13,8 +12,9 @@ foresight: overnight
 planning_horizons:
 - 2035
 snapshots:
-  start: '2023-01-01'
-  end: '2024-01-01'
+  # Native defaults from this checkout's config.default.yaml.
+  start: '2013-01-01'
+  end: '2014-01-01'
   inclusive: left
 enable:
   drop_leap_day: true
@@ -26,23 +26,11 @@ data:
     source: archive
     version: v0.15.0
   cutout:
-    source: build
+    source: archive
     version: latest
 atlite:
   nprocesses: 4
-  default_cutout: europe-2023-era5
-  cutouts:
-    europe-2023-era5:
-      module: era5
-      x: [-12.0, 42.0]
-      y: [33.0, 72.0]
-      dx: 0.3
-      dy: 0.3
-      time: ['2023', '2023']
-      chunks:
-        time: 500
-      prepare_kwargs:
-        monthly_requests: true
+  default_cutout: europe-2013-sarah3-era5
 sector:
   enabled: true
   transport: true
@@ -62,9 +50,10 @@ pypsa_eur:
   # Native sector cleanup must preserve the DE-LU and IE-NI market connections.
   Link: [DC, copper]
 load:
-  fixed_year: 2023
+  fixed_year: false
   scaling_factor: 1.0
 energy:
+  # Native statistical base year; independent of the weather/planning years.
   energy_totals_year: 2023
 electricity:
   transmission_limit: vfixed
@@ -137,7 +126,7 @@ solving:
   options:
     rolling_horizon: false
     noisy_costs: false
-    # Match the hindcast's inter-zone AC formulation; DC uses sector efficiencies.
+    # Keep the agreed AC formulation; DC uses native sector efficiencies.
     transmission_losses: 0
   solver:
     name: gurobi

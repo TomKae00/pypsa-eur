@@ -32,13 +32,7 @@ def project_links(n):
     return n.links.index[n.links.bus0.eq("BEI_HUB") | n.links.bus1.eq("BEI_HUB")]
 
 
-def check_networks(
-    networks, config, *, solved=False, reference=None, require_reference=False
-):
-    require(
-        reference is not None or not require_reference,
-        "Supply --reference with the other branch's built historical network",
-    )
+def check_networks(networks, config, *, solved=False):
     baseline = networks["baseline"]
     definitions = scenarios(config)
     cables = pd.read_csv(config["energy_islands"]["links"])
@@ -236,25 +230,12 @@ def check_networks(
             networks[case].generators.loc[generic, "p_nom_max"],
             check_index_type=False,
         )
-    if reference is not None:
-        require(
-            electricity_buses(reference).equals(buses),
-            "Electricity bus IDs differ from the supplied historical reference network",
-        )
-        pd.testing.assert_series_equal(
-            reference.buses.loc[buses, "country"], baseline.buses.loc[buses, "country"]
-        )
-        print("Electricity bus IDs match the historical reference network.")
-    else:
-        print("Actual historical network comparison not performed (no --reference).")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config/config.bornholm.yaml")
     parser.add_argument("--solved", action="store_true")
-    parser.add_argument("--reference", type=Path)
-    parser.add_argument("--require-reference", action="store_true")
     parser.add_argument(
         "--scenarios",
         nargs="+",
@@ -275,12 +256,5 @@ if __name__ == "__main__":
         )
         for case in selected
     }
-    reference = pypsa.Network(args.reference) if args.reference else None
-    check_networks(
-        networks,
-        config,
-        solved=args.solved,
-        reference=reference,
-        require_reference=args.require_reference,
-    )
+    check_networks(networks, config, solved=args.solved)
     print("Bornholm comparison checks passed.")

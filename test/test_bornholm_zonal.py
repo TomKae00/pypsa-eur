@@ -217,7 +217,6 @@ def comparison():
         "sector": {"enabled": True},
         "energy_islands": {"exclude_project_area": True},
     }
-    reference = n.copy()
     networks = {"baseline": n}
     cables = pd.read_csv(config["energy_islands"]["links"])
     for case, spec in scenarios(config).items():
@@ -260,19 +259,32 @@ def comparison():
             m, "DC", {"efficiency_static": 0.98}, link_indices=selected.link_id
         )
         networks[case] = m
-    return networks, config, reference
+    return networks, config
 
 
-def test_comparison_accepts_matching_reference(comparison):
-    networks, config, reference = comparison
-    check_networks(networks, config, reference=reference, require_reference=True)
+def test_comparison_accepts_runs_without_historical_reference(comparison):
+    networks, config = comparison
+    check_networks(networks, config)
+
+
+def test_bornholm_uses_native_weather_and_load_defaults():
+    config = yaml.safe_load(Path("config/config.bornholm.yaml").read_text())
+    defaults = yaml.safe_load(Path("config/config.default.yaml").read_text())
+    assert config["snapshots"] == defaults["snapshots"]
+    assert config["atlite"]["default_cutout"] == defaults["atlite"]["default_cutout"]
+    assert config["data"]["cutout"] == defaults["data"]["cutout"]
+    assert config["load"]["fixed_year"] == defaults["load"]["fixed_year"]
+    assert (
+        config["energy"]["energy_totals_year"]
+        == defaults["energy"]["energy_totals_year"]
+    )
+    assert config["planning_horizons"] == [2035]
 
 
 @pytest.mark.parametrize(
     "fault,message",
     [
-        ("missing_reference", "Supply --reference"),
-        ("different_reference", "bus IDs differ"),
+        ("wrong_weather_year", "full hourly year"),
         ("baseline_hub", "Baseline contains the project hub"),
         ("nonhourly", "full hourly year"),
         ("missing_copper", "missing shared-price connection"),
@@ -280,11 +292,11 @@ def test_comparison_accepts_matching_reference(comparison):
     ],
 )
 def test_comparison_rejects_invalid_runs(comparison, fault, message):
-    networks, config, reference = comparison
-    if fault == "missing_reference":
-        reference = None
-    elif fault == "different_reference":
-        reference.add("Bus", "extra", carrier="AC")
+    networks, config = comparison
+    if fault == "wrong_weather_year":
+        networks["hybrid"].set_snapshots(
+            pd.date_range("2023-01-01", periods=8760, freq="h")
+        )
     elif fault == "baseline_hub":
         networks["baseline"].add("Bus", "BEI_HUB", carrier="AC")
     elif fault == "nonhourly":
@@ -295,18 +307,18 @@ def test_comparison_rejects_invalid_runs(comparison, fault, message):
     elif fault == "double_cost":
         networks["hybrid"].links.at["BEI_TO_DE-reversed", "capital_cost"] = 200
     with pytest.raises(ValueError, match=message):
-        check_networks(networks, config, reference=reference, require_reference=True)
+        check_networks(networks, config)
 
 
 def test_comparison_rejects_changed_service_demand(comparison):
-    networks, config, _ = comparison
+    networks, config = comparison
     networks["open"].loads.at["heat service", "p_set"] = 200
     with pytest.raises(AssertionError):
         check_networks(networks, config)
 
 
 def test_comparison_rejects_expandable_main_grid(comparison):
-    networks, config, _ = comparison
+    networks, config = comparison
     networks["optimised"].links.at["existing grid", "p_nom_extendable"] = True
     with pytest.raises(ValueError, match="background electricity grid is expandable"):
         check_networks(networks, config)

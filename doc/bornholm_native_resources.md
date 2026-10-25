@@ -109,7 +109,7 @@ bindings, not a bidding-zone price model. Recheck them if clustering or network
 inputs change. The full-study configuration now uses the other branch's bidding-zone
 layout, 8,760 hourly snapshots and sector coupling. Its explicit receiving buses are
 `DKE1` (DK2) and `DE00` (Germany). See [the full-study run guide](bornholm_zonal_study.md)
-for the comparison assumptions, historical-network check and Sophia submission.
+for the comparison assumptions, within-study network checks and Sophia submission.
 
 From the repository root:
 

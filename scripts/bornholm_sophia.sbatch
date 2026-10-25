@@ -69,16 +69,6 @@ if [[ ( "$stage" == solve || "$stage" == all ) && "$selection" != baseline && "$
     echo "Solve the baseline pilot before other scenarios." >&2
     exit 2
 fi
-reference=()
-historical_network="${HINDCAST_NETWORK:-resources/hindcast-build-2023/networks/composed_2023.nc}"
-if [[ -f "$historical_network" ]]; then
-    reference=(--reference "$historical_network")
-elif [[ -n "${HINDCAST_NETWORK:-}" || "$stage" == all || "$stage" == solve ]]; then
-    echo "Set HINDCAST_NETWORK to the other branch's built composed_2023.nc (or solved network)." >&2
-    echo "Its electricity bus IDs must match before the full solve. Use stage 'build' to build first." >&2
-    exit 2
-fi
-
 if [[ "$stage" == dry-run ]]; then
     "${smk[@]}" --dry-run -- "${solved[@]}"
     exit
@@ -86,12 +76,8 @@ fi
 if [[ "$stage" == all || "$stage" == build ]]; then
     "${smk[@]}" -- "${composed[@]}"
 fi
-reference_check=()
-if [[ "$stage" == all || "$stage" == solve ]]; then
-    reference_check=(--require-reference)
-fi
-"$pixi_wrapper" run python scripts/check_bornholm_networks.py "${reference[@]}" "${reference_check[@]}" --scenarios "${selected[@]}"
+"$pixi_wrapper" run python scripts/check_bornholm_networks.py --scenarios "${selected[@]}"
 if [[ "$stage" == all || "$stage" == solve ]]; then
     "${smk[@]}" -- "${solved[@]}"
-    "$pixi_wrapper" run python scripts/check_bornholm_networks.py --solved --require-reference "${reference[@]}" --scenarios "${selected[@]}"
+    "$pixi_wrapper" run python scripts/check_bornholm_networks.py --solved --scenarios "${selected[@]}"
 fi

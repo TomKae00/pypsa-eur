@@ -24,21 +24,21 @@ def job(tmp_path):
         "if sys.argv[1:4] == ['run', 'python', '-c']: sys.exit(subprocess.call([sys.executable, *sys.argv[3:]]))\n"
     )
     wrapper.chmod(0o755)
-    reference = tmp_path / "historical.nc"
-    reference.touch()
     env = os.environ | {
         "PIXI_SOPHIA": str(wrapper),
-        "HINDCAST_NETWORK": str(reference),
         "SLURM_JOB_ID": "test",
         "SLURM_SUBMIT_DIR": str(tmp_path),
         "SLURM_CPUS_PER_TASK": "16",
         "MOCK_CALLS": str(tmp_path / "calls.jsonl"),
     }
+    env.pop("HINDCAST_NETWORK", None)
     script = Path("scripts/bornholm_sophia.sbatch").resolve()
     return tmp_path, script, env
 
 
-@pytest.mark.parametrize("stage,count", [("dry-run", 8), ("build", 8), ("solve", 1)])
+@pytest.mark.parametrize(
+    "stage,count", [("dry-run", 8), ("build", 8), ("solve", 1), ("all", 1)]
+)
 def test_job_defaults(job, stage, count):
     root, script, env = job
     result = subprocess.run(
@@ -52,6 +52,10 @@ def test_job_defaults(job, stage, count):
     assert len(smk[smk.index("--") + 1 :]) == count
     if stage == "solve":
         assert smk[-1] == "results/bornholm_zonal_baseline/networks/solved_2035.nc"
+    assert all(
+        "--reference" not in call and "--require-reference" not in call
+        for call in calls
+    )
 
 
 def test_job_rejects_unknown_case(job):
