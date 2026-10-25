@@ -463,8 +463,10 @@ links:
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#transmission_projects
 transmission_projects:
   enable: true
+  reference_year: null
   include:
     tyndp2020: true
+    tyndp2026: false
     nep: true
     manual: true
   skip:

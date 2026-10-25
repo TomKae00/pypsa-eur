@@ -637,12 +637,21 @@ rule build_transmission_projects:
             ).items()
             if include
         ],
+        project_files=lambda w: [
+            str(path)
+            for name, include in config_provider("transmission_projects", "include")(
+                w
+            ).items()
+            if include
+            for path in sorted(Path("data/transmission_projects", name).glob("*.csv"))
+        ],
     output:
         new_lines=resources("transmission_projects/new_lines.csv"),
         new_links=resources("transmission_projects/new_links.csv"),
         adjust_lines=resources("transmission_projects/adjust_lines.csv"),
         adjust_links=resources("transmission_projects/adjust_links.csv"),
         new_buses=resources("transmission_projects/new_buses.csv"),
+        project_mapping=resources("transmission_projects/project_mapping.csv"),
     log:
         logs("build_transmission_projects.log"),
     benchmark:

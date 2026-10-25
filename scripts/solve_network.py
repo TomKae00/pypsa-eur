@@ -1625,6 +1625,10 @@ if __name__ == "__main__":
         raise RuntimeError("Solving status 'warning'. Discarding solution.")
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    n.meta["solve_result"] = {
+        "status": getattr(status, "value", status),
+        "termination_condition": getattr(condition, "value", condition),
+    }
     n.export_to_netcdf(snakemake.output.network)
 
     if snakemake.output.get("model"):

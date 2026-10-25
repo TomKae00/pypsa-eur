@@ -22,6 +22,10 @@ class _IncludeConfig(ConfigModel):
         True,
         description="Whether to integrate the TYNDP 2020 dataset.",
     )
+    tyndp2026: bool = Field(
+        False,
+        description="Include the pinned TYNDP 2026 subset for the Bornholm 2035 study; see doc/bornholm_2035_grid.md.",
+    )
     nep: bool = Field(
         True,
         description="Whether to integrate the German network development plan dataset.",
@@ -38,6 +42,10 @@ class TransmissionProjectsConfig(BaseModel):
     enable: bool = Field(
         True,
         description="Whether to integrate this transmission projects or not.",
+    )
+    reference_year: int | None = Field(
+        None,
+        description="Optional static grid year. Remove not-yet-built and expired AC/DC assets after applying projects, before clustering. Intended for overnight studies; leave unset for multi-period grids.",
     )
     include: _IncludeConfig = Field(
         default_factory=_IncludeConfig,

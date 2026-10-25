@@ -1,0 +1,39 @@
+{
+  "source_url": "https://github.com/p-glaum/tyndp2026-to-pypsa",
+  "source_commit": "7c207622c12c47447907d67a3a4de4ae53d633b4",
+  "horizon": 2035,
+  "statuses": [
+    "in_permitting",
+    "planned_not_yet_permitted",
+    "under_construction"
+  ],
+  "excluded_project_ids": [
+    1106
+  ],
+  "input_sha256": {
+    "transmission_projects/tyndp2026/new_lines.csv": "c85e60bb23f35bf0f4bc21fe0b979b3ed2d26a21a7df992687a36399842ee4fe",
+    "transmission_projects/tyndp2026/new_links.csv": "0271e3316269bd6d1191ca3aa9a95da858bbbe4ea0003cc8be7e1eb67639367e",
+    "transmission_projects/tyndp2026/upgraded_lines.csv": "15a4323beeb6940a5125e332eb3367282ae00fcdbf23bbdb75a85f3943adb9b6",
+    "transmission_projects/tyndp2026/upgraded_links.csv": "2b87afa35008e2981d06af65efeae12ff6d97eb3f4fb3a6b85bfbe1848816548",
+    "audit/dropped_investments.csv": "f564b15c7990edcf8c83c3e6db9f339d1d6af99c96dbbdd51a4b7217c4e4f6fb",
+    "tyndp/entsoe/2026/tyndp2026_maps_all.geojson": "17c1913e68085065b5f25920d17f3316b18c205579a101cba34da0e525f1021a",
+    "native/tyndp2020/new_links.csv": "999df24f362c61eff40a2e49f0978a9368b81811cbb457d6c185c6ed916ecad5"
+  },
+  "selected_counts": {
+    "new_lines": 60,
+    "new_links": 17,
+    "upgraded_lines": 22,
+    "upgraded_links": 0
+  },
+  "corrected_investment_ids": [
+    1034
+  ],
+  "technical_review_exclusions": {
+    "TYNDP2026_299_1458": "excluded_multiterminal_replacement_needs_review",
+    "TYNDP2026_1112_1799": "excluded_new_substation_endpoint_needs_review"
+  },
+  "unconverted_2035_rows": 100,
+  "recovered_investment_ids": [
+    810
+  ]
+}

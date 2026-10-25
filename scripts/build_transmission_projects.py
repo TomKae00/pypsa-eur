@@ -97,10 +97,11 @@ def connect_new_lines(
     connected to it.
     """
     bus_carrier = np.atleast_1d(bus_carrier)
-    buses = n.buses.query("carrier in @bus_carrier").copy()
-    bus_tree = spatial.KDTree(buses[["x", "y"]])
-
     for port in [0, 1]:
+        if lines.empty:
+            break
+        buses = n.buses.query("carrier in @bus_carrier").copy()
+        bus_tree = spatial.KDTree(buses[["x", "y"]])
         lines_port = lines["geometry"].apply(
             lambda x: pd.Series(
                 get_bus_coords_from_port(x, port=port), index=["x", "y"]
@@ -111,19 +112,26 @@ def connect_new_lines(
         lines_port["neighbor"] = buses.iloc[indices].index
         lines_port["match_distance"] = distances < distance_upper_bound
         # For buses which are not close to any existing bus, only add a new bus if the line is going offshore (e.g. North Sea Wind Power Hub)
-        if not lines_port.match_distance.all() and offshore_shapes.union_all():
+        if (
+            not lines_port.match_distance.all()
+            and offshore_shapes is not None
+            and not offshore_shapes.empty
+        ):
             potential_new_buses = lines_port[~lines_port.match_distance]
             is_offshore = potential_new_buses.apply(
                 lambda x: offshore_shapes.union_all().contains(Point(x.x, x.y)), axis=1
             )
-            new_buses = potential_new_buses[is_offshore]
+            new_buses = potential_new_buses[is_offshore].copy()
             if not new_buses.empty:
+                projects = new_buses.index.copy()
+                # Two offshore endpoints must not receive the same bus ID.
+                new_buses.index = new_buses.index.astype(str) + f" port{port}"
                 new_port, new_buses = add_new_buses(n, new_buses)
                 new_buses["country"] = new_buses.apply(
                     lambda bus: find_country_for_bus(bus, offshore_shapes), axis=1
                 )
-                lines_port.loc[new_port.index, "match_distance"] = True
-                lines_port.loc[new_port.index, "neighbor"] = new_port.neighbor
+                lines_port.loc[projects, "match_distance"] = True
+                lines_port.loc[projects, "neighbor"] = new_port.neighbor.to_numpy()
                 new_buses_df = pd.concat([new_buses_df, new_buses])
 
         if not lines_port.match_distance.all():
@@ -137,6 +145,14 @@ def connect_new_lines(
 
         lines.loc[lines_port.index, f"bus{port}"] = lines_port["neighbor"]
 
+    if not lines.empty:
+        self_loops = lines.bus0.eq(lines.bus1)
+        if self_loops.any():
+            logger.warning(
+                "Ignoring projects mapped to a single bus: %s",
+                lines.index[self_loops].tolist(),
+            )
+        lines = lines.loc[~self_loops]
     lines = lines.assign(under_construction=True)
 
     return lines, new_buses_df
@@ -219,6 +235,8 @@ def find_closest_lines(lines, new_lines, distance_upper_bound=0.1, type="new"):
     pandas.Series: Series containing with index the new lines and values providing closest existing line.
     """
 
+    if lines.empty or new_lines.empty:
+        return pd.Series(dtype=object)
     # get coordinates of start and end points of all lines, for new lines we need to check both directions
     treelines = lines.apply(get_branch_coords_from_buses, axis=1)
     querylines = pd.concat(
@@ -329,8 +347,14 @@ def get_project_files(path, skip=[]):
     if not files:
         logger.warning(f"No projects found for {path.parent.name}")
         return lines
-    for file in files:
+    # Match upgrades against the existing grid, before adding new projects.
+    # Filesystem iteration order must not change which branch gets replaced.
+    for file in sorted(
+        files, key=lambda p: (not p.stem.startswith("upgraded"), p.name)
+    ):
         df = pd.read_csv(file, index_col=0)
+        if df.empty:
+            continue
         df["geometry"] = df.apply(
             lambda x: LineString([[x.x0, x.y0], [x.x1, x.y1]]), axis=1
         )
@@ -392,15 +416,24 @@ def add_projects(
     plan,
     status=["confirmed", "under construction"],
     skip=[],
+    audit=None,
 ):
     lines_dict = get_project_files(path, skip=skip)
     for key, lines in lines_dict.items():
+        decisions = pd.DataFrame(index=lines.index)
+        decisions["plan"] = plan
+        decisions["table"] = key
+        decisions["decision"] = "outside_model_area"
+        decisions["mapped_component"] = ""
         logger.info(f"Processing {key.replace('_', ' ')} projects from {plan}.")
         lines = remove_projects_outside_countries(lines, europe_shape)
-        if isinstance(status, dict):
-            status = status[plan]
-        lines = lines.loc[lines.project_status.isin(status)]
+        decisions.loc[lines.index, "decision"] = "status_not_selected"
+        selected_status = status[plan] if isinstance(status, dict) else status
+        lines = lines.loc[lines.project_status.isin(selected_status)]
+        decisions.loc[lines.index, "decision"] = "unmapped_endpoint_or_self_loop"
         if lines.empty:
+            if audit is not None:
+                audit.append(decisions)
             continue
         if key == "new_lines":
             new_lines, new_buses_df = connect_new_lines(
@@ -410,6 +443,10 @@ def add_projects(
                 n.lines, new_lines, distance_upper_bound=0.10, type="new"
             )
             new_lines = new_lines.drop(duplicate_lines.index, errors="ignore")
+            decisions.loc[duplicate_lines.index, "decision"] = "existing_equivalent"
+            decisions.loc[duplicate_lines.index, "mapped_component"] = duplicate_lines
+            decisions.loc[new_lines.index, "decision"] = "added"
+            decisions.loc[new_lines.index, "mapped_component"] = new_lines.index
             new_lines_df = pd.concat([new_lines_df, new_lines])
             # add new lines to network to be able to find added duplicates
             n.add("Line", new_lines.index, **new_lines)
@@ -426,6 +463,10 @@ def add_projects(
                 n.links, new_links, distance_upper_bound=0.10, type="new"
             )
             new_links = new_links.drop(duplicate_links.index, errors="ignore")
+            decisions.loc[duplicate_links.index, "decision"] = "existing_equivalent"
+            decisions.loc[duplicate_links.index, "mapped_component"] = duplicate_links
+            decisions.loc[new_links.index, "decision"] = "added"
+            decisions.loc[new_links.index, "mapped_component"] = new_links.index
             set_underwater_fraction(new_links, offshore_shapes)
             new_links_df = pd.concat([new_links_df, new_links])
             # add new links to network to be able to find added duplicates
@@ -434,6 +475,19 @@ def add_projects(
             line_map = find_closest_lines(
                 n.lines, lines, distance_upper_bound=0.30, type="upgraded"
             )
+            decisions.loc[lines.index, "decision"] = "unmatched_upgrade"
+            decisions.loc[line_map.index, "decision"] = "upgraded"
+            decisions.loc[line_map.index, "mapped_component"] = (
+                line_map.astype(str) + "_upgraded"
+            )
+            if line_map.empty:
+                if audit is not None:
+                    audit.append(decisions)
+                continue
+            if line_map.duplicated().any():
+                raise ValueError(
+                    "Multiple upgrades map to the same existing line; review project_mapping.csv inputs"
+                )
             upgraded_lines = lines.loc[line_map.index]
             lines_to_adjust = adjust_decommissioning(upgraded_lines, line_map)
             adjust_lines_df = pd.concat([adjust_lines_df, lines_to_adjust])
@@ -455,6 +509,8 @@ def add_projects(
         else:
             logger.warning(f"Unknown project type {key}")
             continue
+        if audit is not None:
+            audit.append(decisions)
     return new_lines_df, new_links_df, adjust_lines_df, adjust_links_df, new_buses_df
 
 
@@ -497,6 +553,7 @@ if __name__ == "__main__":
         if include
     ]
     paths = snakemake.input.transmission_projects
+    audit = []
     for project in projects:
         path = list(filter(lambda path: project in path, paths))[0]
         new_lines_df, new_links_df, adjust_lines_df, adjust_links_df, new_buses_df = (
@@ -513,6 +570,7 @@ if __name__ == "__main__":
                 plan=project,
                 status=transmission_projects["status"],
                 skip=transmission_projects["skip"],
+                audit=audit,
             )
         )
     if not new_lines_df.empty:
@@ -558,3 +616,9 @@ if __name__ == "__main__":
     adjust_lines_df.to_csv(snakemake.output.adjust_lines)
     adjust_links_df.to_csv(snakemake.output.adjust_links)
     new_buses_df.to_csv(snakemake.output.new_buses)
+    mapping = (
+        pd.concat(audit)
+        if audit
+        else pd.DataFrame(columns=["plan", "table", "decision", "mapped_component"])
+    )
+    mapping.rename_axis("project").to_csv(snakemake.output.project_mapping)

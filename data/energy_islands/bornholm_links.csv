@@ -2,3 +2,10 @@ case,link_id,hub_id,target_bus,target_country,target_bus_prefix,target_x,target_
 hybrid,BEI_TO_DK2,BEI_HUB,DKE1,DK,,12.27,55.6,1200,fixed,True,1.0,1.0,,2035
 hybrid,BEI_TO_DE,BEI_HUB,DE00,DE,,13.62,54.14,2000,fixed,True,1.0,1.0,,2035
 radial,BEI_TO_DK2_RADIAL,BEI_HUB,DKE1,DK,,12.27,55.6,3000,fixed,True,1.0,1.0,,2035
+radial_de,BEI_TO_DE_RADIAL,BEI_HUB,DE00,DE,,13.62,54.14,3000,fixed,True,1.0,1.0,,2035
+optimised,BEI_TO_DK2,BEI_HUB,DKE1,DK,,12.27,55.6,6000,extendable,True,1.0,1.0,,2035
+optimised,BEI_TO_DE,BEI_HUB,DE00,DE,,13.62,54.14,6000,extendable,True,1.0,1.0,,2035
+open,BEI_TO_DK2,BEI_HUB,DKE1,DK,,12.27,55.6,6000,extendable,True,1.0,1.0,,2035
+open,BEI_TO_DE,BEI_HUB,DE00,DE,,13.62,54.14,6000,extendable,True,1.0,1.0,,2035
+open,BEI_TO_SE4,BEI_HUB,SE04,SE,,14.13,55.43,6000,extendable,True,1.0,1.0,,2035
+open,BEI_TO_PL,BEI_HUB,PL00,PL,,15.57,54.18,6000,extendable,True,1.0,1.0,,2035

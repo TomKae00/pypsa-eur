@@ -55,12 +55,19 @@ or complete non-coverage still raises an error, with both bounds included.
 
 ## Scenario and cost accounting
 
-| Item | Baseline | Radial | Hybrid |
+The original three fixed-design cases remain:
+
+| Item | Baseline | Radial DK | Hybrid |
 |---|---|---|---|
 | Planning area reserved from generic offshore development | Yes | Yes | Yes |
 | Explicit project wind | None | 3000 MW | 3000 MW |
 | Export to Danish receiving bus | None | 3000 MW | 1200 MW |
 | Export to German receiving bus | None | None | 2000 MW |
+
+The full study additionally includes radial Germany, optimised DK–DE capacities,
+four optional destinations, and two background-grid benchmarks. See the
+[current scenario table](bornholm_zonal_study.md); this small table is not the
+complete run list.
 
 This baseline means **reserved site, project not built**. Allowing generic wind to
 use the site in the baseline would define a different counterfactual. Keep
@@ -85,9 +92,10 @@ mandatory export-link cost or volume is added to the budget RHS: forced Bornholm
 assets do not use up the ordinary grid expansion allowance. Optional expansion
 still competes for that allowance. Project links remain ordinary `DC` carriers.
 
-No duplicate Bornholm-labelled project was found in the committed TYNDP2020, NEP
-or manual project tables. These native transmission inputs remain enabled; no
-second project is inserted into those tables. Existing-ID collisions are errors.
+The full study now uses the pinned TYNDP2026 subset and disables the overlapping
+TYNDP2020, NEP and manual bundles. Bornholm project 1106 is explicitly excluded
+from the background dataset. The smoke configuration retains the earlier native
+input defaults. Existing-ID collisions are errors.
 That is not a geographic deduplication guarantee for future OSM/TYNDP releases:
 review their Bornholm assets before combining a new release with this addition.
 Do not remove the existing Bornholm–Sweden supply connection as if it were a new

@@ -11,3 +11,32 @@ bornholm_zonal_hybrid:
   energy_islands:
     enabled: true
     case: hybrid
+
+bornholm_zonal_radial_de:
+  energy_islands:
+    enabled: true
+    case: radial_de
+
+bornholm_zonal_optimised:
+  energy_islands:
+    enabled: true
+    case: optimised
+
+bornholm_zonal_open:
+  energy_islands:
+    enabled: true
+    case: open
+
+# Same planned grid and demand assumptions, with native further reinforcement.
+bornholm_zonal_baseline_expandable:
+  electricity:
+    transmission_limit: vopt
+  energy_islands:
+    enabled: false
+
+bornholm_zonal_open_expandable:
+  electricity:
+    transmission_limit: vopt
+  energy_islands:
+    enabled: true
+    case: open

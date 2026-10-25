@@ -2,6 +2,7 @@
 """Standalone checks of the full Bornholm comparison, outside model construction."""
 
 import argparse
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,18 @@ def electricity_buses(n):
     return n.buses.index[n.buses.carrier.isin(["AC", "DC"])].difference(["BEI_HUB"])
 
 
+def scenarios(config):
+    definitions = yaml.safe_load(Path(config["run"]["scenarios"]["file"]).read_text())
+    return {
+        name.removeprefix("bornholm_zonal_"): override
+        for name, override in definitions.items()
+    }
+
+
+def project_links(n):
+    return n.links.index[n.links.bus0.eq("BEI_HUB") | n.links.bus1.eq("BEI_HUB")]
+
+
 def check_networks(
     networks, config, *, solved=False, reference=None, require_reference=False
 ):
@@ -27,6 +40,9 @@ def check_networks(
         "Supply --reference with the other branch's built historical network",
     )
     baseline = networks["baseline"]
+    definitions = scenarios(config)
+    cables = pd.read_csv(config["energy_islands"]["links"])
+    project_profiles = []
     expected = pd.date_range(**config["snapshots"], freq="h")
     buses = electricity_buses(baseline)
     require("BEI_HUB" not in baseline.buses.index, "Baseline contains the project hub")
@@ -40,6 +56,47 @@ def check_networks(
     for case, n in networks.items():
         require(n.snapshots.equals(expected), f"{case}: expected the full hourly year")
         require(np.allclose(n.snapshot_weightings, 1.0), f"{case}: non-hourly weights")
+        spec = definitions[case]
+        enabled = spec["energy_islands"]["enabled"]
+        grid_policy = spec.get("electricity", {}).get(
+            "transmission_limit", config["electricity"]["transmission_limit"]
+        )
+        background_dc = n.links.index[n.links.carrier.eq("DC")].difference(
+            project_links(n)
+        )
+        if grid_policy == "vfixed":
+            require(
+                not n.lines.s_nom_extendable.any()
+                and not n.links.loc[background_dc, "p_nom_extendable"].any(),
+                f"{case}: background electricity grid is expandable",
+            )
+        # Capacity is endogenous in the expandable benchmark after solving.
+        if not solved:
+            pd.testing.assert_frame_equal(
+                n.lines[["bus0", "bus1", "s_nom", "length"]].sort_index(),
+                baseline.lines[["bus0", "bus1", "s_nom", "length"]].sort_index(),
+                check_dtype=False,
+                check_index_type=False,
+            )
+            baseline_dc = baseline.links.index[baseline.links.carrier.eq("DC")]
+            pd.testing.assert_frame_equal(
+                n.links.loc[
+                    background_dc, ["bus0", "bus1", "p_nom", "length"]
+                ].sort_index(),
+                baseline.links.loc[
+                    baseline_dc, ["bus0", "bus1", "p_nom", "length"]
+                ].sort_index(),
+                check_dtype=False,
+                check_index_type=False,
+            )
+        # Fixed service/input demands; electricity used by conversion links can respond.
+        pd.testing.assert_frame_equal(
+            n.loads[["bus", "carrier", "p_set"]],
+            baseline.loads[["bus", "carrier", "p_set"]],
+            check_dtype=False,
+            check_index_type=False,
+        )
+        pd.testing.assert_frame_equal(n.loads_t.p_set, baseline.loads_t.p_set)
         require(
             electricity_buses(n).equals(buses), f"{case}: electricity bus set differs"
         )
@@ -82,10 +139,21 @@ def check_networks(
                 )
         if solved:
             require(np.isfinite(n.objective), f"{case}: no finite solved objective")
+            require(
+                n.meta.get("solve_result")
+                == {"status": "ok", "termination_condition": "optimal"},
+                f"{case}: missing successful optimal solver termination",
+            )
         print(
             f"{case}: {len(buses)} onshore electricity buses; {len(n.buses)} total buses; {len(n.snapshots)} hours"
         )
-        if case == "baseline":
+        if not enabled:
+            require(
+                "BEI_HUB" not in n.buses.index
+                and "BEI_WIND" not in n.generators.index
+                and project_links(n).empty,
+                f"{case}: baseline contains project assets",
+            )
             continue
         require("BEI_WIND" in n.generators.index, f"{case}: project wind missing")
         wind = n.generators.loc["BEI_WIND"]
@@ -99,6 +167,7 @@ def check_networks(
                 f"{case}: incorrect solved wind capacity",
             )
         profile = n.generators_t.p_max_pu["BEI_WIND"]
+        project_profiles.append(profile)
         require(
             np.isfinite(profile).all()
             and profile.between(0, 1).all()
@@ -109,12 +178,20 @@ def check_networks(
             set(n.buses.index[n.buses.location.eq("BEI_HUB")]) == {"BEI_HUB"},
             f"{case}: unintended sector buses were attached to the offshore hub",
         )
-        expected_links = (
-            {"BEI_TO_DK2_RADIAL": ("DKE1", 3000)}
-            if case == "radial"
-            else {"BEI_TO_DK2": ("DKE1", 1200), "BEI_TO_DE": ("DE00", 2000)}
+        expected_links = cables.loc[
+            cables.case.eq(spec["energy_islands"]["case"])
+        ].set_index("link_id")
+        require(not expected_links.empty, f"{case}: no candidate cables configured")
+        expected_names = set(expected_links.index) | {
+            name + "-reversed" for name in expected_links.index
+        }
+        require(
+            set(project_links(n)) == expected_names,
+            f"{case}: unexpected/missing project cables",
         )
-        for name, (target, capacity) in expected_links.items():
+        for name, row in expected_links.iterrows():
+            target, maximum = row.target_bus, row.capacity_mw
+            minimum = maximum if row.build_mode == "fixed" else 0
             forward, reverse = n.links.loc[name], n.links.loc[name + "-reversed"]
             require(
                 forward.bus0 == reverse.bus1 == "BEI_HUB"
@@ -122,11 +199,10 @@ def check_networks(
                 f"{case}: incorrect endpoints for {name}",
             )
             require(
-                forward.p_nom_min
-                == forward.p_nom_max
-                == reverse.p_nom_min
-                == reverse.p_nom_max
-                == capacity,
+                forward.p_nom_extendable
+                and reverse.p_nom_extendable
+                and forward.p_nom_min == reverse.p_nom_min == minimum
+                and forward.p_nom_max == reverse.p_nom_max == maximum,
                 f"{case}: incorrect export capacity for {name}",
             )
             require(
@@ -138,20 +214,23 @@ def check_networks(
             )
             if solved:
                 require(
-                    np.allclose([forward.p_nom_opt, reverse.p_nom_opt], capacity),
+                    np.isclose(forward.p_nom_opt, reverse.p_nom_opt)
+                    and minimum - 1e-3 <= forward.p_nom_opt <= maximum + 1e-3,
                     f"{case}: incorrect solved export capacity for {name}",
                 )
-    pd.testing.assert_series_equal(
-        networks["radial"].generators_t.p_max_pu["BEI_WIND"],
-        networks["hybrid"].generators_t.p_max_pu["BEI_WIND"],
-        check_exact=False,
-        rtol=1e-12,
-        atol=1e-12,
-    )
+                if minimum == 0 and np.isclose(forward.p_nom_opt, maximum, atol=1):
+                    warnings.warn(
+                        f"{case}: {name} reaches its {maximum} MW search bound; enlarge the bound before interpreting optimal sizing",
+                        stacklevel=2,
+                    )
+    for profile in project_profiles[1:]:
+        pd.testing.assert_series_equal(
+            project_profiles[0], profile, check_exact=False, rtol=1e-12, atol=1e-12
+        )
     generic = baseline.generators.index[
         baseline.generators.carrier.str.startswith("offwind")
     ]
-    for case in ["radial", "hybrid"]:
+    for case in networks:
         pd.testing.assert_series_equal(
             baseline.generators.loc[generic, "p_nom_max"],
             networks[case].generators.loc[generic, "p_nom_max"],
@@ -176,15 +255,25 @@ if __name__ == "__main__":
     parser.add_argument("--solved", action="store_true")
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--require-reference", action="store_true")
+    parser.add_argument(
+        "--scenarios",
+        nargs="+",
+        help="Short scenario names; baseline is always included",
+    )
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text())
     horizon = config["planning_horizons"][0]
     root, stage = ("results", "solved") if args.solved else ("resources", "composed")
+    selected = args.scenarios or list(scenarios(config))
+    unknown = set(selected).difference(scenarios(config))
+    if unknown:
+        parser.error(f"Unknown scenarios: {sorted(unknown)}")
+    selected = list(dict.fromkeys(["baseline", *selected]))
     networks = {
         case: pypsa.Network(
             f"{root}/bornholm_zonal_{case}/networks/{stage}_{horizon}.nc"
         )
-        for case in ["baseline", "radial", "hybrid"]
+        for case in selected
     }
     reference = pypsa.Network(args.reference) if args.reference else None
     check_networks(

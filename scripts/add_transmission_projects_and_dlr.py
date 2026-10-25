@@ -18,6 +18,19 @@ from scripts._helpers import configure_logging, set_scenario_config
 logger = logging.getLogger(__name__)
 
 
+def select_grid_year(n, year):
+    """Apply project replacement lifetimes before aggregation can hide them."""
+    if year is None:
+        return
+    for component in ["Line", "Link"]:
+        frame = n.df(component)
+        electric = frame.carrier.isin(["AC", "DC"])
+        inactive = frame.build_year.gt(year) | (frame.build_year + frame.lifetime).le(
+            year
+        )
+        n.remove(component, frame.index[electric & inactive])
+
+
 def attach_transmission_projects(
     n: pypsa.Network, transmission_projects: list[str]
 ) -> None:
@@ -83,6 +96,7 @@ if __name__ == "__main__":
 
     if params["transmission_projects"]["enable"]:
         attach_transmission_projects(n, snakemake.input.transmission_projects)
+        select_grid_year(n, params["transmission_projects"].get("reference_year"))
 
     if params["dlr"]["activate"]:
         rating = xr.open_dataarray(snakemake.input.dlr).to_pandas().transpose()

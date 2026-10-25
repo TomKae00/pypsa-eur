@@ -333,6 +333,15 @@ def set_transmission_limit(n, kind, factor, costs, Nyears=1):
 
     set_transmission_costs(n, costs)
 
+    if factor == "fixed":
+        # The background is prepared before energy-island candidates are added.
+        # Do not create a global expansion budget: it would also constrain those
+        # later candidates, including the optional links with zero lower bounds.
+        n.lines["s_nom"] = lines_s_nom
+        n.lines["s_nom_extendable"] = False
+        n.links.loc[links_dc_b, "p_nom_extendable"] = False
+        return n
+
     if factor == "opt" or float(factor) > 1.0:
         n.lines["s_nom_min"] = lines_s_nom
         n.lines["s_nom_extendable"] = True

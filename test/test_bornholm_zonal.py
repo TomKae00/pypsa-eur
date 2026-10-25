@@ -12,7 +12,7 @@ import yaml
 from scripts._helpers import sanitize_custom_columns
 from scripts.add_electricity import set_transmission_costs
 from scripts.add_energy_islands import main as add_energy_islands
-from scripts.check_bornholm_networks import check_networks
+from scripts.check_bornholm_networks import check_networks, scenarios
 from scripts.cluster_network import copperplate_buses
 from scripts.prepare_sector_network import (
     lossy_bidirectional_links,
@@ -181,17 +181,29 @@ def test_copperplate_rejects_invalid_groups(groups):
 def comparison():
     """Full-hourly check fixture; no optimisation or external input downloads."""
     config = yaml.safe_load(Path("config/config.bornholm.yaml").read_text())
-    config["countries"] = ["DK", "DE", "LU", "IE", "GB"]
+    config["countries"] = ["DK", "DE", "LU", "IE", "GB", "SE", "PL"]
     n = pypsa.Network()
     n.set_snapshots(pd.date_range(**config["snapshots"], freq="h"))
     n.add(
         "Bus",
-        ["DKE1", "DE00", "LUG1", "IE00", "GBNI"],
+        ["DKE1", "DE00", "LUG1", "IE00", "GBNI", "SE04", "PL00"],
         carrier="AC",
         country=config["countries"],
     )
     n.add("Bus", "DK heat", carrier="heat", location="DKE1")
     n.add("Bus", "DK H2", carrier="H2", location="DKE1")
+    n.add("Load", "heat service", bus="DK heat", p_set=100)
+    n.add(
+        "Link",
+        "existing grid",
+        bus0="DKE1",
+        bus1="DE00",
+        carrier="DC",
+        p_nom=100,
+        p_min_pu=-1,
+        length=100,
+    )
+    lossy_bidirectional_links(n, "DC", {"efficiency_static": 0.98})
     n.add(
         "Generator",
         "generic offshore",
@@ -207,11 +219,18 @@ def comparison():
     }
     reference = n.copy()
     networks = {"baseline": n}
-    for case, cables in {
-        "radial": {"BEI_TO_DK2_RADIAL": ("DKE1", 3000)},
-        "hybrid": {"BEI_TO_DK2": ("DKE1", 1200), "BEI_TO_DE": ("DE00", 2000)},
-    }.items():
+    cables = pd.read_csv(config["energy_islands"]["links"])
+    for case, spec in scenarios(config).items():
+        if case == "baseline":
+            continue
         m = n.copy()
+        if spec.get("electricity", {}).get("transmission_limit") == "vopt":
+            dc = m.links.carrier.eq("DC")
+            m.links.loc[dc, "p_nom_extendable"] = True
+            m.links.loc[dc, "p_nom_min"] = m.links.loc[dc, "p_nom"]
+        if not spec["energy_islands"]["enabled"]:
+            networks[case] = m
+            continue
         m.add("Bus", "BEI_HUB", carrier="AC", country="DK", location="BEI_HUB")
         m.add(
             "Generator",
@@ -222,21 +241,24 @@ def comparison():
             p_nom_max=3000,
             p_max_pu=pd.Series(0.5, index=m.snapshots),
         )
-        for name, (target, capacity) in cables.items():
+        selected = cables.loc[cables.case.eq(spec["energy_islands"]["case"])]
+        for row in selected.itertuples():
             m.add(
                 "Link",
-                name,
+                row.link_id,
                 bus0="BEI_HUB",
-                bus1=target,
+                bus1=row.target_bus,
                 carrier="DC",
                 p_min_pu=-1,
                 p_nom_extendable=True,
-                p_nom_min=capacity,
-                p_nom_max=capacity,
+                p_nom_min=row.capacity_mw if row.build_mode == "fixed" else 0,
+                p_nom_max=row.capacity_mw,
                 length=100,
                 capital_cost=200,
             )
-        lossy_bidirectional_links(m, "DC", {"efficiency_static": 0.98})
+        lossy_bidirectional_links(
+            m, "DC", {"efficiency_static": 0.98}, link_indices=selected.link_id
+        )
         networks[case] = m
     return networks, config, reference
 
@@ -268,8 +290,23 @@ def test_comparison_rejects_invalid_runs(comparison, fault, message):
     elif fault == "nonhourly":
         networks["hybrid"].set_snapshots(networks["hybrid"].snapshots[::2])
     elif fault == "missing_copper":
-        networks["hybrid"].remove("Link", networks["hybrid"].links.index[0])
+        m = networks["hybrid"]
+        m.remove("Link", m.links.index[m.links.carrier.eq("copper")][0])
     elif fault == "double_cost":
         networks["hybrid"].links.at["BEI_TO_DE-reversed", "capital_cost"] = 200
     with pytest.raises(ValueError, match=message):
         check_networks(networks, config, reference=reference, require_reference=True)
+
+
+def test_comparison_rejects_changed_service_demand(comparison):
+    networks, config, _ = comparison
+    networks["open"].loads.at["heat service", "p_set"] = 200
+    with pytest.raises(AssertionError):
+        check_networks(networks, config)
+
+
+def test_comparison_rejects_expandable_main_grid(comparison):
+    networks, config, _ = comparison
+    networks["optimised"].links.at["existing grid", "p_nom_extendable"] = True
+    with pytest.raises(ValueError, match="background electricity grid is expandable"):
+        check_networks(networks, config)
