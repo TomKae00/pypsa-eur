@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur> -->
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Historical price and flow benchmark
 
 ## Independent feature branch
@@ -177,6 +180,10 @@ Completed years can be transferred to the laptop and analysed independently.
 
 ## Bidding-zone geometry correction
 
+See [the preprocessing methods note](hindcast-corrections.md) for the native
+integration, line-level investigation, reservoir-duration correction, edge-case
+conventions and controlled-comparison design.
+
 The first solved 2023 network placed Ringhals 3/4 (2,288 MW combined) and
 Oskarshamn 3 (1,450 MW) in `SE04`, while Forsmark 1/2/3 (3,446 MW) were
 assigned to `SE03`. These are capacities in the supplied plant dataset,
@@ -220,8 +227,9 @@ network explicitly for the comparison. First inspect the rebuilt individual
 plant CSV and generator table. For the same input fleet, the intended Swedish
 nuclear allocation is 7,184 MW in SE3 and zero in SE4. Also review DK/NO/SE
 demand, generation allocation and corridor endpoints before interpreting
-changes in regional prices. No geometry checks, tests, builds or solves have
-been executed to confirm the corrected generated outputs.
+changes in regional prices. The supplied intermediate files have been traced
+at line and plant level; corrected full-build outputs and their solved-price
+effects still need to be evaluated.
 
 ## Multi-year workflow: 2022–2025
 
