@@ -260,12 +260,104 @@ def add_co2_emissions(n, costs, carriers):
     ].values
 
 
+def fill_hydro_max_hours(
+    hydro: pd.DataFrame, hydro_stats: pd.DataFrame, method: str
+) -> pd.Series:
+    """
+    Fill missing reservoir durations on individual plants, before aggregation.
+
+    Retain positive reported durations. For country totals, distribute only the
+    remaining energy capacity over plants with missing (NaN or zero) durations,
+    in proportion to their discharge capacities. Never overwrite a reported
+    duration to force agreement with a national estimate. The alternative
+    large-installation estimate and six-hour fallback retain their native roles.
+    """
+    if method not in {
+        "energy_capacity_totals_by_country",
+        "estimate_by_large_installations",
+    }:
+        raise ValueError(f"Unknown hydro_max_hours method: {method}")
+
+    if hydro.empty:
+        return pd.Series(index=hydro.index, dtype=float, name="max_hours")
+    hours = hydro.max_hours.astype(float).copy()
+    if (~np.isfinite(hydro.p_nom) | hydro.p_nom.lt(0)).any():
+        raise ValueError("Hydro discharge capacities must be finite and non-negative")
+    if (hours.lt(0) | (hours.notna() & ~np.isfinite(hours))).any():
+        raise ValueError("Reported hydro durations must be finite and non-negative")
+    if hydro.country.isna().any():
+        raise ValueError("Reservoir plants need a country for duration estimation")
+
+    missing = hours.isna() | hours.eq(0)
+    reported_energy = (
+        hydro.p_nom.mul(hours.where(~missing, 0)).groupby(hydro.country).sum()
+    )
+    missing_power = hydro.loc[missing].groupby("country").p_nom.sum()
+
+    if method == "energy_capacity_totals_by_country":
+        # Preserve the existing 0.2 TWh floor for available country estimates.
+        target = hydro_stats["E_store[TWh]"].clip(lower=0.2) * 1e6
+        remaining = target.reindex(reported_energy.index) - reported_energy
+        excess = remaining.index[remaining < -1e-6]
+        if len(excess):
+            logger.warning(
+                "Reported reservoir storage exceeds the country estimate in %s; "
+                "retaining reported durations and assigning zero remaining energy.",
+                ", ".join(excess),
+            )
+        unallocated = remaining.index[
+            remaining.gt(1e-6)
+            & missing_power.reindex(remaining.index, fill_value=0).eq(0)
+        ]
+        if len(unallocated):
+            logger.warning(
+                "No positive-capacity reservoir plants with missing durations in "
+                "%s; retaining reported storage without scaling to country totals.",
+                ", ".join(unallocated),
+            )
+        country_hours = remaining.clip(lower=0).div(missing_power.replace(0, np.nan))
+    else:
+        country_hours = (
+            hydro_stats["E_store[TWh]"]
+            .mul(1e3)
+            .div(hydro_stats["p_nom_discharge[GW]"].replace(0, np.nan))
+            .clip(lower=0)
+        )
+
+    estimates = hydro.loc[missing, "country"].map(country_hours)
+    estimates = estimates.where(np.isfinite(estimates))
+    fallback = hydro.loc[estimates.index[estimates.isna()], "country"].unique()
+    if len(fallback):
+        logger.warning(
+            "Assuming max_hours=6 for reservoir plants with missing durations in %s "
+            "because no usable country estimate is available.",
+            ", ".join(sorted(fallback)),
+        )
+    hours.loc[missing] = estimates.fillna(6.0)
+    completed_energy = hydro.p_nom.mul(hours).groupby(hydro.country).sum()
+    logger.info(
+        "Reservoir duration estimation (%s): filled %d of %d plants before "
+        "aggregation. Storage by country (TWh):\n%s",
+        method,
+        missing.sum(),
+        len(hydro),
+        pd.DataFrame(
+            {"reported": reported_energy / 1e6, "completed": completed_energy / 1e6}
+        )
+        .round(6)
+        .to_string(),
+    )
+    return hours
+
+
 def load_and_aggregate_powerplants(
     ppl_fn: str,
     costs: pd.DataFrame,
     consider_efficiency_classes: bool | list[float] = False,
     aggregation_strategies: dict = None,
     exclude_carriers: list = None,
+    hydro_capacities: str | None = None,
+    hydro_max_hours: str | None = None,
 ) -> pd.DataFrame:
     if not aggregation_strategies:
         aggregation_strategies = {}
@@ -297,6 +389,21 @@ def load_and_aggregate_powerplants(
     ppl["carrier"] = ppl.carrier.where(
         ~ppl.carrier.isin(["hydro", "natural gas"]), ppl.technology
     )
+
+    if hydro_max_hours is not None:
+        if hydro_capacities is None:
+            raise ValueError("Reservoir duration estimation requires hydro_capacities")
+        hydro_stats = pd.read_csv(
+            hydro_capacities, comment="#", na_values="-", index_col=0
+        )
+        reservoir = ppl.carrier.eq("hydro")
+        # Aggregating first hides missing durations inside otherwise populated
+        # regional averages. Fill at plant level so sum(p_nom * max_hours) is
+        # preserved by the existing capacity-weighted aggregation below.
+        ppl["max_hours"] = ppl["max_hours"].astype(float)
+        ppl.loc[reservoir, "max_hours"] = fill_hydro_max_hours(
+            ppl.loc[reservoir], hydro_stats, hydro_max_hours
+        )
 
     cost_columns = [
         "VOM",
@@ -728,7 +835,6 @@ def attach_hydro(
     costs: pd.DataFrame,
     ppl: pd.DataFrame,
     profile_hydro: str,
-    hydro_capacities: str,
     carriers: list,
     **params,
 ):
@@ -745,8 +851,6 @@ def attach_hydro(
         DataFrame containing the power plant data.
     profile_hydro : str
         Path to the hydro profile data.
-    hydro_capacities : str
-        Path to the hydro capacities data.
     carriers : list
         List of hydro energy carriers.
     **params :
@@ -821,50 +925,11 @@ def attach_hydro(
         )
 
     if "hydro" in carriers and not hydro.empty:
-        hydro_max_hours = params.get("hydro_max_hours")
-
-        assert hydro_capacities is not None, "No path for hydro capacities given."
-
-        hydro_stats = pd.read_csv(
-            hydro_capacities, comment="#", na_values="-", index_col=0
-        )
-        e_target = hydro_stats["E_store[TWh]"].clip(lower=0.2) * 1e6
-        e_installed = hydro.eval("p_nom * max_hours").groupby(hydro.country).sum()
-        e_missing = e_target - e_installed
-        missing_mh_i = hydro.query("max_hours.isnull() or max_hours == 0").index
-        # some countries may have missing storage capacity but only one plant
-        # which needs to be scaled to the target storage capacity
-        missing_mh_single_i = hydro.index[
-            ~hydro.country.duplicated() & hydro.country.isin(e_missing.dropna().index)
-        ]
-        missing_mh_i = missing_mh_i.union(missing_mh_single_i)
-
-        if hydro_max_hours == "energy_capacity_totals_by_country":
-            # watch out some p_nom values like IE's are totally underrepresented
-            max_hours_country = (
-                e_missing / hydro.loc[missing_mh_i].groupby("country").p_nom.sum()
-            )
-
-        elif hydro_max_hours == "estimate_by_large_installations":
-            max_hours_country = (
-                hydro_stats["E_store[TWh]"] * 1e3 / hydro_stats["p_nom_discharge[GW]"]
-            )
-        else:
-            raise ValueError(f"Unknown hydro_max_hours method: {hydro_max_hours}")
-
-        max_hours_country.clip(0, inplace=True)
-
-        missing_countries = pd.Index(hydro["country"].unique()).difference(
-            max_hours_country.dropna().index
-        )
-        if not missing_countries.empty:
-            logger.warning(
-                f"Assuming max_hours=6 for hydro reservoirs in the countries: {', '.join(missing_countries)}"
-            )
-        hydro_max_hours = hydro.max_hours.where(
-            (hydro.max_hours > 0) & ~hydro.index.isin(missing_mh_single_i),
-            hydro.country.map(max_hours_country),
-        ).fillna(6)
+        # Durations were completed on individual plants, then aggregated using
+        # capacity weights. Zero can be a valid result when no energy remains
+        # in the national estimate; do not reinterpret it as missing here.
+        if (~np.isfinite(hydro.max_hours) | hydro.max_hours.lt(0)).any():
+            raise ValueError("Reservoir durations must be filled before aggregation")
 
         if params.get("flatten_dispatch", False):
             buffer = params.get("flatten_dispatch_buffer", 0.2)
@@ -879,7 +944,7 @@ def attach_hydro(
             carrier="hydro",
             bus=hydro["bus"],
             p_nom=hydro["p_nom"],
-            max_hours=hydro_max_hours,
+            max_hours=hydro["max_hours"],
             capital_cost=costs.at["hydro", "capital_cost"],
             marginal_cost=costs.at["hydro", "marginal_cost"],
             p_max_pu=p_max_pu,  # dispatch
@@ -1199,12 +1264,19 @@ def main(
         if "landfall_length" in settings.keys()
     }
 
+    hydro_params = params.renewable.get("hydro", {})
+    build_reservoirs = "hydro" in params.electricity[
+        "renewable_carriers"
+    ] and "hydro" in hydro_params.get("carriers", [])
+
     ppl = load_and_aggregate_powerplants(
         inputs["powerplants"],
         costs,
         consider_efficiency_classes=params.clustering["consider_efficiency_classes"],
         aggregation_strategies=params.clustering["aggregation_strategies"],
         exclude_carriers=params.clustering["exclude_carriers"],
+        hydro_capacities=inputs["hydro_capacities"] if build_reservoirs else None,
+        hydro_max_hours=(hydro_params["hydro_max_hours"] if build_reservoirs else None),
     )
 
     attach_load(
@@ -1271,7 +1343,6 @@ def main(
             costs,
             ppl,
             inputs.profile_hydro,
-            inputs.hydro_capacities,
             carriers,
             **p,
         )

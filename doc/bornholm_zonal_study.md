@@ -19,6 +19,7 @@ is retained for debugging; it is not the analysis run.
 | CO2 constraint | Native relative budget: 25% of the configured 1990 reference emissions, covering the enabled sectors |
 | Main electricity grid | Native OSM 0.7 plus the covered TYNDP 2026 project subset for 2035; fixed background (`vfixed`) |
 | Grid benchmarks | The same installed planned assets, with native further reinforcement (`vopt`) |
+| Gas / hydrogen transmission | Existing gas pipelines fixed; no new gas pipelines or hydrogen pipelines/retrofits, in all eight cases |
 | Losses | Native sector DC and distribution losses; AC loss approximation disabled |
 | Renewable resource classes | Three for onshore wind, offshore AC/DC wind and solar |
 | Project counterfactual | Project site reserved from generic offshore development in every case |
@@ -42,6 +43,73 @@ unconstrained links. Sector buses increase the **total** bus count. Radial and
 hybrid also add `BEI_HUB`; the onshore electricity bus IDs must be identical across
 the Bornholm scenarios. The actual count is printed from the built networks,
 not inferred from `n_clusters` (which is not a target in administrative mode).
+
+### Common pipeline assumption
+
+The Bornholm configuration uses the existing sector switches:
+
+```yaml
+sector:
+  gas_network: true
+  gas_network_connectivity_upgrade: 0
+  H2_network: false
+  H2_retrofit: false
+```
+
+`gas_network: true` retains regional gas balances, the existing gas pipelines
+and native supply entry points. With `H2_retrofit: false`, existing pipelines
+are already fixed by native PyPSA-Eur. Setting connectivity upgrades to zero
+also suppresses the additional candidate pipelines otherwise used to connect
+isolated regions. The implementation now skips the NetworkX augmentation call
+for zero, which that function does not itself accept.
+
+`H2_network: false` removes interregional hydrogen pipelines; it does not disable
+regional hydrogen production, consumption or storage. There is no separate
+committed 2035 hydrogen-backbone dataset in this study, so this is a **no hydrogen
+pipeline network** assumption, not a fixed planned 2035 hydrogen network. Gas
+and hydrogen storage, conversion, heat supply and other local sector investments
+retain their native flexibility. Hydropower is not disabled by these switches.
+
+This is a controlled infrastructure assumption for assessing Bornholm, not a
+necessary consequence of fixing electricity transmission. It applies equally
+to both `vopt` benchmarks so their comparison isolates electricity-grid
+reinforcement. Disconnected gas regions may consequently be unable to use gas;
+the model must meet their demands through the remaining technologies. Check
+feasibility in the rebuilt baseline. Disabling pipeline investment does not
+establish that the full hourly sector solve will fit on a smaller HPC node.
+
+### Shared geography and reservoir corrections
+
+The Bornholm branch includes the generic preprocessing corrections from
+hindcast commits `a477dca8249f2614ffddaf9aeaf6e65d35875bf1` and
+`0b30b179d332232e380aa17c330808b4fb6456d1`:
+
+- At administrative level `bz`, base bus regions use the actual native bidding
+  zone polygons. Dissolving entire NUTS3 regions with majority-overlap labels
+  previously moved boundaries, plants and transmission endpoints between zones.
+  Corrected regions feed the existing country-constrained bus and plant mapping
+  and the existing line aggregation; no plant-specific reassignment or manual
+  interzonal transfer-capacity calibration is added.
+- Missing reservoir durations are completed at individual plants before native
+  capacity-weighted aggregation. Reported durations are retained and only the
+  residual national storage estimate is allocated to plants with missing data.
+  The erroneous overwrite of the first reservoir entry of each country is removed.
+  Native inflows, cyclic storage and discharge constraints remain in use.
+
+The assignment methods match the corrected hindcast branch. Numerical capacities
+need not match a 2023 hindcast: Bornholm uses the planned 2035 grid, 2035 plant
+eligibility and future investment assumptions. Its weather remains the native
+2013 input. Cross-zone AC ratings retain native line-rating aggregation and
+`s_max_pu`; they are not observed NTC or flow-based market limits.
+
+The networks built before these corrections are stale. After pulling, run the
+full `build` stage before any `solve`, so the changed base-network script and its
+explicit bidding-zone input rebuild dependent regions, plants and networks.
+Existing retrieved datasets and unchanged weather cutouts can be reused. The
+comparison checker rejects the old pipeline settings and checks that every case
+retains the same fixed gas network with no gas or hydrogen pipeline candidates.
+
+### Scenario comparisons
 
 All run names have the prefix `bornholm_zonal_`:
 
@@ -148,13 +216,13 @@ Bornholm baseline pilot. No historical-benchmark network or `HINDCAST_NETWORK`
 environment variable is required.
 
 ```bash
-sbatch scripts/bornholm_sophia.sbatch solve baseline
+sbatch --partition=fatq scripts/bornholm_sophia.sbatch solve baseline
 ```
 
 After the baseline pilot completes, solve another case, for example:
 
 ```bash
-sbatch scripts/bornholm_sophia.sbatch solve hybrid
+sbatch --partition=fatq scripts/bornholm_sophia.sbatch solve hybrid
 ```
 
 Use the suffixes in the table above for the remaining cases. `build` and `dry-run`
@@ -166,12 +234,17 @@ is the recommended sequence. The full solve stops before optimisation if
 the actual electricity bus IDs or country assignments differ. Investigate an
 upstream shape/network version mismatch rather than suppressing this check.
 
-The batch script reserves one `workq` node exclusively for 24 hours and configures
-16 CPU workers; Gurobi uses 16 threads. Sophia's observed `workq` configuration
+The batch script defaults to one exclusive `workq` node for builds; the solve
+commands above override this to `fatq`. Both use 24 hours and 16 CPU workers;
+Gurobi uses 16 threads. Sophia's observed `workq` configuration
 reports only 1 MB per node to Slurm, which rejects explicit requests such as
 `--mem=16G` or `--mem=112G`. This is scheduler metadata, not the node's physical
 RAM. Omit `--mem` and `--mem-per-cpu`; the exclusive allocation avoids sharing the
 node with another job. Check physical memory with `free -h` on the compute node.
+The first hourly baseline failed with Gurobi out of memory during presolve on a
+125 GiB `workq` node. A subsequent hardware check found 243 GiB on `fatq`.
+This motivates the larger-node retry after rebuilding, but is not evidence that
+243 GiB will be sufficient to finish the solve.
 Snakemake's `mem_mb=110000` is an internal scheduling budget, not a Slurm memory
 reservation or a hard runtime limit. It admits one full solve at a time. The
 selected cases run sequentially within an allocation. Use one full solve per job
@@ -235,8 +308,9 @@ within-study comparisons, rejection of stale 2023 networks, consistency with
 native default inputs, and job stages without a historical network. Native
 workflow expansion also confirmed 2013 snapshots, the default archived cutout
 for generic solar and project wind, `load.fixed_year: false`, the 2023 sector
-statistical base year, and the 2035 planning horizon. Full European profiles and
-sector networks have not been rebuilt for the corrected weather input here.
+statistical base year, and the 2035 planning horizon. The subsequent Sophia build
+completed all eight full-hourly sector networks and their comparison checks at
+`cb45ce41`; the baseline solve then failed with Gurobi out of memory.
 
 ```bash
 pixi run python -m pytest --noconftest -q test/test_energy_islands.py test/test_energy_island_resources.py test/test_compose_network.py test/test_cluster_network.py test/test_add_electricity.py test/test_bornholm_zonal.py test/test_bornholm_grid.py test/test_bornholm_job.py
@@ -252,7 +326,26 @@ whitespace checks passed.
 The grid-only dependency dry-run passed. A native build through
 `base_extended.nc` checks the real OSM grid, project import and retirement step;
 its mapping audit is discussed in the [grid note](bornholm_2035_grid.md).
-This is not a full European sector build or solve. The earlier full sector
-dependency dry-run was stopped during DAG construction and is not reported as
-passed. No cluster submission was performed here. Complete that dependency
-dry-run, all composed-network comparison checks and the baseline pilot on Sophia.
+This grid-only test is separate from the subsequent full build on Sophia.
+
+For the fixed-pipeline and shared-preprocessing revision, 112 targeted tests
+passed, including pipeline candidate switches, stale-network rejection, native
+plant and AC/DC corridor assignment across a boundary inside a county, reservoir
+energy conservation through aggregation, small-network optimisation, NetCDF
+round trips, configuration/schema synchronisation and the 12 job-script cases.
+Two existing sector/resource integration tests were excluded from this run after
+their multiprocessing weather-profile fixture stalled in the development
+executor; the full resource-profile suite was not rerun successfully. The local
+runtime uses native CPU-affinity detection in Dask because its optional psutil
+probe cannot resolve process IDs in the executor's PID namespace. No production
+model functions were replaced for these tests.
+
+The ten relevant geography, clustering, plant-mapping and reservoir functions
+were compared structurally with hindcast commit `0b30b179` and are identical.
+A check using the available native zone polygons and Swedish plant coordinates
+assigns Ringhals 3/4 and Oskarshamn 3 to SE03 and keeps Forsmark 1/2/3 in SE03.
+This checks the mapping method, not a completed 2035 network rebuild.
+
+The eight sector networks must now be rebuilt with these pipeline, geography
+and hydro corrections, pass the comparison checker, and complete a new baseline
+pilot on Sophia. No new HPC build or solve was submitted for this revision.

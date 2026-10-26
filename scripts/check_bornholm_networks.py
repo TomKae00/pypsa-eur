@@ -52,6 +52,40 @@ def check_networks(networks, config, *, solved=False):
         require(np.allclose(n.snapshot_weightings, 1.0), f"{case}: non-hourly weights")
         spec = definitions[case]
         enabled = spec["energy_islands"]["enabled"]
+        sector = n.meta.get("sector", {})
+        for key, value in {
+            "gas_network": True,
+            "gas_network_connectivity_upgrade": 0,
+            "H2_network": False,
+            "H2_retrofit": False,
+        }.items():
+            require(
+                sector.get(key) == value,
+                f"{case}: stale or inconsistent sector setting {key}; rebuild networks",
+            )
+        gas_pipes = n.links.index[n.links.carrier.eq("gas pipeline")]
+        require(
+            not n.links.loc[gas_pipes, "p_nom_extendable"].any(),
+            f"{case}: existing gas pipelines are expandable",
+        )
+        require(
+            not n.links.carrier.eq("gas pipeline new").any(),
+            f"{case}: new gas pipeline candidates are present",
+        )
+        require(
+            not n.links.carrier.str.startswith("H2 pipeline").any(),
+            f"{case}: hydrogen pipelines are present",
+        )
+        # The pipeline assumption is common to the electric-grid benchmarks too.
+        baseline_gas = baseline.links.index[baseline.links.carrier.eq("gas pipeline")]
+        pd.testing.assert_frame_equal(
+            n.links.loc[gas_pipes, ["bus0", "bus1", "p_nom", "length"]].sort_index(),
+            baseline.links.loc[
+                baseline_gas, ["bus0", "bus1", "p_nom", "length"]
+            ].sort_index(),
+            check_dtype=False,
+            check_index_type=False,
+        )
         grid_policy = spec.get("electricity", {}).get(
             "transmission_limit", config["electricity"]["transmission_limit"]
         )

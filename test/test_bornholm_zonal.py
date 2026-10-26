@@ -192,6 +192,17 @@ def comparison():
     )
     n.add("Bus", "DK heat", carrier="heat", location="DKE1")
     n.add("Bus", "DK H2", carrier="H2", location="DKE1")
+    n.add("Bus", ["DK gas", "DE gas"], carrier="gas", location=["DKE1", "DE00"])
+    n.add(
+        "Link",
+        "existing gas",
+        bus0="DK gas",
+        bus1="DE gas",
+        carrier="gas pipeline",
+        p_nom=5000,
+        p_min_pu=-1,
+        length=200,
+    )
     n.add("Load", "heat service", bus="DK heat", p_set=100)
     n.add(
         "Link",
@@ -214,7 +225,7 @@ def comparison():
     )
     copperplate_buses(n, config["clustering"]["copperplate_regions"])
     n.meta = {
-        "sector": {"enabled": True},
+        "sector": config["sector"].copy(),
         "energy_islands": {"exclude_project_area": True},
     }
     networks = {"baseline": n}
@@ -289,6 +300,11 @@ def test_bornholm_uses_native_weather_and_load_defaults():
         ("nonhourly", "full hourly year"),
         ("missing_copper", "missing shared-price connection"),
         ("double_cost", "double-counted investment"),
+        ("stale_pipeline_config", "stale or inconsistent sector setting"),
+        ("expandable_gas", "existing gas pipelines are expandable"),
+        ("new_gas", "new gas pipeline candidates are present"),
+        ("new_hydrogen", "hydrogen pipelines are present"),
+        ("retrofitted_hydrogen", "hydrogen pipelines are present"),
     ],
 )
 def test_comparison_rejects_invalid_runs(comparison, fault, message):
@@ -306,6 +322,24 @@ def test_comparison_rejects_invalid_runs(comparison, fault, message):
         m.remove("Link", m.links.index[m.links.carrier.eq("copper")][0])
     elif fault == "double_cost":
         networks["hybrid"].links.at["BEI_TO_DE-reversed", "capital_cost"] = 200
+    elif fault == "stale_pipeline_config":
+        networks["hybrid"].meta["sector"]["H2_network"] = True
+    elif fault == "expandable_gas":
+        networks["hybrid"].links.at["existing gas", "p_nom_extendable"] = True
+    elif fault in {"new_gas", "new_hydrogen", "retrofitted_hydrogen"}:
+        carrier = {
+            "new_gas": "gas pipeline new",
+            "new_hydrogen": "H2 pipeline",
+            "retrofitted_hydrogen": "H2 pipeline retrofitted",
+        }[fault]
+        networks["hybrid"].add(
+            "Link",
+            "forbidden pipeline",
+            bus0="DK gas",
+            bus1="DE gas",
+            carrier=carrier,
+            p_nom_extendable=True,
+        )
     with pytest.raises(ValueError, match=message):
         check_networks(networks, config)
 
@@ -321,4 +355,11 @@ def test_comparison_rejects_expandable_main_grid(comparison):
     networks, config = comparison
     networks["optimised"].links.at["existing grid", "p_nom_extendable"] = True
     with pytest.raises(ValueError, match="background electricity grid is expandable"):
+        check_networks(networks, config)
+
+
+def test_comparison_rejects_changed_background_gas_capacity(comparison):
+    networks, config = comparison
+    networks["open_expandable"].links.at["existing gas", "p_nom"] = 10000
+    with pytest.raises(AssertionError):
         check_networks(networks, config)

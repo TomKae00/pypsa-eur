@@ -81,6 +81,14 @@ rule base_network:
     input:
         unpack(input_base_network),
         nuts3_shapes=resources("nuts3_shapes.geojson"),
+        bidding_zones=lambda w: (
+            resources("bidding_zones.geojson")
+            if (
+                config_provider("clustering", "mode")(w) == "administrative"
+                and "bz" in config_provider("clustering", "administrative")(w).values()
+            )
+            else []
+        ),
         country_shapes=resources("country_shapes.geojson"),
         offshore_shapes=resources("offshore_shapes.geojson"),
         europe_shape=resources("europe_shape.geojson"),
