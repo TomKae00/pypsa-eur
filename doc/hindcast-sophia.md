@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur> -->
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Parallel hindcast jobs on Sophia
 
 Run these commands yourself in the Sophia SSH terminal. This helper does not
@@ -34,6 +37,42 @@ This uses the successful electricity-only 2023 case's `workq`, Gurobi options
 and native dynamic costs. It does not submit the multi-year campaign. Shell
 syntax and local dispatch checks cover the launcher; the new HPC run itself
 has not been executed here.
+
+## Corrected 2022 and 2024 runs
+
+The old 2024 job failed in `build_electricity_demand` while strictly selecting
+all model snapshots from the optional synthetic fallback. Missing synthetic
+timestamps caused a `KeyError`, even if the primary demand inputs could supply
+the requested year. The reader now aligns synthetic data to the requested hours
+and countries; unavailable entries stay missing. Observed demand keeps
+precedence and the existing completeness assertion still stops an unfilled gap.
+No synthetic profile is shifted from another year. Three focused demand-entry
+point regression cases cover observed precedence, overlapping fallback coverage
+and rejection of a gap outside that coverage. Actual 2024 source completeness
+and a successful HPC solve still need to be established by the run.
+
+Once no hindcast jobs are active in this checkout, update it and submit both
+years using their already completed annual cutouts:
+
+```bash
+cd ~/projects/pypsa-eur-hindcast
+git pull --ff-only
+mkdir -p logs
+for year in 2022 2024; do
+  sbatch --job-name="hindcast-corrected-$year" --cpus-per-task=8 \
+    --output="logs/hindcast-corrected-$year-%j.log" \
+    scripts/hindcast_sophia.sbatch rebuild-solve "$year" "$(git rev-parse HEAD)"
+done
+squeue -r -u "$USER"
+```
+
+The jobs are independent and can run concurrently, subject to Slurm placement
+and native Snakemake locks. Each rebuild applies the geography and hydro
+corrections before solving with native annual demand, fuel and CO2 inputs.
+Successful corrected results go to `results/hindcast-corrected-YEAR/network.nc`;
+the old 2022 solved result remains in `results/hindcast-build-2022/network.nc`.
+If either job fails, inspect its year-specific log before retrying. Keep source
+and environment unchanged while either job is queued or running.
 
 ## Campaign layout
 
