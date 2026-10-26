@@ -9,7 +9,7 @@
 set -euo pipefail
 
 : "${SLURM_JOB_ID:?Run through sbatch, not on the login node}"
-mode="${1:?Expected weather, build-solve or solve}"
+mode="${1:?Expected weather, build-solve, rebuild-solve or solve}"
 year="${2:?Expected year or array}"
 submitted_revision="${3:?Expected submitted Git revision}"
 
@@ -22,7 +22,7 @@ if [[ "$year" == array ]]; then
     esac
 fi
 case "$year" in 2022|2023|2024|2025) ;; *) exit 2 ;; esac
-case "$mode" in weather|build-solve|solve) ;; *) exit 2 ;; esac
+case "$mode" in weather|build-solve|rebuild-solve|solve) ;; *) exit 2 ;; esac
 
 cd "${SLURM_SUBMIT_DIR:?Submit from the repository root}"
 # Host Git exists on the login node but is absent on Sophia compute nodes.
@@ -48,8 +48,21 @@ run_pixi() {
 
 network="resources/hindcast-build-$year/networks/composed_$year.nc"
 output="results/hindcast-build-$year/network.nc"
+rebuild_args=()
+flow_args=()
+if [[ "$mode" == rebuild-solve ]]; then
+    output="results/hindcast-corrected-$year/network.nc"
+    # Reconstruct spatial assignments and all dependent resources, retaining
+    # the completed raw-data/weather cache. Never solve the stale composed file.
+    rebuild_args=(--forcerun base_network compose_network)
+    flow_args=(--flow-sources "data/hindcast/flow-sources-corrected-$year.yaml")
+fi
 mapping="data/hindcast/bus_zones_$year.csv"
 configs=(config/hindcast/build.yaml "config/hindcast/build-$year.yaml")
+if [[ "$mode" != weather && ( -e "$output" || -e "${output%.nc}.audit.json" ) ]]; then
+    echo "Existing solve output/audit found at $output; refusing to overwrite it." >&2
+    exit 1
+fi
 
 printf 'Stage=%s year=%s job=%s node=%s CPUs=%s revision=%s\n' \
     "$mode" "$year" "$SLURM_JOB_ID" "$(hostname)" "$cores" "$submitted_revision"
@@ -62,7 +75,7 @@ if [[ "$mode" == weather ]]; then
     exit 0
 fi
 
-if [[ "$mode" == build-solve ]]; then
+if [[ "$mode" == build-solve || "$mode" == rebuild-solve ]]; then
     if [[ "$year" == 2025 ]]; then
         echo "2025 build is pending review of annual nuclear availability and other input coverage." >&2
         echo "The configured data/nuclear_p_max_pu.csv currently ends at 2024; weather preparation is allowed." >&2
@@ -79,7 +92,8 @@ if [[ "$mode" == build-solve ]]; then
     # Run directories differ by year. Any unexpected shared writer is blocked by
     # Snakemake rather than bypassed with --nolock.
     run_pixi snakemake "$network" \
-        --cores "$cores" --configfile "${configs[@]}" --rerun-incomplete
+        --cores "$cores" --configfile "${configs[@]}" --rerun-incomplete \
+        "${rebuild_args[@]}"
 fi
 
 if [[ ! -s "$network" ]]; then
@@ -91,14 +105,14 @@ if [[ -e "$output" || -e "${output%.nc}.audit.json" ]]; then
     exit 1
 fi
 if [[ ! -f "$mapping" ]]; then
-    run_pixi python scripts/hindcast.py prepare-zonal "$network" --year "$year"
+    run_pixi python scripts/hindcast.py prepare-zonal "$network" --year "$year" "${flow_args[@]}"
 fi
 # A second invocation checks a new template and fails on unknown/unreviewed IDs.
 # Existing reviewed CSVs (including 2023) are preserved.
-run_pixi python scripts/hindcast.py prepare-zonal "$network" --year "$year"
+run_pixi python scripts/hindcast.py prepare-zonal "$network" --year "$year" "${flow_args[@]}"
 
-mkdir -p "results/hindcast-build-$year"
-printf '%s\n' "$submitted_revision" > "results/hindcast-build-$year/submitted-revision.txt"
+mkdir -p "$(dirname "$output")"
+printf '%s\n' "$submitted_revision" > "$(dirname "$output")/submitted-revision.txt"
 run_pixi python scripts/hindcast.py solve "$network" \
     --output "$output" --solver gurobi --threads "$cores"
 printf 'Completed year=%s; solved network=%s\n' "$year" "$output"

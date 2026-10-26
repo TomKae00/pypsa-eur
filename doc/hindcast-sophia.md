@@ -4,6 +4,37 @@ Run these commands yourself in the Sophia SSH terminal. This helper does not
 connect to Sophia, start a remote agent or install an IDE backend. Submit from
 the separate `feature/historical-hindcast` checkout.
 
+## Rebuild and solve the corrected 2023 case
+
+With no hindcast jobs active, the human-invoked command below rebuilds the
+corrected network and immediately solves it in one allocation. No intermediate
+manual review or separate geography-only solve is required for this run.
+
+```bash
+cd ~/projects/pypsa-eur-hindcast
+git pull --ff-only
+mkdir -p logs
+sbatch --job-name=hindcast-corrected-2023 --cpus-per-task=8 \
+  --output=logs/hindcast-corrected-2023-%j.log \
+  scripts/hindcast_sophia.sbatch rebuild-solve 2023 "$(git rev-parse HEAD)"
+squeue -r -u "$USER"
+```
+
+The native `--forcerun base_network compose_network` rebuilds spatial
+assignments and dependent resources, including the composed network. The
+completed ERA5 cutout and unchanged raw-data cache are reused. Generated
+resources in `resources/hindcast-build-2023` are updated; the original solved
+network and audit in `results/hindcast-build-2023` remain intact. The corrected
+solve, audit and submitted revision go to `results/hindcast-corrected-2023`.
+Flow-query products use a separate `flow-sources-corrected-2023` filename.
+An existing corrected result/audit prevents a new submission from rebuilding or
+overwriting it. Do not submit this mode twice or edit this checkout while active.
+
+This uses the successful electricity-only 2023 case's `workq`, Gurobi options
+and native dynamic costs. It does not submit the multi-year campaign. Shell
+syntax and local dispatch checks cover the launcher; the new HPC run itself
+has not been executed here.
+
 ## Campaign layout
 
 | Work | CPUs per job | Dependency |
