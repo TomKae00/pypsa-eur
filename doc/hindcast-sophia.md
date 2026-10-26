@@ -74,6 +74,37 @@ the old 2022 solved result remains in `results/hindcast-build-2022/network.nc`.
 If either job fails, inspect its year-specific log before retrying. Keep source
 and environment unchanged while either job is queued or running.
 
+## Restart after missing clipped-cell geometries
+
+The corrected 2023 job `4911912` failed in spatial demand allocation with a
+missing region geometry; the supplied 2022/2024 jobs `4911920`/`4911921` also
+failed, although their final causes have not been inspected here. The base-region
+fix removes only cells with no positive-area intersection with their assigned
+outline, retaining the grid buses. Demand allocation filters existing land
+cells and normalises native combined distribution keys by country. See the
+[methods note](hindcast-corrections.md#clipped-cells-at-coastlines-and-borders).
+
+After those jobs have stopped, pull and submit all three corrected years:
+
+```bash
+cd ~/projects/pypsa-eur-hindcast
+git pull --ff-only
+mkdir -p logs
+for year in 2022 2023 2024; do
+  sbatch --job-name="hindcast-corrected-$year" --cpus-per-task=8 \
+    --output="logs/hindcast-corrected-$year-%j.log" \
+    scripts/hindcast_sophia.sbatch rebuild-solve "$year" "$(git rev-parse HEAD)"
+done
+squeue -r -u "$USER"
+```
+
+`rebuild-solve` forces the native base-network stage, so cached malformed regions
+are rebuilt before their dependants. The completed annual cutouts are reused.
+Each corrected output remains separate from the original solved networks.
+No further checkout or environment changes should be made while these jobs are
+queued or running. Focused local checks passed; these restart jobs have not
+been executed here.
+
 ## Campaign layout
 
 | Work | CPUs per job | Dependency |

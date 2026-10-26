@@ -36,6 +36,37 @@ from scripts.base_network import (
 path_cwd = pathlib.Path.cwd()
 
 
+@pytest.mark.parametrize(
+    "coordinates", [[(0.5, 0.5)], [(0.25, 0.5), (0.75, 0.5), (5, 0.5)]]
+)
+def test_onshore_cells_cover_outline_without_missing_geometries(coordinates, caplog):
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from scripts.base_network import process_onshore_regions
+
+    buses = pd.DataFrame(coordinates, columns=["x", "y"])
+    buses.index = buses.index.map(lambda i: f"bus{i}")
+    buses = buses.assign(
+        country="NL", admin="NL00", onshore_bus=True, substation_lv=True
+    )
+    original = buses.copy(deep=True)
+    outline = box(0, 0, 1, 1)
+    admin = gpd.GeoDataFrame(
+        {"country": ["NL"]}, index=["NL00"], geometry=[outline], crs=4326
+    )
+    result = process_onshore_regions("NL00", buses, admin, "EPSG:4326")
+    assert result.geometry.notna().all()
+    assert not result.geometry.is_empty.any()
+    assert result.union_all().symmetric_difference(outline).area < 1e-12
+    pd.testing.assert_frame_equal(buses, original)
+    if len(coordinates) > 1:
+        assert set(result.name) == {"bus0", "bus1"}
+        assert "retaining the network buses" in caplog.text
+    else:
+        assert list(result.name) == ["bus0"]
+
+
 @pytest.mark.parametrize("levels", [{"level": "bz"}, {"level": 0, "SE": "bz"}])
 def test_bidding_zone_shapes_preserve_boundary_inside_nuts_region(tmp_path, levels):
     """A majority-overlap NUTS label must not move a whole county into one zone."""

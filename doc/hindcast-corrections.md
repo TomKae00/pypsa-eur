@@ -58,6 +58,47 @@ A rebuild can also change simplification, regions, demand and asset allocation.
 The existing handling of areas without grid buses remains a separate limitation
 to review for islands and other small regions.
 
+### Clipped cells at coastlines and borders
+
+The first corrected 2023 rebuild failed before solving, during demand
+disaggregation. The supplied diagnostic identified 17 missing/empty geometries
+in the base onshore regions and two surviving after simplification:
+`virtual_way/691457479:b:1-300` (NO) and `way/693745438-220` (NL).
+All 17 reported coordinates lie outside their country's native zone outlines
+in the supplied polygon dataset. A local reproducer confirms that a bus mapped
+to its nearest administrative region can have a Voronoi cell with no
+intersection with that region. Native clipping then removes the cell, while
+subsequent reindexing creates a row with missing geometry.
+
+`process_onshore_regions` now exports only cells with positive intersection
+area. It logs the affected bus IDs and retains all electrical buses and their
+asset assignments. It does not expand the zone polygon or move a bus to another
+country/zone. A bus without a land cell receives no area-based demand or
+renewable potential directly; it remains part of the grid and subsequent
+network aggregation. This handles the selected geometries consistently; it
+does not establish that the underlying coastline or bus coordinates are exact.
+
+Demand allocation now filters existing cells to eligible substations, rather
+than reindexing and recreating missing shapes. A country with national demand
+and grid buses must still have eligible land cells. Remaining malformed input
+geometries are rejected with their IDs.
+
+The existing JRC Energy Atlas, GB consumption and NUTS GDP/population keys keep
+their priority. After combining them, relative weights are normalised once per
+country to preserve the supplied national load at every hour. This generalises
+the existing intended GB/NI renormalisation; the old GB membership test checked
+the Series index, and mixing individually normalised source keys can otherwise
+inflate national demand. Missing, negative, non-finite or zero-total weights
+stop the build rather than triggering an arbitrary uniform allocation. Logs
+record the combined weight sum and number of eligible cells per country.
+
+Focused regressions check coverage of the original outline, retention of
+electrical buses, singleton cells, substation selection, malformed geometries,
+missing country coverage and unusable distribution data. Integration cases run
+the actual allocation functions against small GeoTIFF, GB Excel/geometry and
+NUTS fixtures, including a landless bus and GB/NI source mixing, and verify
+hourly country-total conservation. Full corrected HPC rebuilds remain pending.
+
 ### Reservoirs
 
 The Norwegian input contains 918 reservoir plants, 491 with missing durations,
