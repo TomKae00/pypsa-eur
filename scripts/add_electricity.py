@@ -281,8 +281,15 @@ def fill_hydro_max_hours(
     if hydro.empty:
         return pd.Series(index=hydro.index, dtype=float, name="max_hours")
     hours = hydro.max_hours.astype(float).copy()
-    if (~np.isfinite(hydro.p_nom) | hydro.p_nom.lt(0)).any():
-        raise ValueError("Hydro discharge capacities must be finite and non-negative")
+    invalid_capacity = ~np.isfinite(hydro.p_nom) | hydro.p_nom.lt(0)
+    if invalid_capacity.any():
+        details = hydro.loc[invalid_capacity].reindex(
+            columns=["name", "country", "bus", "p_nom"]
+        )
+        raise ValueError(
+            "Hydro discharge capacities must be finite and non-negative:\n"
+            + details.to_string()
+        )
     if (hours.lt(0) | (hours.notna() & ~np.isfinite(hours))).any():
         raise ValueError("Reported hydro durations must be finite and non-negative")
     if hydro.country.isna().any():
@@ -396,6 +403,21 @@ def load_and_aggregate_powerplants(
         hydro_stats = pd.read_csv(
             hydro_capacities, comment="#", na_values="-", index_col=0
         )
+        # A source record without discharge capacity cannot contribute a
+        # capacity-weighted duration or receive a share of residual storage.
+        # Omit it explicitly rather than inventing MW or treating NaN as zero.
+        missing_capacity = ppl.carrier.eq("hydro") & ppl.p_nom.isna()
+        if missing_capacity.any():
+            logger.warning(
+                "Excluding %d reservoir records with missing discharge capacity "
+                "from duration estimation and plant aggregation. Source CSV is "
+                "unchanged; omitted MW and storage are unknown:\n%s",
+                missing_capacity.sum(),
+                ppl.loc[missing_capacity]
+                .reindex(columns=["name", "country", "bus", "p_nom", "max_hours"])
+                .to_string(),
+            )
+            ppl = ppl.loc[~missing_capacity].copy()
         reservoir = ppl.carrier.eq("hydro")
         # Aggregating first hides missing durations inside otherwise populated
         # regional averages. Fill at plant level so sum(p_nom * max_hours) is

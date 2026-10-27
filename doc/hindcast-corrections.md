@@ -155,6 +155,15 @@ capacities. Native capacity-weighted aggregation then preserves
 
 The implementation explicitly handles these cases:
 
+- Reservoir source records with missing discharge capacity are excluded before
+  duration completion and aggregation, with their source row IDs, names,
+  countries, buses and values recorded in the build log. The source CSV remains
+  unchanged. The corrected 2023 build exposed 25 Italian records with neither
+  capacity nor duration. Their omitted MW and storage are unknown: exclusion is
+  a source-data limitation, not evidence of zero installed capacity. No capacity
+  is invented; the residual-storage calculation uses only records with known
+  discharge capacity. Negative or infinite capacities still fail, now with the
+  offending records in the error message. Zero capacities remain supported.
 - Positive reported durations remain unchanged, including in single-plant
   countries. A complete dataset is not rescaled to a national estimate.
 - If reported energy already exceeds the estimate, it is retained, missing
