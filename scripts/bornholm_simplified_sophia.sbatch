@@ -16,8 +16,8 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 stage="${1:-build}"
 case "$stage" in
-  build|solve|all|dry-run) ;;
-  *) echo "Usage: sbatch scripts/bornholm_simplified_sophia.sbatch [build|solve|all|dry-run]" >&2; exit 2 ;;
+  build|solve|all|check|dry-run) ;;
+  *) echo "Usage: sbatch scripts/bornholm_simplified_sophia.sbatch [build|solve|all|check|dry-run]" >&2; exit 2 ;;
 esac
 
 base="config/config.bornholm.yaml"
@@ -46,6 +46,12 @@ echo "Simplifications: EU CO2 pooling; no CO2 pipelines, methanation, H2 fuel ce
 
 if [[ "$stage" == dry-run ]]; then
   "${smk[@]}" --dry-run -- "$solved"
+  exit 0
+fi
+
+# Validate the existing composed network without repeating the successful build.
+if [[ "$stage" == check ]]; then
+  "$pixi_wrapper" run python scripts/check_bornholm_simplified.py --stage composed
   exit 0
 fi
 
