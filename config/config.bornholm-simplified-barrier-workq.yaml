@@ -1,0 +1,21 @@
+# Workq/128-GB counterpart to the fatq barrier experiment.
+# Use exactly the SAME composed simplified 2035 PyPSA network and Gurobi settings.
+# Separate run name prevents parallel experiments overwriting each other's results.
+run:
+  name: bornholm_simplified_barrier_workq
+  scenarios:
+    enable: false
+  shared_resources:
+    policy: false
+
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-bornholm
+  solver_options:
+    gurobi-bornholm:
+      method: 2
+      threads: 4
+      crossover: 0
+      Seed: 123
+      # No Gurobi TimeLimit; 24h Slurm walltime.
