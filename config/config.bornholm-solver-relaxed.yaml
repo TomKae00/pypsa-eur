@@ -1,0 +1,20 @@
+# Optional follow-up PDHG experiment: looser termination tolerances.
+# Do not use these looser tolerances for final market-price results without validation.
+# Layer AFTER config/config.bornholm.yaml.
+run:
+  name: bornholm_solver_relaxed
+  scenarios:
+    enable: false
+
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-bornholm
+  solver_options:
+    gurobi-bornholm:
+      threads: 16
+      method: 6
+      crossover: 0
+      Seed: 123
+      PDHGConvTol: 1.0e-4
+      PDHGRelTol: 1.0e-5
