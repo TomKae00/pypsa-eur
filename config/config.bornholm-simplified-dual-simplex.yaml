@@ -1,4 +1,5 @@
-# Independent dual-simplex benchmark on the SAME built simplified Bornholm network.
+# Independent dual-simplex solve on the SAME built simplified Bornholm network.
+# No solver time limit; only the HPC scheduler's walltime applies.
 # Overlay order:
 #  1. config/config.bornholm.yaml
 #  2. config/config.bornholm-simplified.yaml
@@ -21,4 +22,3 @@ solving:
       threads: 1          # Gurobi LP simplex is single-threaded
       crossover: -1       # Reset inherited PDHG-only crossover setting
       Seed: 123
-      TimeLimit: 21600    # Six hours of solver time; diagnostic experiment
