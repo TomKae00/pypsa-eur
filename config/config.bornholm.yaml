@@ -37,8 +37,8 @@ sector:
   heating: true
   biomass: true
   industry: true
-  shipping: true
-  aviation: true
+  shipping: false
+  aviation: false
   agriculture: true
   # Fixed background pipelines in every case; local hydrogen remains endogenous.
   H2_network: false
@@ -137,9 +137,8 @@ solving:
   solver_options:
     gurobi-bornholm:
       threads: 16
-      method: 2
+      method: 6
       crossover: 0
-      BarConvTol: 1.0e-6
       Seed: 123
   mem_mb: 110000
   runtime: 24h
