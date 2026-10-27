@@ -22,6 +22,7 @@ def job(tmp_path):
         "import json, os, subprocess, sys\n"
         "with open(os.environ['MOCK_CALLS'], 'a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
         "if sys.argv[1:4] == ['run', 'python', '-c']: sys.exit(subprocess.call([sys.executable, *sys.argv[3:]]))\n"
+        "if sys.argv[1:3] == ['run', 'snakemake']: sys.exit(int(os.environ.get('MOCK_SNAKEMAKE_EXIT', '0')))\n"
     )
     wrapper.chmod(0o755)
     env = os.environ | {
@@ -37,7 +38,8 @@ def job(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "stage,count", [("dry-run", 8), ("build", 8), ("solve", 1), ("all", 1)]
+    "stage,count",
+    [("dry-run", 8), ("build", 8), ("rebuild", 8), ("solve", 1), ("all", 1)],
 )
 def test_job_defaults(job, stage, count):
     root, script, env = job
@@ -50,6 +52,13 @@ def test_job_defaults(job, stage, count):
     ]
     smk = next(call for call in calls if call[:2] == ["run", "snakemake"])
     assert len(smk[smk.index("--") + 1 :]) == count
+    if stage == "rebuild":
+        assert smk[smk.index("--forcerun") + 1] == "base_network"
+        assert sum(call[:2] == ["run", "snakemake"] for call in calls) == 1
+        assert calls[-1][:3] == ["run", "python", "scripts/check_bornholm_networks.py"]
+        assert "--solved" not in calls[-1]
+    else:
+        assert "--forcerun" not in smk
     if stage == "solve":
         assert smk[-1] == "results/bornholm_zonal_baseline/networks/solved_2035.nc"
     assert all(
@@ -68,6 +77,20 @@ def test_job_rejects_unknown_case(job):
     )
     assert result.returncode == 2
     assert "Unknown scenario" in result.stderr
+
+
+def test_rebuild_failure_propagates_before_comparison_checks(job):
+    root, script, env = job
+    env["MOCK_SNAKEMAKE_EXIT"] = "9"
+    result = subprocess.run(
+        ["bash", str(script), "rebuild"], env=env, capture_output=True, text=True
+    )
+    assert result.returncode == 9
+    calls = [
+        json.loads(line) for line in (root / "calls.jsonl").read_text().splitlines()
+    ]
+    assert calls[-1][:2] == ["run", "snakemake"]
+    assert not any("scripts/check_bornholm_networks.py" in call for call in calls)
 
 
 @pytest.mark.parametrize("stage", ["solve", "all"])
@@ -96,7 +119,7 @@ def test_selected_build_includes_comparison_baseline(job):
     ]
 
 
-@pytest.mark.parametrize("stage", ["dry-run", "build", "solve", "all"])
+@pytest.mark.parametrize("stage", ["dry-run", "build", "rebuild", "solve", "all"])
 def test_job_rejects_login_node_execution(job, stage):
     root, script, env = job
     env.pop("SLURM_JOB_ID")

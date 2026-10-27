@@ -188,21 +188,29 @@ def upsample_load(
 
     if substation_only:
         substation_lv_i = n.buses.index[n.buses["substation_lv"]]
-        regions = regions.reindex(substation_lv_i)
+        # Restrict existing land cells; reindexing would fabricate missing
+        # geometries for substations whose clipped Voronoi cell has no area.
+        regions = regions.loc[regions.index.isin(substation_lv_i)]
+    invalid = regions.geometry.isna() | regions.geometry.is_empty
+    if invalid.any():
+        raise ValueError(
+            "Missing or empty land geometries for demand regions: "
+            f"{regions.index[invalid].tolist()}. Rebuild the base bus regions."
+        )
     load = pd.read_csv(load_fn, index_col=0, parse_dates=True)
+    missing = (
+        set(n.buses.country).intersection(load.columns).difference(regions.country)
+    )
+    if missing:
+        raise ValueError(
+            f"No eligible land cells for demand countries: {sorted(missing)}"
+        )
 
     ea_keys = energy_atlas_distribution_keys(raster_fn, regions)
     gb_keys = gb_distribution_keys(gb_excel_fn, gb_geojson_fn, regions)
     nuts3_keys = nuts3_distribution_keys(nuts3_fn, distribution_key, regions)
 
     factors = ea_keys.combine_first(gb_keys).combine_first(nuts3_keys)
-
-    # sanitize: need to renormalize since `gb_keys` only cover Great Britain
-    # and Northern Ireland is taken from `nuts3_keys`
-    if "GB" in regions.country:
-        uk_regions_i = regions.query("country == 'GB'").index
-        uk_weights = factors.loc[uk_regions_i].sum()
-        factors.loc[uk_regions_i] /= uk_weights
 
     data_arrays = []
 
@@ -212,7 +220,25 @@ def upsample_load(
             continue
 
         load_ct = load[cntry]
-        factors_ct = factors.loc[group.index]
+        factors_ct = factors.reindex(group.index)
+        invalid_weights = ~np.isfinite(factors_ct) | factors_ct.lt(0)
+        if invalid_weights.any() or factors_ct.sum() <= 0:
+            raise ValueError(
+                f"Invalid or missing demand distribution weights for {cntry}; "
+                f"invalid regions: {factors_ct.index[invalid_weights].tolist()}, "
+                f"weight sum: {factors_ct.sum()}"
+            )
+        # Native data sources are prioritised region by region. Combining their
+        # individually normalised keys (e.g. GB statistics plus NI NUTS data)
+        # requires final country normalisation to retain national hourly load.
+        logger.info(
+            "Demand allocation %s: %d land cells, combined weight sum %.6g; "
+            "normalising to preserve national hourly load.",
+            cntry,
+            len(factors_ct),
+            factors_ct.sum(),
+        )
+        factors_ct = factors_ct / factors_ct.sum()
 
         data_arrays.append(
             xr.DataArray(

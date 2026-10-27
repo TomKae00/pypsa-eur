@@ -259,6 +259,49 @@ After a failed or cancelled build, wait for that job to exit before updating the
 checkout and submitting `build` again. The script uses `--rerun-incomplete` to
 regenerate unfinished outputs; completed, up-to-date targets can be reused.
 
+### Restart after missing land-cell geometries
+
+Build `4911929` at `89bd671a` failed in `build_electricity_demand_base` for all
+eight scenarios: `rasterstats` passed a missing polygon to Shapely. This matches
+the missing clipped-cell failure fixed on the hindcast branch in `98c6ba9`.
+The same generic correction is included here. Clipped onshore Voronoi cells
+with no positive land area are omitted from region exports; their electrical
+buses, generators and transmission connections remain in the network. Substation
+demand allocation filters existing land regions instead of reindexing them and
+recreating missing polygons. Remaining missing geometries or countries without
+eligible land cells produce an explicit error rather than silently losing load.
+
+The native JRC, GB-statistics and NUTS source priority is retained. Combined
+weights are normalised by country so allocation conserves every national hourly
+load, including when GB and Northern Ireland use different sources. The two
+affected production functions match the hindcast fix. These changes do not
+alter the selected bidding-zone boundaries, pipeline settings or weather year.
+
+After the failed build has stopped, pull the update and use `rebuild` once:
+
+```bash
+cd ~/projects/pypsa-eur-bornholm
+git pull --ff-only origin feature/bornholm-energy-island
+
+build_job=$(sbatch --parsable scripts/bornholm_sophia.sbatch rebuild)
+pilot_job=$(sbatch --parsable --partition=fatq \
+  --dependency="afterok:${build_job}" --kill-on-invalid-dep=yes \
+  scripts/bornholm_sophia.sbatch solve baseline)
+echo "Build: $build_job"
+echo "Solve: $pilot_job"
+squeue -j "$build_job,$pilot_job"
+```
+
+`rebuild` forces the native `base_network` rule for the selected scenarios and
+rebuilds its dependants, then runs the comparison checks. It defaults to all
+eight cases, does not solve, and reuses retrieved inputs and unchanged cutouts.
+A failed rebuild returns a non-zero status, preventing the dependent baseline
+solve. An old solve dependency cannot be reused after its build has failed;
+submit a new dependent job as above. Ordinary subsequent runs can use `build`.
+Local regression checks cover geometry coverage, retention of electrical buses,
+national hourly demand conservation and job-stage selection. A complete revised
+sector build and baseline solve still require the Sophia run.
+
 The script refuses all execution outside a Slurm job, including dry-run. `PIXI_SOPHIA` and
 `GRB_LICENSE_FILE` can override the wrapper and licence paths. Record the job ID
 returned by `sbatch`; the combined log is `slurm-bornholm-<jobid>.out`.

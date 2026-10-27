@@ -867,7 +867,22 @@ def process_onshore_regions(
         crs=crs,
     )
 
-    return onshore_regions_adm
+    # A bus assigned by nearest region can lie outside that region's outline.
+    # Its clipped Voronoi cell may then have no area. Retain the electrical bus,
+    # but do not export a missing/zero-area cell as a land allocation region.
+    has_area = (
+        onshore_regions_adm.geometry.notna()
+        & ~onshore_regions_adm.geometry.is_empty
+        & (shapely.area(onshore_regions_adm.geometry) > 0)
+    )
+    if (~has_area).any():
+        logger.warning(
+            "No positive-area onshore cell in %s for buses %s; retaining the "
+            "network buses without a land allocation cell.",
+            adm,
+            onshore_regions_adm.loc[~has_area, "name"].tolist(),
+        )
+    return onshore_regions_adm.loc[has_area]
 
 
 def process_offshore_regions(

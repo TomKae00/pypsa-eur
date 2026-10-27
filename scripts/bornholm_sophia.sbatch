@@ -28,8 +28,8 @@ export SINGULARITYENV_MKL_NUM_THREADS=1
 
 stage="${1:-build}"
 case "$stage" in
-    all|build|solve|dry-run) ;;
-    *) echo "Usage: sbatch scripts/bornholm_sophia.sbatch [build|solve|all|dry-run] [short-scenario-name|all]" >&2; exit 2 ;;
+    all|build|rebuild|solve|dry-run) ;;
+    *) echo "Usage: sbatch scripts/bornholm_sophia.sbatch [build|rebuild|solve|all|dry-run] [short-scenario-name|all]" >&2; exit 2 ;;
 esac
 if [[ -z "${SLURM_JOB_ID:-}" ]]; then
     echo "Run inside a Slurm allocation on a compute node, including dry-run; use srun or sbatch." >&2
@@ -76,7 +76,11 @@ if [[ "$stage" == dry-run ]]; then
     "${smk[@]}" --dry-run -- "${solved[@]}"
     exit
 fi
-if [[ "$stage" == all || "$stage" == build ]]; then
+if [[ "$stage" == rebuild ]]; then
+    # Regenerate malformed cached regions and their dependants using native
+    # Snakemake invalidation, while reusing retrieved datasets and cutouts.
+    "${smk[@]}" --forcerun base_network -- "${composed[@]}"
+elif [[ "$stage" == all || "$stage" == build ]]; then
     "${smk[@]}" -- "${composed[@]}"
 fi
 "$pixi_wrapper" run python scripts/check_bornholm_networks.py --scenarios "${selected[@]}"
