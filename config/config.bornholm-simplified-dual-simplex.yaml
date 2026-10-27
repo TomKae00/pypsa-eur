@@ -1,0 +1,24 @@
+# Independent dual-simplex benchmark on the SAME built simplified Bornholm network.
+# Overlay order:
+#  1. config/config.bornholm.yaml
+#  2. config/config.bornholm-simplified.yaml
+#  3. this file
+# Only the solver and output run name change; no physical model changes.
+run:
+  name: bornholm_simplified_dual_simplex
+  scenarios:
+    enable: false
+  shared_resources:
+    policy: false
+
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-bornholm
+  solver_options:
+    gurobi-bornholm:
+      method: 1           # Dual simplex (LP)
+      threads: 1          # Gurobi LP simplex is single-threaded
+      crossover: -1       # Reset inherited PDHG-only crossover setting
+      Seed: 123
+      TimeLimit: 21600    # Six hours of solver time; diagnostic experiment
