@@ -3,7 +3,7 @@
 year: 2023  # default for single-year commands; override with --year
 years: [2022, 2023, 2024, 2025]
 summary_output: results/hindcast-europe-zonal
-network: results/hindcast-build-{year}/network.nc
+network: results/hindcast-corrected-{year}/network.nc
 bus_zones: data/hindcast/bus_zones_{year}.csv
 zone_aliases: config/hindcast/zone-aliases.yaml
 # Multiple buses in a market zone must be natively copperplated and agree in price.

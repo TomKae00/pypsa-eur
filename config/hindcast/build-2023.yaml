@@ -2,7 +2,7 @@
 # Build ONLY composed_2023.nc with native historical fuel/CO2 inputs, then use
 # scripts/hindcast.py solve without --marginal-costs (see doc/hindcast.md).
 run:
-  name: hindcast-build-2023
+  name: hindcast-corrected-2023
   scenarios:
     enable: false
   shared_resources:

@@ -1,7 +1,7 @@
 # Annual overlay: use after config/hindcast/build.yaml in --configfile.
 # Independent overnight case; native scenarios cannot change planning_horizons.
 run:
-  name: hindcast-build-2024
+  name: hindcast-corrected-2024
   scenarios:
     enable: false
 planning_horizons:
