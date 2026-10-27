@@ -302,6 +302,38 @@ Local regression checks cover geometry coverage, retention of electrical buses,
 national hourly demand conservation and job-stage selection. A complete revised
 sector build and baseline solve still require the Sophia run.
 
+### Restart after missing reservoir capacities
+
+The rebuild at `eecee9a` reached `compose_network` on 27 October 2026, then
+failed the reservoir capacity validation before duration completion. The
+hindcast branch's correction from `d3e54e2` is also applied here: reservoir
+records with missing discharge capacity are excluded before duration completion
+and aggregation, with source row IDs, names, countries, buses and values logged.
+Their omitted MW and storage are unknown; this is a source-data limitation.
+The source CSV is retained, and capacity is never invented or set to zero.
+Known-capacity plants still preserve reported durations and share residual
+national storage through native capacity-weighted aggregation. Negative or
+infinite capacities continue to fail, now naming the offending records.
+
+After pulling this correction, use `build` to resume the unfinished composition
+steps and reuse the corrected spatial inputs from the previous rebuild:
+
+```bash
+cd ~/projects/pypsa-eur-bornholm
+git pull --ff-only origin feature/bornholm-energy-island
+
+build_job=$(sbatch --parsable scripts/bornholm_sophia.sbatch build)
+pilot_job=$(sbatch --parsable --partition=fatq \
+  --dependency="afterok:${build_job}" --kill-on-invalid-dep=yes \
+  scripts/bornholm_sophia.sbatch solve baseline)
+echo "Build: $build_job"
+echo "Solve: $pilot_job"
+squeue -j "$build_job,$pilot_job"
+```
+
+Review the logged excluded records after the build. A successful build and
+baseline solve remain to be verified on Sophia.
+
 The script refuses all execution outside a Slurm job, including dry-run. `PIXI_SOPHIA` and
 `GRB_LICENSE_FILE` can override the wrapper and licence paths. Record the job ID
 returned by `sbatch`; the combined log is `slurm-bornholm-<jobid>.out`.

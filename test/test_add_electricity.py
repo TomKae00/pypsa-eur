@@ -132,8 +132,9 @@ def test_hydro_large_installation_and_missing_country_fallback(hydro_stats):
 
 
 @pytest.mark.parametrize("missing_duration", [np.nan, 0])
+@pytest.mark.parametrize("include_missing_capacity", [False, True])
 def test_reservoir_energy_survives_native_plant_aggregation(
-    tmp_path, hydro_stats, missing_duration
+    tmp_path, hydro_stats, missing_duration, include_missing_capacity, caplog
 ):
     """Mixed known/missing durations in the same bus must survive completion."""
     plants = pd.DataFrame(
@@ -150,9 +151,16 @@ def test_reservoir_energy_survives_native_plant_aggregation(
             "bus": ["NO1", "NO1", "NO2"],
         }
     )
+    if include_missing_capacity:
+        unknown = plants.iloc[[0]].copy()
+        unknown["Name"] = "unknown_capacity"
+        unknown["Capacity"] = np.nan
+        unknown["Duration"] = np.nan
+        plants = pd.concat([plants, unknown], ignore_index=True)
     plants_path = tmp_path / "plants.csv"
     stats_path = tmp_path / "hydro.csv"
     plants.to_csv(plants_path)
+    source_csv = plants_path.read_bytes()
     hydro_stats.to_csv(stats_path)
     costs = pd.DataFrame(
         {
@@ -174,6 +182,17 @@ def test_reservoir_energy_survives_native_plant_aggregation(
     )
     aggregated = load_and_aggregate_powerplants(**kwargs)
     individual = load_and_aggregate_powerplants(**kwargs, exclude_carriers=["hydro"])
+    assert plants_path.read_bytes() == source_csv
+    assert len(individual) == 3
+    assert np.isfinite(individual.p_nom).all()
+    assert not individual.index.str.contains("unknown_capacity").any()
+    if include_missing_capacity:
+        assert (
+            "Excluding 1 reservoir records with missing discharge capacity"
+            in caplog.text
+        )
+        assert "unknown_capacity" in caplog.text
+        assert "omitted MW and storage are unknown" in caplog.text
     energy = aggregated.p_nom * aggregated.max_hours
     individual_energy = (
         (individual.p_nom * individual.max_hours).groupby(individual.bus).sum()
@@ -184,6 +203,24 @@ def test_reservoir_energy_survives_native_plant_aggregation(
         energy.groupby(aggregated.bus).sum().sort_index(),
         individual_energy.sort_index(),
     )
+
+
+@pytest.mark.parametrize("capacity", [np.nan, -1.0, np.inf, -np.inf])
+def test_hydro_invalid_capacity_reports_source_record(hydro_stats, capacity):
+    plants = pd.DataFrame(
+        {
+            "name": ["bad_reservoir"],
+            "country": ["NO"],
+            "bus": ["NO1"],
+            "p_nom": [capacity],
+            "max_hours": [np.nan],
+        },
+        index=["source_row_17"],
+    )
+    with pytest.raises(ValueError, match="finite and non-negative") as exc:
+        fill_hydro_max_hours(plants, hydro_stats, "energy_capacity_totals_by_country")
+    for detail in ["source_row_17", "bad_reservoir", "NO1"]:
+        assert detail in str(exc.value)
 
 
 def test_attach_hydro_keeps_completed_zero_duration(tmp_path):
