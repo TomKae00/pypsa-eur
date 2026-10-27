@@ -1,0 +1,21 @@
+# Independent Gurobi barrier solve on the already composed simplified Bornholm 2035 network.
+# Layer after config/config.bornholm.yaml and config/config.bornholm-simplified.yaml.
+# Physical inputs are identical to the simplified PDHG and dual-simplex runs.
+run:
+  name: bornholm_simplified_barrier
+  scenarios:
+    enable: false
+  shared_resources:
+    policy: false
+
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-bornholm
+  solver_options:
+    gurobi-bornholm:
+      method: 2            # Barrier / interior point (LP)
+      threads: 4           # Limit parallel factorization memory footprint
+      crossover: 0         # Skip potentially memory-intensive crossover
+      Seed: 123
+      # No Gurobi time limit. Slurm enforces the 24-hour job walltime.
