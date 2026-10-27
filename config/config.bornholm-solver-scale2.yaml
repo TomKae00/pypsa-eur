@@ -16,4 +16,4 @@ solving:
       method: 6
       crossover: 0
       Seed: 123
-      # 5h 30m solver cap leaves time for model build/export within 6h.\n      TimeLimit: 19800\n      ScaleFlag: 2
+      ScaleFlag: 2
