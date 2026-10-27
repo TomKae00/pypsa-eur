@@ -16,5 +16,5 @@ solving:
       method: 6
       crossover: 0
       Seed: 123
-      PDHGConvTol: 1.0e-4
+      # 5h 30m solver cap leaves time for model build/export within 6h.\n      TimeLimit: 19800\n      PDHGConvTol: 1.0e-4
       PDHGRelTol: 1.0e-5
