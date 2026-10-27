@@ -1,0 +1,92 @@
+# Procedure inferred from the authors' archived 2023 fuel inputs.
+# This is not an assertion of an exact replica for every source or year.
+procedure: archive_2023_inferred
+parameter_evidence_year: 2023
+years: [2022, 2023, 2024, 2025]
+source_directory: data/hindcast/market-data-2022-2025-offline
+output_directory: data/hindcast/paper-procedure
+drop_leap_day: false
+
+time:
+  # Retrospective observation-day blocks, not quote publication timestamps.
+  effective_lag_days: {gas: 0, coal: 0, co2: 0, oil: 0}
+  daily_max_age_days: 10
+  weekly_max_age_days: 21
+  holding: previous_observation
+
+gas:
+  file: gas_ttf_daily.csv
+  column: gas_eur_mwh_quoted
+  price_multiplier: 1.0
+  formula: gas_model_fuel_price = Yahoo_TTF_close
+  evidence: >-
+    Reconstructed gas fuel costs match unmodified Yahoo TTF closes held on
+    their observation dates in all 8760 hours of the 2023 archive, for both
+    CCGT and OCGT. No additional division by 0.9 is applied. This establishes
+    the implemented price convention, not the quote's physical HHV/LHV basis.
+
+coal:
+  file: coal_rotterdam_daily.csv
+  column: coal_usd_t
+  source_price_decimals: 2
+  combined_price_factor: 0.1141439205955335
+  formula: coal_model_fuel_price = round(Rotterdam_USD_per_tonne, 2) * combined_price_factor
+  evidence: >-
+    This combined currency/energy factor reproduces all 8760 hours of the
+    recovered 2023 coal input. Its separate exchange-rate and heating-value
+    components cannot be established from this comparison. Daily ECB rates
+    are not additionally applied, and the reciprocal is not labelled MWh/t.
+
+oil:
+  workbook_source: oil-commission
+  price_sheet: Prices wo taxes
+  consumption_sheet: Consumption
+  price_column_suffix: _price_wo_tax_fuel_oil_1
+  consumption_column_suffix: _consumption_fuel_oil_1
+  consumption_weight_year: 2023
+  countries: [AT, BE, BG, CY, CZ, DE, DK, EE, ES, FI, FR, GR, HR, HU, IE, IT, LT, LU, LV, MT, NL, PL, PT, RO, SE, SI, SK]
+  missing_consumption: exclude_country
+  missing_price: renormalize_available_weights
+  eur_per_tonne_divisor: 10.83
+  formula: oil_model_fuel_price = national_consumption_weighted_untaxed_low_sulphur_oil_EUR_per_tonne / 10.83
+  evidence: >-
+    The EU aggregate reconstructed from national prices and published 2023
+    consumption weights, divided by 10.83, matches the 2023 archive in 357 of
+    365 days. The remaining dates are unresolved and are not patched from
+    model outputs. Reusing these weights for other years is an explicit
+    extension of the recovered 2023 procedure, not independently verified
+    evidence of the authors' weighting choices in those years.
+
+lignite:
+  coal_price_factor: 0.8911423821185138
+  formula: lignite_model_fuel_price = coal_model_fuel_price * coal_price_factor
+  evidence: Constant energy-price ratio recovered from every hour of the 2023 archive
+
+co2:
+  file: co2_eua_daily.csv
+  column: co2_eur_tco2
+  price_multiplier: 1.0
+  formula: unchanged EUR/tCO2, without integer rounding
+  alignment_status: provider_substitution_unresolved
+  evidence: >-
+    Investing.com EUA futures remain an explicit substitute for the paper's
+    Trading Economics input. The reconstructed 2023 series contains whole-euro
+    prices but is not reproduced by rounding or shifting our Investing.com
+    series. No unsupported correction or rounding is introduced to force a match.
+
+alignment:
+  reference: https://data.dtu.dk/articles/media/31248568/1
+  archive_network: hindcast-dyn-wy2023.nc
+  archive_md5: f5c4553bb7ebef90505bb606dc796f6c
+  fuel_procedure: inferred_from_2023_archive
+  exact_replica: false
+  verified_parameter_years: [2023]
+  parameter_extension_years: [2022, 2024, 2025]
+  oil_unresolved_reference_dates:
+    - {start: '2023-01-01', end: '2023-01-01'}
+    - {start: '2023-11-27', end: '2023-12-03'}
+  limitations:
+    - The combined coal factor is empirically recovered; its physical decomposition is unknown.
+    - The eight unresolved 2023 oil dates are retained from the source-based procedure without manual patches.
+    - CO2 uses a different provider from the paper; exact source alignment remains unresolved.
+    - Parameters and oil weights inferred in 2023 are explicitly extended to the other selected years.

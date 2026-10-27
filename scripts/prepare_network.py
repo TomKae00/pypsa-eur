@@ -28,6 +28,7 @@ import pypsa
 from scripts._helpers import (
     PYPSA_V1,
     get,
+    read_hourly_prices,
 )
 from scripts.add_electricity import set_transmission_costs
 from scripts.co2_budget import (
@@ -288,10 +289,13 @@ def add_emission_prices(n, emission_prices={"co2": 0.0}, exclude_co2=False):
     n.storage_units["marginal_cost"] += su_ep
 
 
-def add_dynamic_emission_prices(n, fn):
-    co2_price = (
-        pd.read_csv(fn, index_col=0, parse_dates=True).squeeze().reindex(n.snapshots)
-    )
+def add_dynamic_emission_prices(n, fn, prepared_hourly=False):
+    if prepared_hourly:
+        co2_price = read_hourly_prices(fn, n.snapshots, required_columns=("co2",))["co2"]
+    else:
+        co2_price = (
+            pd.read_csv(fn, index_col=0, parse_dates=True).squeeze().reindex(n.snapshots)
+        )
 
     emissions = (
         n.generators.carrier.map(n.carriers.co2_emissions) / n.generators.efficiency
@@ -477,8 +481,10 @@ def main(
 
     if emission_prices["dynamic"]:
         if not os.path.exists(inputs.co2_price):
-            raise ValueError("CO2 price file for monthly prices not found")
-        add_dynamic_emission_prices(n, inputs.co2_price)
+            raise ValueError(f"CO2 price file not found: {inputs.co2_price}")
+        add_dynamic_emission_prices(
+            n, inputs.co2_price, prepared_hourly=bool(emission_prices.get("price_file"))
+        )
     elif emission_prices["enable"]:
         if isinstance(emission_prices["co2"], dict):
             logger.warning(

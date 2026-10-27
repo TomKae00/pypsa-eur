@@ -20,6 +20,15 @@ def get_compose_inputs(w):
     sector_enabled = cfg["sector"]["enabled"]
     horizons = cfg["planning_horizons"]
 
+    conventional = cfg["conventional"]
+    emission_prices = cfg["costs"]["emission_prices"]
+    fuel_price_file = conventional.get("fuel_price_file")
+    co2_price_file = emission_prices.get("price_file")
+    if fuel_price_file and not conventional["dynamic_fuel_price"]:
+        raise ValueError("conventional.fuel_price_file requires dynamic_fuel_price: true")
+    if co2_price_file and not emission_prices["dynamic"]:
+        raise ValueError("costs.emission_prices.price_file requires dynamic: true")
+
     # Electricity-only inputs (always included)
     inputs = dict(
         **input_profile_tech(w),
@@ -30,11 +39,19 @@ def get_compose_inputs(w):
         hydro_capacities=ancient("data/hydro_capacities.csv"),
         unit_commitment="data/unit_commitment.csv",
         fuel_price=(
-            resources("monthly_fuel_price.csv")
-            if cfg["conventional"]["dynamic_fuel_price"]
+            (
+                fuel_price_file.format(horizon=horizon)
+                if fuel_price_file
+                else resources("monthly_fuel_price.csv")
+            )
+            if conventional["dynamic_fuel_price"]
             else []
         ),
-        co2_price=resources("co2_price.csv"),
+        co2_price=(
+            co2_price_file.format(horizon=horizon)
+            if co2_price_file
+            else resources("co2_price.csv")
+        ),
         eurostat=(
             resources("eurostat_energy_balances.csv")
             if cfg["co2_budget"]["relative"]
