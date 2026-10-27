@@ -317,6 +317,12 @@ Nordic, Iberian, Italian, British, Irish and other countries without adequate
 Core coverage still need additional circuit-rating sources. Existing Nordic
 market-capacity publications are not substitutes for circuit ampacities.
 
+The [Nordic nominal-rating investigation](nordic-nominal-ratings.md) records the
+current circuit review, construction mismatches, source-unit ambiguities and the
+remaining asset-owner data requirements. Its read-only script inventories all
+Nordic original records and keeps DC power comparisons separate. No unresolved
+Nordic value is automatically promoted into the correction study.
+
 ## Prepare physical nominal ratings on Sophia, without solving
 
 The human-invoked worker mode `nominal-build` builds only the original base

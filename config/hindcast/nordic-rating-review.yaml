@@ -1,0 +1,1094 @@
+# Reviewed evidence only. This file does not authorize nominal-rating overrides.
+schema_version: 1
+reviewed_on: '2026-10-27'
+countries:
+- DK
+- FI
+- 'NO'
+- SE
+scope: Evidence review of physical nominal inputs only; not an override file
+temporal_policy: Explicit source editions; matching a reference value does not certify every hour or any other
+  model year. Later documents may establish installed design facts but not historic availability.
+sources:
+  svk-snit2-2023:
+    url: https://www.svk.se/4a7f0c/siteassets/2.utveckling-av-kraftsystemet/transmissionsnatet/utbyggnadsprojekt/munga-hamra/koncessionsansokan/koncessionsansokan.pdf
+    edition: Munga-Hamra concession application, 2023-09-06
+    rating_basis: Circuit count only; no individual continuous ampacity adopted
+    retrieved_sha256: a42275b508f6aae04a879c515dfd8a85712e3ff98bd3c757a84a362673941039
+    accessed: '2026-10-27'
+  nve-hasle-borgvik-2021:
+    url: https://www.nve.no/om-nve/nves-listefoerte-kulturminner/kraftledninger/hasle-borgvik/
+    edition: NVE asset description, updated 2021-08-16
+    rating_basis: Conductor construction; not a published continuous-current rating
+    retrieved_sha256: 4364c687502e5b480a455427e8408d45008f70c8ea6b06fd5d4908e51cc7878f
+    accessed: '2026-10-27'
+  nordic-soa-appendices-v5:
+    url: https://www.fingrid.fi/globalassets/dokumentit/fi/kantaverkko/kantaverkon-kehittaminen/appendix-1-9-to-soa-annex-os-v5.pdf
+    edition: SOA Annex OS appendices 1-9 v5; appendix dates differ
+    rating_basis: 'Read each appendix separately: installed, nominal, receiving-end and TTC are distinct'
+    retrieved_sha256: a7e0420b015ae9539a887bb4c7eaeed6490a8c60f05e71efc72ddaa22d48467e
+    accessed: '2026-10-27'
+  entsoe-hvdc-2024:
+    url: https://eepublicdownloads.entsoe.eu/clean-documents/SOC%20documents/Nordic/2024/HVDC_Utilisation_and_Availability_Statistics_2024.pdf
+    edition: 2024 reporting year; published 2025-06-30
+    rating_basis: Table 3.1 and individual asset sections; receiving-end values are not nameplate ratings
+    retrieved_sha256: cb8b7f1b98def0bdb98baffa5ea7cb0741173a337330ce6ba83262e68f46a72c
+    accessed: '2026-10-27'
+  hitachi-gotland:
+    url: https://www.hitachienergy.com/jp/ja/news-and-events/customer-stories/the-gotland-hvdc-link
+    edition: Manufacturer project description; accessed 2026-10-27
+    rating_basis: Project rated power; maximum overload distinguished
+    retrieved_sha256: 7a474aeba7579383a3f69127e4fb1793c0fa97eda4fed41fef5f95a2cc91ca96
+    accessed: '2026-10-27'
+  hitachi-skagerrak:
+    url: https://www.hitachienergy.com/us/en/news-and-events/customer-stories/skagerrak
+    edition: Manufacturer project description; accessed 2026-10-27
+    rating_basis: Historic pole ratings; inconsistent with stated rounded system total and later TSO nominal
+      values
+    retrieved_sha256: 4115bb16d710317bc979063abaac8a82525ca7927fb4ce4131d2e2dcff74d1d2
+    accessed: '2026-10-27'
+  svk-south-west-link:
+    url: https://www.svk.se/utveckling-av-kraftsystemet/transmissionsnatet/avslutade-transmissionsnatsprojekt/sydvastlanken/
+    edition: Project description reviewed 2025-03-13
+    rating_basis: Two 600-MW DC links; not the separate northern AC section
+    retrieved_sha256: 3e2c28c2162f30c0133e5c4ff8850f609937b8be2b3f02507fd04f25c2fc6a10
+    accessed: '2026-10-27'
+  statnett-nsl-2023:
+    url: https://www.statnett.no/en/about-statnett/news-and-press-releases/news-archive-2023/reduced-capacity-on-norway-uk-interconnector/
+    edition: '2023-03-16'
+    rating_basis: Explicit installed power distinguished from allocated operating capacity
+    retrieved_sha256: 570c44073c42179ef7fd83d36e09ae8cffb8c5cc45c0f1cab4f4177fdec840fd
+    accessed: '2026-10-27'
+  50hertz-kontek:
+    url: https://www.50hertz.com/en/Grid/Griddevelopement/Interconnectorsandphaseshifters
+    edition: TSO project page; accessed 2026-10-27
+    rating_basis: Kontek technical power; not Kriegers Flak converter capability
+    retrieved_sha256: 0e1155ed90747bd993c0e950b2120ecbfac58d1c3f14b0ccfbd7a5773b317f28
+    accessed: '2026-10-27'
+  osm-swedish-circuit-identities:
+    url: https://api.openstreetmap.org/api/0.6/
+    edition: Current identity observations, accessed 2026-10-27
+    rating_basis: OSM names, route refs and bundles; no ampacity inferred
+    retrieved_sha256: 470266a1daf27fbe3662cebc953eacf9b4d6d91ce7ea40440fb1d11d6258b326
+    accessed: '2026-10-27'
+    fingerprint_kind: Local collection of OSM API element responses; see each review identity URL
+  osm-dc-project-identities:
+    url: https://api.openstreetmap.org/api/0.6/
+    edition: Current project identity observations, accessed 2026-10-27
+    rating_basis: OSM project identity only; rating evidence comes from the independently listed TSO/manufacturer
+      reference
+    retrieved_sha256: 081a9be3b40b0c606d6f53771fd91eee11c42514eebdc5f35134f9c444486228
+    accessed: '2026-10-27'
+    fingerprint_kind: OSM batch relations response; individual URLs on review records
+reviews:
+- component: Line
+  id: merged_way/1025530506-400+1
+  name: Djuptjärn - Keminmaa
+  expected:
+    bus0: way/1025530508-400
+    bus1: way/47317827-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - '1317'
+  - UL21 S3-4
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/47317779.json
+  - https://api.openstreetmap.org/api/0.6/way/1025530506.json
+- component: Line
+  id: merged_way/107053661-220+5
+  name: Ånge – Hofors västra
+  expected:
+    bus0: way/375751481-220
+    bus1: relation/7107330-220
+    type: Al/St 240/40 2-bundle 220.0
+    v_nom: 220.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL7 S1-2;RL7 S3
+  - RL7 S1-2
+  - RL7 S3
+  observed_bundle_tags:
+  - double
+  - triple;single
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/188271350.json
+  - https://api.openstreetmap.org/api/0.6/way/283520613.json
+  - https://api.openstreetmap.org/api/0.6/way/107053661.json
+  - https://api.openstreetmap.org/api/0.6/way/104230660.json
+  - https://api.openstreetmap.org/api/0.6/way/106901450.json
+  - https://api.openstreetmap.org/api/0.6/way/283520609.json
+- component: Line
+  id: merged_way/12376344-400+13
+  name: Morgårdshammar
+  expected:
+    bus0: way/1207952344-400
+    bus1: way/51252509-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL7
+  - CL7 S1-2
+  - CL7 S1-2;RL7 S3
+  - CL7 S2
+  - CL7 S3-4
+  observed_bundle_tags:
+  - triple
+  - triple;single
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/284190252.json
+  - https://api.openstreetmap.org/api/0.6/way/1452323623.json
+  - https://api.openstreetmap.org/api/0.6/way/188499662.json
+  - https://api.openstreetmap.org/api/0.6/way/50235913.json
+  - https://api.openstreetmap.org/api/0.6/way/284190251.json
+  - https://api.openstreetmap.org/api/0.6/way/283520608.json
+  - https://api.openstreetmap.org/api/0.6/way/106928144.json
+  - https://api.openstreetmap.org/api/0.6/way/12376778.json
+  - https://api.openstreetmap.org/api/0.6/way/106928145.json
+  - https://api.openstreetmap.org/api/0.6/way/283520609.json
+  - https://api.openstreetmap.org/api/0.6/way/12376768.json
+  - https://api.openstreetmap.org/api/0.6/way/12376344.json
+  - https://api.openstreetmap.org/api/0.6/way/12376816.json
+  - https://api.openstreetmap.org/api/0.6/way/12376794.json
+- component: Line
+  id: merged_way/150294375-400+6
+  name: Midskog-Kättbo
+  expected:
+    bus0: way/934908818-400
+    bus1: way/187832596-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL1 S2
+  observed_bundle_tags:
+  - '2'
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/50978162.json
+  - https://api.openstreetmap.org/api/0.6/way/50980251.json
+  - https://api.openstreetmap.org/api/0.6/way/51045795.json
+  - https://api.openstreetmap.org/api/0.6/way/51046714.json
+  - https://api.openstreetmap.org/api/0.6/way/150294375.json
+  - https://api.openstreetmap.org/api/0.6/way/260833743.json
+  - https://api.openstreetmap.org/api/0.6/way/51047641.json
+- component: Line
+  id: merged_way/150486182-220+3
+  name: Nedre Røssåga - Ajaure
+  expected:
+    bus0: relation/8473044-220
+    bus1: way/299750661-220
+    type: Al/St 240/40 2-bundle 220.0
+    v_nom: 220.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - AL7 S1
+  observed_bundle_tags: []
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/401111314.json
+  - https://api.openstreetmap.org/api/0.6/way/150486197.json
+  - https://api.openstreetmap.org/api/0.6/way/150486182.json
+  - https://api.openstreetmap.org/api/0.6/way/610564182.json
+- component: Line
+  id: merged_way/200339426-400+1
+  name: Nybro – Ekhyddan
+  expected:
+    bus0: relation/10629005-400
+    bus1: way/279842937-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/31159544.json
+  - https://api.openstreetmap.org/api/0.6/way/200339426.json
+- component: Line
+  id: merged_way/206480715-400+5
+  name: Stackbo
+  expected:
+    bus0: relation/7313829-400
+    bus1: relation/11971282-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - UL17 S4-5
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/169164978.json
+  - https://api.openstreetmap.org/api/0.6/way/206480715.json
+  - https://api.openstreetmap.org/api/0.6/way/49417253.json
+  - https://api.openstreetmap.org/api/0.6/way/58413160.json
+  - https://api.openstreetmap.org/api/0.6/way/169164976.json
+  - https://api.openstreetmap.org/api/0.6/way/104749015.json
+- component: Line
+  id: merged_way/232662155-420+2
+  name: Halden - ? / Halden - Skogssäter
+  expected:
+    bus0: way/232893576-420
+    bus1: relation/11097406-420
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 420.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - '701'
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/585475863.json
+  - https://api.openstreetmap.org/api/0.6/way/232662155.json
+  - https://api.openstreetmap.org/api/0.6/way/585475862.json
+- component: Line
+  id: merged_way/279382375-400+7
+  name: Kilforsen-Hallsberg
+  expected:
+    bus0: virtual_way/50257553:0-400
+    bus1: way/207159887-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL4 S1-4
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/261952828.json
+  - https://api.openstreetmap.org/api/0.6/way/51040925.json
+  - https://api.openstreetmap.org/api/0.6/way/51041023.json
+  - https://api.openstreetmap.org/api/0.6/way/50257553.json
+  - https://api.openstreetmap.org/api/0.6/way/51040927.json
+  - https://api.openstreetmap.org/api/0.6/way/279382376.json
+  - https://api.openstreetmap.org/api/0.6/way/35377326.json
+  - https://api.openstreetmap.org/api/0.6/way/279382375.json
+- component: Line
+  id: merged_way/284130263-400+8
+  name: Hjälta-Hamra
+  expected:
+    bus0: relation/7313829-400
+    bus1: relation/13889505-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL5 S1-2
+  - CL5 S3
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/279203972.json
+  - https://api.openstreetmap.org/api/0.6/way/284700349.json
+  - https://api.openstreetmap.org/api/0.6/way/284130263.json
+  - https://api.openstreetmap.org/api/0.6/way/58413927.json
+  - https://api.openstreetmap.org/api/0.6/way/284881695.json
+  - https://api.openstreetmap.org/api/0.6/way/109428970.json
+  - https://api.openstreetmap.org/api/0.6/way/284700348.json
+  - https://api.openstreetmap.org/api/0.6/way/261954137.json
+  - https://api.openstreetmap.org/api/0.6/way/284127776.json
+- component: Line
+  id: merged_way/389538690-400+5
+  name: Djurmo
+  expected:
+    bus0: way/1237755672-400
+    bus1: way/207159887-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL22 S1-2
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/1237755674.json
+  - https://api.openstreetmap.org/api/0.6/way/261930432.json
+  - https://api.openstreetmap.org/api/0.6/way/389538690.json
+  - https://api.openstreetmap.org/api/0.6/way/1237755673.json
+  - https://api.openstreetmap.org/api/0.6/way/470259536.json
+  - https://api.openstreetmap.org/api/0.6/way/470259534.json
+- component: Line
+  id: merged_way/43037492-400+2
+  name: Stackbo – Vittersjö
+  expected:
+    bus0: relation/7313829-400
+    bus1: way/284127778-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL3 S3
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/43037492.json
+  - https://api.openstreetmap.org/api/0.6/way/261954141.json
+  - https://api.openstreetmap.org/api/0.6/way/284130265.json
+- component: Line
+  id: merged_way/50257557-400+3
+  name: Kilforsen (Betåsen) – Vargfors
+  expected:
+    bus0: way/278968688-400
+    bus1: way/278505918-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - UL6 S3-7
+  - UL6S3-7
+  observed_bundle_tags: []
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/50257563.json
+  - https://api.openstreetmap.org/api/0.6/way/50240063.json
+  - https://api.openstreetmap.org/api/0.6/way/50257562.json
+  - https://api.openstreetmap.org/api/0.6/way/50257557.json
+- component: Line
+  id: merged_way/51045624-400+3
+  name: Rätan-Tandö
+  expected:
+    bus0: way/294897999-400
+    bus1: relation/15657009-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - CL26 S3-4
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/51043035.json
+  - https://api.openstreetmap.org/api/0.6/way/51045626.json
+  - https://api.openstreetmap.org/api/0.6/way/51045624.json
+  - https://api.openstreetmap.org/api/0.6/way/50978159.json
+- component: Line
+  id: merged_way/71375664-400+1
+  name: Isovaara – Petäjäskoski sähköasema
+  expected:
+    bus0: way/400471060-400
+    bus1: way/286955409-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - '1182'
+  - UL8 S3-4
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/1025521314.json
+  - https://api.openstreetmap.org/api/0.6/way/71375664.json
+- component: Line
+  id: merged_way/785582956-400+3
+  name: Porjus-Grundfors
+  expected:
+    bus0: way/299750661-400
+    bus1: way/255820193-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - UL1 S1-3
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/785582956.json
+  - https://api.openstreetmap.org/api/0.6/way/287757321.json
+  - https://api.openstreetmap.org/api/0.6/way/785582965.json
+  - https://api.openstreetmap.org/api/0.6/way/260770704.json
+- component: Line
+  id: merged_way/83239283-400+1
+  name: Tenhult
+  expected:
+    bus0: way/200052139-400
+    bus1: way/200222142-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs: []
+  observed_bundle_tags: []
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/114351725.json
+  - https://api.openstreetmap.org/api/0.6/way/83239283.json
+- component: Line
+  id: relation/5528438:b-400
+  name: Oresund 400-kV cable circuit (FL23/FL25 individual allocation unresolved)
+  expected:
+    bus0: way/131339683-400
+    bus1: way/101320612-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - nordic-soa-appendices-v5
+  finding: hold_mw_not_nominal_mva
+  note: Joint TSO source lists 830 MW for each FL23/FL25 cable circuit across all three temperature columns.
+    Individual allocation is unresolved but both published powers are identical. Obtain continuous ampacity
+    or MVA and its reference conditions; do not silently copy MW to s_nom or use overall border TTC.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/5528438.json
+  rating_basis: Published MW per cable bundle, SOA appendix 6 section 4.1.1; not current or MVA
+  published_cable_capacity_mw: 830
+- component: Line
+  id: relation/5528440:b-400
+  name: Oresund 400-kV cable circuit (FL23/FL25 individual allocation unresolved)
+  expected:
+    bus0: way/131339683-400
+    bus1: way/101320612-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - nordic-soa-appendices-v5
+  finding: hold_mw_not_nominal_mva
+  note: Joint TSO source lists 830 MW for each FL23/FL25 cable circuit across all three temperature columns.
+    Individual allocation is unresolved but both published powers are identical. Obtain continuous ampacity
+    or MVA and its reference conditions; do not silently copy MW to s_nom or use overall border TTC.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/5528440.json
+  rating_basis: Published MW per cable bundle, SOA appendix 6 section 4.1.1; not current or MVA
+  published_cable_capacity_mw: 830
+- component: Line
+  id: relation/5763685-400
+  name: Ekhyddan
+  expected:
+    bus0: way/200222142-400
+    bus1: way/279842937-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/5763685.json
+- component: Line
+  id: relation/8614154-220
+  name: Valbo
+  expected:
+    bus0: way/283078113-220
+    bus1: relation/7319976-220
+    type: Al/St 240/40 2-bundle 220.0
+    v_nom: 220.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - single
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8614154.json
+- component: Line
+  id: way/1348774144-400
+  name: Aurora Line
+  expected:
+    bus0: virtual_way/1348774144:0-400
+    bus1: way/1348464438-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - '1936'
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/1348774144.json
+- component: Line
+  id: way/171073032-220
+  name: Horndal 1
+  expected:
+    bus0: relation/7108546-220
+    bus1: relation/7123679-220
+    type: Al/St 240/40 2-bundle 220.0
+    v_nom: 220.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - svk-snit2-2023
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - KL2 S7-8
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/171073032.json
+- component: Line
+  id: way/263710354-400
+  name: FL12 S1-2
+  expected:
+    bus0: virtual_way/263708249:1-400
+    bus1: virtual_way/263710358:1-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - FL12 S1-2
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/263710354.json
+- component: Line
+  id: way/263710356-400
+  name: FL14 S3-4
+  expected:
+    bus0: virtual_way/263708249:1-400
+    bus1: virtual_way/263710358:1-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - FL14 S3-4
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/263710356.json
+- component: Line
+  id: way/278497533-400
+  name: Vargfors-Tuggen
+  expected:
+    bus0: way/278497532-400
+    bus1: way/278505918-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - UL7 S1
+  observed_bundle_tags: []
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/278497533.json
+- component: Line
+  id: way/286857166-400
+  name: Stornorrfors – Högnäs
+  expected:
+    bus0: way/286857165-400
+    bus1: way/1028201096-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs:
+  - UL4 S3-6
+  observed_bundle_tags: []
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/286857166.json
+- component: Line
+  id: way/287684721-420
+  name: Nea - Riksgrensen
+  expected:
+    bus0: relation/8527323-420
+    bus1: virtual_way/287684721:1-420
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 420.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/287684721.json
+- component: Line
+  id: way/292593505-400
+  name: Ofoten-Ritsem
+  expected:
+    bus0: way/292593503-400
+    bus1: virtual_way/292593505:1-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/292593505.json
+- component: Line
+  id: way/585198893-420
+  name: Hasle - Borgvik
+  expected:
+    bus0: way/60495669-420
+    bus1: virtual_way/585198893:1-420
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 420.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  - nve-hasle-borgvik-2021
+  finding: hold_missing_continuous_rating
+  note: NVE describes FeAl 2x326 duplex conductors; model uses a generic four-bundle type. Construction evidence
+    does not establish the limiting continuous ampacity for the full circuit.
+  observed_route_refs:
+  - '711'
+  observed_bundle_tags:
+  - double
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/585198893.json
+- component: Line
+  id: way/80342200-400
+  name: Keminmaa sähköasema
+  expected:
+    bus0: way/217032425-400
+    bus1: way/47317827-400
+    type: Al/St 240/40 4-bundle 380.0
+    v_nom: 400.0
+    num_parallel: 1.0
+  source_ids:
+  - osm-swedish-circuit-identities
+  finding: hold_missing_continuous_rating
+  note: Identity/construction reviewed; a continuous circuit rating under documented conditions is still required.
+  observed_route_refs: []
+  observed_bundle_tags:
+  - triple
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/way/80342200.json
+- component: Link
+  id: relation/13295785-515-DC
+  name: North Sea Link
+  expected:
+    bus0: relation/12832053
+    bus1: way/642490160
+    carrier: DC
+    voltage: 515.0
+  source_ids:
+  - statnett-nsl-2023
+  - osm-dc-project-identities
+  rating_basis: installed_nameplate
+  finding: reference_value_matches
+  note: Installed 1400 MW is explicitly distinguished from the 1100-MW operating allocation.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/13295785.json
+  reference_nominal_mw: 1400
+- component: Link
+  id: relation/15781671-525-DC
+  name: Viking Link
+  expected:
+    bus0: way/1078532568
+    bus1: way/1101832649
+    carrier: DC
+    voltage: 525.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Two 700-MW poles; timing/availability outside this review.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/15781671.json
+  reference_nominal_mw: 1400
+- component: Link
+  id: relation/16213216-525-DC
+  name: NordLink
+  expected:
+    bus0: way/525964617
+    bus1: relation/8890887
+    carrier: DC
+    voltage: 525.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Two 700-MW poles; compare project total once.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/16213216.json
+  reference_nominal_mw: 1400
+- component: Link
+  id: relation/2505320-400-DC
+  name: Kontek
+  expected:
+    bus0: way/142321228
+    bus1: way/940919943
+    carrier: DC
+    voltage: 400.0
+  source_ids:
+  - 50hertz-kontek
+  - osm-dc-project-identities
+  rating_basis: technical_project_rating
+  finding: reference_value_matches
+  note: Technical rating 600 MW; do not substitute directional traded capacity.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/2505320.json
+  reference_nominal_mw: 600
+- component: Link
+  id: relation/3391931-350-DC
+  name: Skagerrak poles 1-3
+  expected:
+    bus0: way/1271587268
+    bus1: relation/7928148
+    carrier: DC
+    voltage: 350.0
+  source_ids:
+  - hitachi-skagerrak
+  - nordic-soa-appendices-v5
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: unresolved_rating_basis
+  finding: hold_reference_point_or_edition
+  note: Model 940 MW follows historic 250+250+440. Joint SOA appendix 4 section 4.1 states nominal 500 MW for
+    poles 1+2 combined and 500 MW for pole 3. Receiving-end report values use a different basis; resolve equipment/reference-point
+    basis before any replacement.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/3391931.json
+- component: Link
+  id: relation/3391954-500-DC
+  name: Fenno-Skan 2
+  expected:
+    bus0: way/1275744419
+    bus1: way/1275744416
+    carrier: DC
+    voltage: 500.0
+  source_ids:
+  - nordic-soa-appendices-v5
+  - osm-dc-project-identities
+  rating_basis: normal_project_rating
+  finding: reference_value_matches
+  note: SOA appendix 2 section 4.1.2 distinguishes normal 800 MW from overload and restricted modes.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/3391954.json
+  reference_nominal_mw: 800
+- component: Link
+  id: relation/3392001-150-DC
+  name: Gotland links 2 and 3
+  expected:
+    bus0: way/140248154
+    bus1: way/140248140
+    carrier: DC
+    voltage: 150.0
+  source_ids:
+  - hitachi-gotland
+  - osm-dc-project-identities
+  rating_basis: manufacturer_project_rating
+  finding: reference_value_matches
+  note: Total rated 260 MW; do not replace with stated maximum 320 MW.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/3392001.json
+  reference_nominal_mw: 260
+- component: Link
+  id: relation/3392010-450-DC
+  name: SwePol Link
+  expected:
+    bus0: way/255314292
+    bus1: relation/14939275
+    carrier: DC
+    voltage: 450.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Project rated power, Table 3.1.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/3392010.json
+  reference_nominal_mw: 600
+- component: Link
+  id: relation/3918230-450-DC
+  name: Baltic Cable
+  expected:
+    bus0: way/275466323
+    bus1: way/1302589312
+    carrier: DC
+    voltage: 450.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Project rated power, Table 3.1.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/3918230.json
+  reference_nominal_mw: 600
+- component: Link
+  id: relation/5487095-400-DC
+  name: Great Belt / Storebaelt
+  expected:
+    bus0: way/1384028957
+    bus1: way/160792651
+    carrier: DC
+    voltage: 400.0
+  source_ids:
+  - nordic-soa-appendices-v5
+  - osm-dc-project-identities
+  rating_basis: nominal_project_rating
+  finding: reference_value_matches
+  note: SOA appendix 8 section 4.1 explicitly gives nominal 600 MW.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/5487095.json
+  reference_nominal_mw: 600
+- component: Link
+  id: relation/6886400-450-DC
+  name: EstLink 2
+  expected:
+    bus0: relation/18986190
+    bus1: way/26619335
+    carrier: DC
+    voltage: 450.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Project rated power, Table 3.1.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/6886400.json
+  reference_nominal_mw: 650
+- component: Link
+  id: relation/8184629-300-DC
+  name: Konti-Skan links 1 and 2
+  expected:
+    bus0: way/98216482
+    bus1: way/1451345383
+    carrier: DC
+    voltage: 300.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - nordic-soa-appendices-v5
+  - osm-dc-project-identities
+  rating_basis: unresolved_rating_basis
+  finding: hold_reference_point_or_edition
+  note: Model 680 MW matches an obsolete directional convention. SOA appendix 5 section 4.1 gives 715 MW at
+    the receiving end; the 2024 report distinguishes 740-MW sending capability. Obtain post-upgrade equipment
+    nameplate/reference-point data before changing nominal input.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8184629.json
+- component: Link
+  id: relation/8184630-150-DC
+  name: EstLink 1
+  expected:
+    bus0: way/1262324052
+    bus1: way/1262323677
+    carrier: DC
+    voltage: 150.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Project rated power, Table 3.1.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8184630.json
+  reference_nominal_mw: 350
+- component: Link
+  id: relation/8184631-400-DC
+  name: Fenno-Skan 1
+  expected:
+    bus0: way/140248147
+    bus1: way/1275744419
+    carrier: DC
+    voltage: 400.0
+  source_ids:
+  - nordic-soa-appendices-v5
+  - osm-dc-project-identities
+  rating_basis: installed_nameplate
+  finding: reference_value_matches
+  note: SOA appendix 2 section 4.1.2 explicitly distinguishes installed 500 MW from permanent reduced-voltage
+    operation at 400 MW. Installed rating matches; operational restriction is outside this task.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8184631.json
+  reference_nominal_mw: 500
+- component: Link
+  id: relation/8184632-500-DC
+  name: Skagerrak pole 4
+  expected:
+    bus0: way/1271587272
+    bus1: relation/7928148
+    carrier: DC
+    voltage: 500.0
+  source_ids:
+  - hitachi-skagerrak
+  - nordic-soa-appendices-v5
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: unresolved_rating_basis
+  finding: hold_reference_point_or_edition
+  note: Model/manufacturer project value 700 MW; joint SOA appendix 4 says nominal 715 MW; 2024 report uses
+    receiving-end 682 MW. Do not mix reference points or infer a nameplate correction.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8184632.json
+- component: Link
+  id: relation/8184633-300-DC
+  name: South West Link / SydVastlanken DC section
+  expected:
+    bus0: way/235724487
+    bus1: way/1265541077
+    carrier: DC
+    voltage: 300.0
+  source_ids:
+  - svk-south-west-link
+  - osm-dc-project-identities
+  rating_basis: technical_project_rating
+  finding: reference_value_matches
+  note: Two 600-MW links; the separate northern AC section is not added to this DC power.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8184633.json
+  reference_nominal_mw: 1200
+- component: Link
+  id: relation/8185420-320-DC
+  name: COBRAcable
+  expected:
+    bus0: way/99220741
+    bus1: way/655858864
+    carrier: DC
+    voltage: 320.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Project rated power, Table 3.1.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8185420.json
+  reference_nominal_mw: 700
+- component: Link
+  id: relation/8185455-300-DC
+  name: NordBalt
+  expected:
+    bus0: way/90098783
+    bus1: relation/10629005
+    carrier: DC
+    voltage: 300.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Project rated power, Table 3.1.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/8185455.json
+  reference_nominal_mw: 700
+- component: Link
+  id: relation/9965201-450-DC
+  name: NorNed
+  expected:
+    bus0: way/158601617
+    bus1: relation/11981383
+    carrier: DC
+    voltage: 450.0
+  source_ids:
+  - entsoe-hvdc-2024
+  - osm-dc-project-identities
+  rating_basis: reported_project_rating
+  finding: reference_value_matches
+  note: Project rated power, Table 3.1.
+  identity_urls:
+  - https://api.openstreetmap.org/api/0.6/relation/9965201.json
+  reference_nominal_mw: 700
