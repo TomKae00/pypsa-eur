@@ -1,7 +1,7 @@
 # Circuit identities reviewed against original OSM endpoints/circuit counts and
 # JAO EIC records. These bind identities, not a fixed rating or source year.
-# A binding is used only when both TSOs publish the same fixed current for
-# every EIC in the explicitly selected edition. No seasonal/DLR conversion.
+# Border bindings require agreement from both TSOs. Internal bindings explicitly
+# identify the owning TSO and country. No seasonal/DLR conversion.
 bindings:
   maribor-kainachtal:
     eics: [10T-AT-SI-00001T, 10T-AT-SI-00002R]
@@ -58,3 +58,87 @@ bindings:
         num_parallel: 1
     evidence: "OSM route ref 424, cables=3; endpoints align with Sokolnice/Križovany. Same CEPS/SEPS EIC. Require agreement in the selected edition; retain model voltage for MVA conversion."
     evidence_url: https://api.openstreetmap.org/api/0.6/relation/5167896.json
+  karlsruhe-ost-oberwald:
+    owning_tso: TRANSNETBW
+    country: DE
+    eics: [11TD40000A575-L3]
+    lines:
+      relation/3861966-220:
+        bus0: way/32725957-220
+        bus1: way/32725958-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "OSM route KAOST-OWALD is the red single circuit, cables=3. Original endpoints are named Oberwald and Karlsruhe Ost, matching the TransnetBW source; map endpoints and route length agree."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/3861966.json
+  bezdecin-chotejovice-v210:
+    owning_tso: CEPS
+    country: CZ
+    eics: [27T-TLI-V210---F]
+    lines:
+      relation/5123162-220:
+        bus0: way/197827799-220
+        bus1: way/28475691-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "OSM route ref 210, cables=3; station tags identify Chotějovice and Bezděčín. Source EIC identifies V210 and the same endpoint pair; map and whole-route length agree."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/5123162.json
+  cechy-stred-bezdecin-v209:
+    owning_tso: CEPS
+    country: CZ
+    eics: [27T-TLI-V209---D]
+    lines:
+      relation/5123165-220:
+        bus0: way/28468576-220
+        bus1: way/28475691-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "OSM route ref 209, cables=3; source EIC is V209. Station tags identify Čechy střed and Bezděčín; map and route length agree. Missing or changed reference EICs in later editions remain on hold."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/5123165.json
+  zakucac-bilice-257:
+    owning_tso: HOPS
+    country: HR
+    eics: [31T-0000-A-0022X]
+    lines:
+      relation/4743374-220:
+        bus0: way/162022271-220
+        bus1: way/59683455-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "OSM route is named Bilice–HE Zakučac with cables=3. Both original station names, voltage, map endpoints and whole-route length match the HOPS circuit."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/4743374.json
+  zerjavinec-mraclin-247:
+    owning_tso: HOPS
+    country: HR
+    eics: [31T-0000-A-0004Z]
+    lines:
+      relation/5203344-220:
+        bus0: way/89819945-220
+        bus1: virtual_relation/5203281:1-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "OSM route is named Mraclin–Žerjavinec with cables=3. The Mraclin substation and virtual Žerjavinec endpoint align with the HOPS source; voltage and whole-route length agree."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/5203344.json
+  lemesany-sucany-v273:
+    owning_tso: SEPS
+    country: SK
+    eics: [24T-V273-000000V]
+    lines:
+      way/242679229-220:
+        bus0: way/239560640-220
+        bus1: way/100979306-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "OSM way ref 273, circuits=1, cables=3; source EIC is V273. Station tags identify Sučany and Lemešany; map endpoints and route length agree."
+    evidence_url: https://api.openstreetmap.org/api/0.6/way/242679229.json
+  krizovany-sala-v279:
+    owning_tso: SEPS
+    country: SK
+    eics: [24T-V279-000000E]
+    lines:
+      way/112543955-220:
+        bus0: way/51982806-220
+        bus1: way/656435549-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "OSM way ref 279, name V279 Križovany–Šaľa, circuits=1, cables=3. Source EIC and both station tags match; map endpoints and route length agree."
+    evidence_url: https://api.openstreetmap.org/api/0.6/way/112543955.json

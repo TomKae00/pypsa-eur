@@ -9,7 +9,7 @@
 set -euo pipefail
 
 : "${SLURM_JOB_ID:?Run through sbatch, not on the login node}"
-mode="${1:?Expected weather, build-solve, rebuild-solve or solve}"
+mode="${1:?Expected weather, nominal-build, build-solve, rebuild-solve or solve}"
 year="${2:?Expected year or array}"
 submitted_revision="${3:?Expected submitted Git revision}"
 
@@ -22,7 +22,7 @@ if [[ "$year" == array ]]; then
     esac
 fi
 case "$year" in 2022|2023|2024|2025) ;; *) exit 2 ;; esac
-case "$mode" in weather|build-solve|rebuild-solve|solve) ;; *) exit 2 ;; esac
+case "$mode" in weather|nominal-build|build-solve|rebuild-solve|solve) ;; *) exit 2 ;; esac
 
 cd "${SLURM_SUBMIT_DIR:?Submit from the repository root}"
 # Host Git exists on the login node but is absent on Sophia compute nodes.
@@ -59,6 +59,21 @@ if [[ "$mode" == rebuild-solve ]]; then
 fi
 mapping="data/hindcast/bus_zones_$year.csv"
 configs=(config/hindcast/build.yaml "config/hindcast/build-$year.yaml")
+if [[ "$mode" == nominal-build ]]; then
+    # Isolate physical-grid preparation by year; no composed dispatch network,
+    # weather preparation or solver is requested in this mode.
+    nominal_run="hindcast-nominal-$year"
+    nominal_config="$TMPDIR/nominal-run.yaml"
+    printf 'run:\n  name: %s\n' "$nominal_run" > "$nominal_config"
+    configs+=(config/hindcast/line-ratings.yaml "$nominal_config")
+    nominal_network="resources/$nominal_run/networks/base.nc"
+    nominal_audit="resources/$nominal_run/line_rating_audit.json"
+    printf 'Stage=nominal-build year=%s job=%s revision=%s\n' "$year" "$SLURM_JOB_ID" "$submitted_revision"
+    run_pixi snakemake "$nominal_network" "$nominal_audit" \
+        --cores "$cores" --configfile "${configs[@]}" --rerun-incomplete
+    printf 'Completed physical nominal ratings: %s\n' "$nominal_audit"
+    exit 0
+fi
 if [[ "$mode" != weather && ( -e "$output" || -e "${output%.nc}.audit.json" ) ]]; then
     echo "Existing solve output/audit found at $output; refusing to overwrite it." >&2
     exit 1

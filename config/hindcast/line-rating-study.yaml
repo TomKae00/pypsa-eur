@@ -1,0 +1,9 @@
+# Model year and source edition are selected independently. No latest-year fallback.
+registry: config/hindcast/line-rating-sources.yaml
+bindings: config/hindcast/line-rating-bindings.yaml
+policy: fixed-snapshot-representative
+sources_by_year:
+  2022: [jao-core-2022-09]
+  2023: [jao-core-2023-09]
+  2024: [jao-core-2024-09]
+  2025: [jao-core-2025-09]

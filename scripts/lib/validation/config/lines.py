@@ -69,6 +69,10 @@ class LinesConfig(BaseModel):
         None,
         description="Optional compiled physical AC line-rating YAML for the OSM network. Supports {year} from a single planning horizon; source edition and weather year remain separate. Applied before simplification, with original-line signature checks.",
     )
+    rating_study: str | None = Field(
+        None,
+        description="Optional explicit physical nominal-rating study YAML. Reads registered fixed references and reviewed circuit identities during base construction; no prior NetCDF required. Mutually exclusive with rating_corrections.",
+    )
     s_nom_max: float = Field(
         float("inf"),
         description="Global upper limit for the maximum capacity of each extendable line (MW).",

@@ -15,6 +15,7 @@ Creates the network topology from an ENTSO-E map extract, and create Voronoi sha
 """
 
 import logging
+import json
 import multiprocessing as mp
 import warnings
 from functools import partial
@@ -285,8 +286,11 @@ def _apply_parameter_corrections(n, parameter_corrections):
 
 def _apply_reviewed_line_ratings(n, path, planning_horizons):
     """Validate a compiled physical-rating payload, then use the native updater."""
-    with open(path) as stream:
-        payload = yaml.safe_load(stream)
+    if isinstance(path, dict):
+        payload = path
+    else:
+        with open(path) as stream:
+            payload = yaml.safe_load(stream)
     if not isinstance(payload, dict):
         raise ValueError("Line-rating correction file must contain a mapping")
     meta = payload.get("metadata", {})
@@ -327,7 +331,11 @@ def _apply_reviewed_line_ratings(n, path, planning_horizons):
                 raise ValueError(f"Reviewed line {line_id} has changed {attr}; regenerate its rating payload")
     old = n.lines.loc[list(updates), "s_nom"].copy()
     _apply_parameter_corrections(n, corrections)
-    n.meta["physical_line_ratings"] = {**meta, "applied_original_lines": len(updates)}
+    n.meta["physical_line_ratings"] = {
+        **meta, "applied_original_lines": len(updates), "applied_line_ids": list(updates),
+        "applied_nominal_ratings_mva": updates, "decisions": payload.get("decisions", []),
+        "dc_nominal_ratings_changed": False,
+    }
     logger.info("Applied %s reviewed physical line ratings from %s for model year %s", len(updates), meta["source_id"], meta["model_year"])
     for line_id in updates:
         logger.info("Physical rating %s: %.3f -> %.3f MVA", line_id, old[line_id], updates[line_id])
@@ -798,18 +806,29 @@ def base_network(
     _set_lines_s_nom_from_linetypes(n)
     if config["electricity"].get("base_network") == "entsoegridkit":
         _apply_parameter_corrections(n, parameter_corrections)
-    if config["lines"].get("rating_corrections"):
+    # Country assignments are needed to distinguish an internal owner's
+    # publication from cross-border circuit reports.
+    n = _remove_unconnected_components(n)
+    _set_countries_and_substations(n, config, country_shapes, offshore_shapes)
+
+    if config["lines"].get("rating_corrections") or config["lines"].get("rating_study"):
         if base_network != "osm":
             raise ValueError("Reviewed physical line ratings currently require electricity.base_network: osm")
         if config["lines"].get("dynamic_line_rating", {}).get("activate", False):
             raise ValueError("Fixed reviewed line ratings cannot be combined with DLR, which would replace the loading limits")
-        _apply_reviewed_line_ratings(
-            n, snakemake.input.line_rating_corrections, config["planning_horizons"]
-        )
-
-    n = _remove_unconnected_components(n)
-
-    _set_countries_and_substations(n, config, country_shapes, offshore_shapes)
+        if config["lines"].get("rating_study"):
+            if config["lines"].get("rating_corrections"):
+                raise ValueError("Choose a source study or compiled nominal-rating input")
+            from scripts.prepare_line_rating_corrections import payload_from_study
+            from scripts.audit_line_ratings import annotate_inventory
+            original = annotate_inventory(n.lines, n.buses)
+            rating_input = payload_from_study(
+                original, snakemake.input.line_rating_study, config["planning_horizons"],
+                snakemake.input.line_rating_sources,
+            )
+        else:
+            rating_input = snakemake.input.line_rating_corrections
+        _apply_reviewed_line_ratings(n, rating_input, config["planning_horizons"])
 
     _set_links_underwater_fraction(n, offshore_shapes)
 
@@ -1797,7 +1816,14 @@ if __name__ == "__main__":
     )
 
     # Export network
-    n.meta = snakemake.config
+    physical_line_ratings = n.meta.get("physical_line_ratings")
+    n.meta = dict(snakemake.config)
+    if physical_line_ratings:
+        n.meta["physical_line_ratings"] = physical_line_ratings
+    if "line_rating_audit" in snakemake.output.keys():
+        with open(snakemake.output.line_rating_audit, "w") as stream:
+            json.dump(physical_line_ratings or {"enabled": False}, stream, indent=2)
+            stream.write("\n")
     n.export_to_netcdf(snakemake.output.base_network)
 
     # Export shapes

@@ -22,6 +22,30 @@ storage cached_http:
     provider="cached-http",
 
 
+def line_rating_registry_input(w):
+    from scripts.line_rating_study import resolve_study
+    study = config_provider("lines")(w).get("rating_study")
+    if not study:
+        raise ValueError("A physical nominal-rating study must select the source registry")
+    return resolve_study(study, config_provider("planning_horizons")(w))["registry_path"]
+
+
+rule retrieve_line_rating_source:
+    input:
+        registry=line_rating_registry_input,
+    output:
+        archive="data/hindcast/line-ratings/sources/{source_id}.zip",
+    wildcard_constraints:
+        source_id=r"[A-Za-z0-9_-]+",
+    retries: 2
+    resources:
+        mem_mb=1000,
+    message:
+        "Retrieving a registered physical nominal-rating source"
+    script:
+        scripts("retrieve_line_rating_source.py")
+
+
 if (EUROSTAT_BALANCES_DATASET := dataset_version("eurostat_balances"))["source"] in [
     "primary",
     "archive",

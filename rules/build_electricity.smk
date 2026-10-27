@@ -75,6 +75,16 @@ def input_base_network(w):
         inputs["parameter_corrections"] = "data/parameter_corrections.yaml"
         inputs["links_p_nom"] = "data/links_p_nom.csv"
     rating_file = config_provider("lines")(w).get("rating_corrections")
+    rating_study = config_provider("lines")(w).get("rating_study")
+    if rating_file and rating_study:
+        raise ValueError("Choose a compiled rating file or a source study, not both")
+    if rating_study:
+        from scripts.line_rating_study import resolve_study
+        selection = resolve_study(rating_study, config_provider("planning_horizons")(w))
+        inputs["line_rating_study"] = rating_study
+        inputs["line_rating_registry"] = selection["registry_path"]
+        inputs["line_rating_bindings"] = selection["bindings_path"]
+        inputs["line_rating_sources"] = [s["local_path"] for s in selection["sources"]]
     if rating_file:
         horizons = config_provider("planning_horizons")(w)
         years = horizons if isinstance(horizons, list) else [horizons]
@@ -104,6 +114,7 @@ rule base_network:
         onshore_regions=resources("onshore_regions_base.geojson"),
         offshore_regions=resources("offshore_regions_base.geojson"),
         admin_shapes=resources("admin_shapes.geojson"),
+        line_rating_audit=resources("line_rating_audit.json"),
     log:
         logs("base_network.log"),
     benchmark:

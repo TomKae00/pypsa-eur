@@ -443,6 +443,7 @@ lines:
     750.0: "Al/St 560/50 4-bundle 750.0"
   s_max_pu: 0.7
   rating_corrections: null
+  rating_study: null
   s_nom_max: .inf
   s_nom_max_extension: 20000
   length_factor: 1.25

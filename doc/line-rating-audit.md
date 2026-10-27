@@ -1,6 +1,6 @@
 # Physical AC line ratings: audit and integration proposal
 
-This work checks the physical ratings of the original transmission circuits.
+This work checks the physical nominal ratings (`s_nom`) of the original transmission circuits. Seasonal limits, loading margins and market coupling are not changed.
 It does not infer ratings from electricity prices or bidding-zone transfer
 limits. Commissioning dates, outages, NTCs and flow-based market constraints
 are outside this step. The tool never modifies a network.
@@ -107,6 +107,7 @@ those coordinates. Do not silently borrow a later year's line identities.
 
 * `original_line_inventory.csv`: original OSM IDs, circuit counts, voltage,
   nominal capacity, assumed current per circuit, endpoints, type and source tags.
+* `original_link_nominal_inventory.csv`: DC nominal powers (`p_nom`, MW), separately labelled from converter/model connectors and AC MVA. These records are not automatically corrected or summed into project capacities.
 * `reference_ratings.csv`: source records and the original rating categories.
 * `candidate_matches.csv`: geographically plausible pairs at similar voltage.
 * `rating_review.csv`: reference details beside each candidate, with blank
@@ -170,9 +171,12 @@ fixed year or hard-coded current value.
 
 The preparer `scripts/prepare_line_rating_corrections.py` combines those
 identities with one explicitly selected source edition. It accepts a group only
-when every EIC is reported by both TSOs, every report uses a positive fixed
+when the declared authority is satisfied, every report uses a positive fixed
 current, all reported currents agree, and the number of source circuits equals
-the original model's circuit count. Conflicts, incomplete data and seasonal/DLR
+the original model's circuit count. Border bindings require reports from both
+TSOs. An internal binding explicitly names the owning TSO and country; both
+model endpoints must be in that country. An unexpected reporting TSO prevents
+acceptance of a single-owner binding. Conflicts, incomplete data and seasonal/DLR
 records are held. It never averages conflicting ratings or assumes the lower
 of two values is necessarily a comparable continuous limit.
 
@@ -206,20 +210,40 @@ The network hash is provenance; runtime compatibility uses the selected lines'
 original endpoints, voltage, circuit count, type and default nominal capacity,
 not a byte-for-byte comparison between base and base-extended NetCDF files.
 
-Enable the optional overlay `config/hindcast/line-ratings.yaml` alongside the
-annual build config when constructing a **separate comparison run**. Its option
-is:
+For a normal build, enable `config/hindcast/line-ratings.yaml` alongside the
+annual config. It selects:
 
 ```yaml
 lines:
-  rating_corrections: data/hindcast/line-ratings/corrections_{year}.yaml
+  rating_corrections: null
+  rating_study: config/hindcast/line-rating-study.yaml
 ```
 
+The study points to the source registry and reviewed circuit bindings, and
+explicitly selects source IDs for each planning year. More than one source may
+be selected, including normalized physical-reference CSVs from other TSOs.
+There is no automatic latest/nearest-year choice. Reports that disagree remain
+on hold rather than being combined by an assumed precedence rule.
+
+The registry, study, bindings and actual source archives are declared Snakemake
+inputs. Missing archives are retrieved by `retrieve_line_rating_source` and
+checked against their registered hashes. The original network is assembled with
+native line parameters, then the same compiler works on its in-memory original
+line table. This avoids requiring a previously built baseline NetCDF or a
+circular rule dependency. The corrections still run before simplification.
+
+Alternatively, `lines.rating_corrections` can select a prepared YAML such as
+`data/hindcast/line-ratings/corrections_{year}.yaml`, with `rating_study` null.
 `{year}` comes from the single planning horizon, not the weather snapshots.
-The default is null, so existing cases retain their baseline behaviour.
-Multiple planning horizons in one build are rejected for this input; use
-independent annual hindcast builds. The optional correction file is a declared
-Snakemake input, so a changed payload triggers the affected build stages.
+The modes are mutually exclusive. Both default to null. Multiple planning years
+in a single base build remain unsupported for these explicit annual snapshots.
+
+`resources/RUN/line_rating_audit.json` records the sources, decisions, applied
+nominal values, status counts for all original lines, and country coverage.
+When the feature is disabled it records `enabled: false`. The standalone
+preparer also exports `.nominal_coverage.csv` and `.country_coverage.csv` beside
+its YAML: every original line is labelled as corrected, verified unchanged,
+reviewed but held, or retained as an unreviewed native assumption.
 
 The base-network hook checks the compiled policy, model year, provenance,
 original IDs and signatures, and positive finite ratings **before** updating
@@ -256,11 +280,24 @@ files and their decision records identify the accepted subset.
 | Sokolnice–Stupava, one circuit | 2,000 A | Accepted in 2023–2025; held in 2022 (1,530 versus 2,000 A) |
 | Sokolnice–Križovany, one circuit | 2,000 A | Accepted in 2022; held in 2023–2024 for disagreement and in 2025 for incomplete reporting |
 
-Each selected edition therefore produces five original model-record updates,
-representing six physical circuits. This is a small supported subset, not a
-claim that Europe has been fully corrected. Nordic circuits have not received
-new physical-rating overrides in this subset. Market transfer limits, stability
-constraints, and internal constraints removed by copperplating remain separate.
+The reviewed set now also includes internal circuits for TransnetBW (Germany),
+ČEPS (Czechia), HOPS (Croatia) and SEPS (Slovakia). Their source EICs, original
+endpoint IDs and owner are explicit in the bindings file. The seven additional
+identities were checked against route references or named endpoints, circuit
+counts, geometry and source route lengths. Current values are still taken from
+the selected edition, not hard-coded in the bindings.
+
+With the supplied original topology, 2022 currently accepts 11 original records;
+2023–2025 accept 12 each. Most original European lines still retain their native
+assumptions. This is an expanded physical-reference set, not a claim of complete
+European validation. Internal corrections can disappear when a bidding zone is
+copperplated; their absence from a zonal corridor change is expected.
+
+The inventory flags unusual voltage tags, invalid or fractional original circuit
+counts and generic overhead types on underground assets. These are review flags,
+not automatic physical replacements. In the supplied network the 236-kV Swedish
+and 254-kV British tags also appear in their current OSM source records, so they
+are not rounded to conventional voltage levels without further evidence.
 
 ## Sources
 
@@ -279,3 +316,46 @@ constraints, and internal constraints removed by copperplating remain separate.
 Nordic, Iberian, Italian, British, Irish and other countries without adequate
 Core coverage still need additional circuit-rating sources. Existing Nordic
 market-capacity publications are not substitutes for circuit ampacities.
+
+## Prepare physical nominal ratings on Sophia, without solving
+
+The human-invoked worker mode `nominal-build` builds only the original base
+network and its physical-rating audit. It does not request a composed network,
+weather cutout or optimization. It uses separate year-specific run directories:
+
+```bash
+# From the repository root, after these changes are available in the checkout.
+mkdir -p logs
+sbatch --job-name=nominal-ratings-2023 --cpus-per-task=4 \
+  --output=logs/nominal-ratings-2023-%j.log \
+  scripts/hindcast_sophia.sbatch nominal-build 2023 "$(git rev-parse HEAD)"
+```
+
+The outputs are `resources/hindcast-nominal-2023/networks/base.nc` and
+`resources/hindcast-nominal-2023/line_rating_audit.json`. Use another year as the
+argument for its explicitly configured source edition. This base-only mode is
+also usable for 2025 without claiming that the other annual model inputs have
+been reviewed. Existing solved results remain outside these output paths. Keep
+the source checkout and environment unchanged while a job is active.
+
+## AC and DC nominal ratings
+
+The implemented corrections change AC `s_nom` (MVA). The whole-network audit
+also inventories DC branch `p_nom` (MW) separately. Model connector capacities
+are distinguished from DC branch records: summing connectors and branches would
+double count or mix modelling devices with physical assets. No DC nominal power
+is changed without a project-specific physical reference; a bidding-zone transfer
+limit is not used as a DC nameplate rating. In the supplied original network
+there are 39 DC branch records and 67 other/converter links. These are original
+records, not 106 physical interconnectors.
+
+## References without EICs
+
+Normalized TSO CSVs may provide a `circuit_id` containing the actual local circuit
+code. A binding then uses `circuit_ids` instead of `eics`; the two selectors are
+mutually exclusive. If no circuit ID is supplied, an existing EIC is used, or
+otherwise the explicit `reference_id`. Local circuit codes are not labelled as
+EICs. This allows additional countries' physical nominal references to use the
+same compiler without changing its rating calculation. Reports for the same
+physical border circuit must share a reviewed circuit ID before they can be
+reconciled; row numbers from different workbooks are not assumed equivalent.

@@ -20,7 +20,6 @@ from zipfile import ZipFile, is_zipfile
 import numpy as np
 import pandas as pd
 import yaml
-from netCDF4 import Dataset
 
 
 def sha256(path):
@@ -35,17 +34,25 @@ def read_component(ds, component, columns):
     return pd.DataFrame(
         {c: ds[f"{component}_{c}"][:] for c in columns
          if f"{component}_{c}" in ds.variables},
-        index=pd.Index(ds[f"{component}_i"][:], name="line_id" if component == "lines" else "bus"),
+        index=pd.Index(ds[f"{component}_i"][:], name={"lines": "line_id", "links": "link_id"}.get(component, "bus")),
     )
 
 
 def inventory(path):
+    from netCDF4 import Dataset
+
     with Dataset(path) as ds:
         buses = read_component(ds, "buses", ["country", "x", "y"])
         lines = read_component(ds, "lines", [
             "bus0", "bus1", "v_nom", "s_nom", "num_parallel", "type",
             "length", "s_max_pu", "underground", "tags",
         ])
+    return annotate_inventory(lines, buses)
+
+
+def annotate_inventory(lines, buses):
+    """Use identical nominal-input checks for saved and in-construction networks."""
+    lines = lines.copy()
     if lines.index.has_duplicates:
         raise ValueError("Original line identifiers must be unique")
     for end in [0, 1]:
@@ -54,7 +61,43 @@ def inventory(path):
     lines["model_current_a_per_circuit"] = (
         1000 * lines.s_nom / (np.sqrt(3) * lines.v_nom * lines.num_parallel)
     )
+    # These are review flags, never automatic voltage/type/capacity replacements.
+    flags = pd.Series("", index=lines.index, dtype=object)
+    checks = {
+        "nonstandard_nominal_voltage": ~lines.v_nom.isin([220, 225, 275, 300, 330, 380, 400, 420, 500, 750]),
+        "invalid_nominal_capacity": ~np.isfinite(lines.s_nom) | lines.s_nom.le(0),
+        "invalid_circuit_count": ~np.isfinite(lines.num_parallel) | lines.num_parallel.le(0),
+        "fractional_original_circuit_count": ~np.isclose(lines.num_parallel, lines.num_parallel.round()),
+    }
+    if "underground" in lines:
+        checks["generic_overhead_type_on_underground_asset"] = (
+            lines.underground.eq(True) & lines.type.str.contains("Al/St", regex=False, na=False)
+        )
+    for label, mask in checks.items():
+        flags.loc[mask] = flags.loc[mask] + label + ";"
+    lines["nominal_input_flags"] = flags.str.rstrip(";")
     return lines
+
+
+def nominal_link_inventory(path):
+    """Keep physical DC p_nom separate from AC MVA and model connectors."""
+    from netCDF4 import Dataset
+
+    with Dataset(path) as ds:
+        buses = read_component(ds, "buses", ["country"])
+        if "links_i" not in ds.variables:
+            return pd.DataFrame()
+        links = read_component(ds, "links", ["bus0", "bus1", "carrier", "p_nom", "voltage", "tags"])
+    if "carrier" not in links:
+        links["carrier"] = ""
+    if "p_nom" not in links:
+        links["p_nom"] = np.nan
+    for end in [0, 1]:
+        links[f"country{end}"] = links[f"bus{end}"].map(buses.country)
+    links["inventory_role"] = np.where(links.carrier.eq("DC"), "dc_branch_record", "model_connector_or_other_link")
+    links = links.rename(columns={"p_nom": "nominal_power_mw"})
+    links["reference_status"] = "not_reviewed_against_physical_project_reference"
+    return links
 
 
 def cached_source(spec, cache, offline):
@@ -201,6 +244,14 @@ def normalize(spec, path):
     if (currents.dropna(how="all") < 0).any().any():
         raise ValueError("Negative current in source")
     ref["source_id"] = spec["id"]
+    # Other TSOs need not publish EICs. Preserve their actual circuit codes or
+    # explicit reference IDs instead of inventing an EIC for a local identifier.
+    if "circuit_id" not in ref:
+        eic = ref["eic"].fillna("").astype(str).str.strip()
+        ref["circuit_id"] = eic.where(eic.ne(""), ref.reference_id.astype(str))
+    if ref.circuit_id.isna().any() or ref.circuit_id.astype(str).str.strip().eq("").any():
+        raise ValueError("Circuit identity must be explicit in every reference row")
+    ref["circuit_id"] = ref.circuit_id.astype(str)
     ref["source_url"] = spec.get("url", spec.get("provenance_url", ""))
     ref["snapshot_date"] = spec.get("snapshot_date", "")
     ref["temporal_scope"] = "snapshot; not evidence of availability or whole-year validity"
@@ -274,6 +325,7 @@ def main():
         parser.error("Supply --clustered-network and --linemap together")
     registry = yaml.safe_load(args.source_config.read_text())["sources"]
     lines = inventory(args.network)
+    links = nominal_link_inventory(args.network)
     if lines.v_nom.nunique() < 2:
         raise ValueError("Network appears simplified; provide the original-voltage network")
     args.output.mkdir(parents=True, exist_ok=True)
@@ -288,10 +340,13 @@ def main():
     reference = pd.concat(references, ignore_index=True)
     match = candidates(lines, reference, args.endpoint_tolerance_km)
     lines.to_csv(args.output / "original_line_inventory.csv")
+    links.to_csv(args.output / "original_link_nominal_inventory.csv")
     reference.to_csv(args.output / "reference_ratings.csv", index=False)
     match.to_csv(args.output / "candidate_matches.csv", index=False)
     aggregation = None
     if args.clustered_network:
+        from netCDF4 import Dataset
+
         with Dataset(args.clustered_network) as ds:
             clustered = read_component(ds, "lines", ["s_nom", "bus0", "bus1"])
         linemap = pd.read_csv(args.linemap, index_col=0).iloc[:, 0].astype(str)
@@ -325,6 +380,7 @@ def main():
     summary = {"model_year": args.year, "network": str(args.network), "network_sha256": sha256(args.network),
                "source_config_sha256": sha256(args.source_config), "sources": sources,
                "original_lines": len(lines), "countries": sorted(set(lines.country0) | set(lines.country1)),
+               "link_inventory_role_counts": {str(k): int(v) for k, v in links.get("inventory_role", pd.Series(dtype=str)).value_counts().items()},
                "candidate_rows": len(match), "lines_with_candidates": int(match.line_id.nunique()),
                "approved_corrections": 0, "network_modified": False,
                "endpoint_tolerance_km": args.endpoint_tolerance_km,

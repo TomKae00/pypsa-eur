@@ -1,4 +1,6 @@
-# Optional overlay. First compile a reviewed payload for each chosen model year.
-# This applies only the supported subset; it is not a complete European rating set.
+# Optional physical nominal-rating overlay. Sources are declared Snakemake inputs;
+# reviewed ratings are compiled inside base construction, before aggregation.
+# Unsupported circuits retain native assumptions. No prior NetCDF is required.
 lines:
-  rating_corrections: data/hindcast/line-ratings/corrections_{year}.yaml
+  rating_corrections: null
+  rating_study: config/hindcast/line-rating-study.yaml
