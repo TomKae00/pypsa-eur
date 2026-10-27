@@ -1,0 +1,25 @@
+# Solver-only sensitivity on the ALREADY-BUILT simplified Bornholm baseline.
+# Layer after config.bornholm.yaml and config.bornholm-simplified.yaml.
+# Keep physical assumptions and hourly network identical to simplified baseline.
+run:
+  name: bornholm_simplified_pdhg_relaxed
+  scenarios:
+    enable: false
+  shared_resources:
+    policy: false
+
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-bornholm
+  solver_options:
+    gurobi-bornholm:
+      threads: 16
+      method: 6
+      crossover: 0
+      Seed: 123
+      # Exploratory tolerances, not validated for final hourly nodal prices.
+      # PDHG requires BOTH objective convergence and primal/dual feasibility.
+      # Default Gurobi 13 settings are 1e-6 for both quantities.
+      PDHGConvTol: 1.0e-3
+      PDHGRelTol: 1.0e-5
