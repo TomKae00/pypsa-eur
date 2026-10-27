@@ -1,0 +1,19 @@
+# Controlled PDHG experiment: geometric-mean scaling only.
+# Layer AFTER config/config.bornholm.yaml to retain identical physical assumptions.
+# Disable scenarios and use a distinct run directory so logs/results cannot collide.
+run:
+  name: bornholm_solver_scale2
+  scenarios:
+    enable: false
+
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-bornholm
+  solver_options:
+    gurobi-bornholm:
+      threads: 16
+      method: 6
+      crossover: 0
+      Seed: 123
+      ScaleFlag: 2
