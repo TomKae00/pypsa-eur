@@ -65,9 +65,14 @@ def main():
         sector.get("regional_co2_sequestration_potential", {}).get("enable") is False,
         "Regional sequestration potential is still enabled",
     )
+    # NetCDF metadata round-tripping stringifies YAML integer dictionary keys.
+    # Accept both representations, but still verify the actual 2035 cap.
+    sequestration_limits = sector.get("co2_sequestration_potential", {})
+    limit = sequestration_limits.get(str(HORIZON), sequestration_limits.get(HORIZON))
     require(
-        float(sector.get("co2_sequestration_potential", {}).get(HORIZON, -1)) == 100.0,
-        "Default 2035 global 100 MtCO2 sequestration limit has changed",
+        limit is not None and np.isclose(float(limit), 100.0),
+        f"Unexpected global CO2 sequestration limit in network metadata: "
+        f"2035={limit!r}; available values={sequestration_limits!r}",
     )
     carrier = n.links.carrier
     require(not carrier.eq("CO2 pipeline").any(), "CO2 pipelines remain")
