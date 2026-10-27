@@ -1,0 +1,4 @@
+# Optional overlay. First compile a reviewed payload for each chosen model year.
+# This applies only the supported subset; it is not a complete European rating set.
+lines:
+  rating_corrections: data/hindcast/line-ratings/corrections_{year}.yaml

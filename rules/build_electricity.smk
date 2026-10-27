@@ -74,6 +74,13 @@ def input_base_network(w):
         inputs = {c: f"data/entsoegridkit/{c}.csv" for c in components}
         inputs["parameter_corrections"] = "data/parameter_corrections.yaml"
         inputs["links_p_nom"] = "data/links_p_nom.csv"
+    rating_file = config_provider("lines")(w).get("rating_corrections")
+    if rating_file:
+        horizons = config_provider("planning_horizons")(w)
+        years = horizons if isinstance(horizons, list) else [horizons]
+        if len(years) != 1:
+            raise ValueError("Physical line-rating corrections require a single planning year")
+        inputs["line_rating_corrections"] = rating_file.format(year=years[0])
     return inputs
 
 

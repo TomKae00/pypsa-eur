@@ -256,8 +256,11 @@ def _load_lines(buses, lines):
 
 
 def _apply_parameter_corrections(n, parameter_corrections):
-    with open(parameter_corrections) as f:
-        corrections = yaml.safe_load(f)
+    if isinstance(parameter_corrections, dict):
+        corrections = parameter_corrections
+    else:
+        with open(parameter_corrections) as f:
+            corrections = yaml.safe_load(f)
 
     if corrections is None:
         return
@@ -278,6 +281,56 @@ def _apply_parameter_corrections(n, parameter_corrections):
                     raise NotImplementedError()
                 inds = r.index.intersection(df.index)
                 df.loc[inds, attr] = r[inds].astype(df[attr].dtype)
+
+
+def _apply_reviewed_line_ratings(n, path, planning_horizons):
+    """Validate a compiled physical-rating payload, then use the native updater."""
+    with open(path) as stream:
+        payload = yaml.safe_load(stream)
+    if not isinstance(payload, dict):
+        raise ValueError("Line-rating correction file must contain a mapping")
+    meta = payload.get("metadata", {})
+    years = planning_horizons if isinstance(planning_horizons, list) else [planning_horizons]
+    if len(years) != 1 or meta.get("model_year") != int(years[0]):
+        raise ValueError("Line-rating payload must match the single planning year; weather year is not used")
+    if meta.get("schema_version") != 1 or meta.get("rating_policy") != "fixed-snapshot-representative":
+        raise ValueError("Unsupported physical line-rating payload or rating policy")
+    for key in ["source_id", "source_url", "source_sha256", "bindings_sha256"]:
+        if not isinstance(meta.get(key), str) or not meta[key].strip():
+            raise ValueError(f"Line-rating provenance is missing {key}")
+    for key in ["source_sha256", "bindings_sha256"]:
+        if len(meta[key]) != 64 or any(c not in "0123456789abcdef" for c in meta[key]):
+            raise ValueError(f"Invalid {key} in line-rating provenance")
+    corrections = payload.get("corrections", {})
+    # Restrict this input to physical nominal AC capacities. It cannot alter
+    # buses, topology, security factors, impedances or market transfer limits.
+    if set(corrections) != {"Line"} or set(corrections["Line"]) != {"s_nom"} or set(corrections["Line"]["s_nom"]) != {"index"}:
+        raise ValueError("Line-rating payload must contain only Line.s_nom.index updates")
+    updates = corrections["Line"]["s_nom"]["index"]
+    guards = payload.get("expected_lines", {})
+    if not updates or set(updates) != set(guards):
+        raise ValueError("Each line-rating update needs exactly one expected-line signature")
+    missing = set(updates) - set(n.lines.index)
+    if missing:
+        raise ValueError(f"Reviewed original OSM lines absent from this network: {sorted(missing)}")
+    for line_id, value in updates.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value) or value <= 0:
+            raise ValueError(f"Physical line rating must be finite and positive: {line_id}")
+        expected = guards[line_id]
+        if set(expected) != {"bus0", "bus1", "type", "v_nom", "num_parallel", "s_nom"}:
+            raise ValueError(f"Incomplete original-line signature: {line_id}")
+        for attr in ["bus0", "bus1", "type"]:
+            if n.lines.at[line_id, attr] != expected[attr]:
+                raise ValueError(f"Reviewed line {line_id} has changed {attr}; re-review its binding")
+        for attr in ["v_nom", "num_parallel", "s_nom"]:
+            if not np.isclose(n.lines.at[line_id, attr], expected[attr], rtol=1e-8, atol=1e-6):
+                raise ValueError(f"Reviewed line {line_id} has changed {attr}; regenerate its rating payload")
+    old = n.lines.loc[list(updates), "s_nom"].copy()
+    _apply_parameter_corrections(n, corrections)
+    n.meta["physical_line_ratings"] = {**meta, "applied_original_lines": len(updates)}
+    logger.info("Applied %s reviewed physical line ratings from %s for model year %s", len(updates), meta["source_id"], meta["model_year"])
+    for line_id in updates:
+        logger.info("Physical rating %s: %.3f -> %.3f MVA", line_id, old[line_id], updates[line_id])
 
 
 def _reconnect_crimea(lines):
@@ -745,6 +798,14 @@ def base_network(
     _set_lines_s_nom_from_linetypes(n)
     if config["electricity"].get("base_network") == "entsoegridkit":
         _apply_parameter_corrections(n, parameter_corrections)
+    if config["lines"].get("rating_corrections"):
+        if base_network != "osm":
+            raise ValueError("Reviewed physical line ratings currently require electricity.base_network: osm")
+        if config["lines"].get("dynamic_line_rating", {}).get("activate", False):
+            raise ValueError("Fixed reviewed line ratings cannot be combined with DLR, which would replace the loading limits")
+        _apply_reviewed_line_ratings(
+            n, snakemake.input.line_rating_corrections, config["planning_horizons"]
+        )
 
     n = _remove_unconnected_components(n)
 

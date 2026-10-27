@@ -1,0 +1,39 @@
+# Explicit source editions. The model year is supplied separately to the audit.
+# A snapshot is not a claim of unchanged ratings throughout its publication year.
+# Other TSO data can use format: normalized_csv and a local path; see the guide.
+sources:
+  jao-core-2022-09:
+    format: jao_core_sgm_zip
+    edition: "Core SGM first release, September 2022"
+    snapshot_date: ""
+    provenance_url: https://www.jao.eu/static-grid-model
+    url: https://www.jao.eu/sites/default/files/2022-09/outdated_Core%20Static%20Grid%20Model%20%E2%80%93%201st%20Release.zip
+    sha256: 69f4f598983df2d8b382b0b03a5847e38ae877605fcf8621fb594ead65175b06
+    exclude_workbooks:
+      Core _Static Grid Model_template_D4_20220419.xlsx: "Empty archive member (zero bytes); TransnetBW coverage missing in this download."
+      Core _Static Grid Model_template_SK.xlsx: "Use the explicitly dated SK_2022_07 workbook instead of the older duplicate."
+    notes: "No bundled map. Workbook dates differ; BE filename explicitly references Q4 2021. No assumption of full-year 2022 validity."
+  jao-core-2023-09:
+    format: jao_core_sgm_zip
+    edition: "Core SGM fourth release, 2023-09-20"
+    snapshot_date: "2023-09-20"
+    provenance_url: https://www.jao.eu/static-grid-model
+    url: https://www.jao.eu/sites/default/files/2024-04/outdated_Core%20Static%20Grid%20Model%20%E2%80%93%204th%20release.zip
+    sha256: 433119ef64ab6f03f37797f427a5908aba548eb19db21ec130c848522fa8da65
+  jao-core-2024-09:
+    format: jao_core_sgm_zip
+    edition: "Core SGM sixth release, September 2024"
+    snapshot_date: "2024-09-16"
+    provenance_url: https://www.jao.eu/static-grid-model
+    url: https://www.jao.eu/sites/default/files/2024-10/202409_Core%20Static%20Grid%20Mode_6th%20release.zip
+    sha256: fe74d814a96b6738e374bf27d9be3a161f4c4a06ae817472ebb7789f1ecb41af
+  jao-core-2025-09:
+    format: jao_core_sgm_zip
+    edition: "Core SGM eighth release, September 2025"
+    snapshot_date: ""
+    provenance_url: https://www.jao.eu/static-grid-model
+    url: https://www.jao.eu/sites/default/files/2025-10/202509_Core%20Static%20Grid%20Model_8th%20release.zip
+    sha256: 245489e2b9145b6703d4e25a7c1be4c16544f44b6ddd91831d9c259c059b651b
+    workbooks:
+    - For publication/202509_Core Static Grid Model_for publication.xlsx
+    notes: "Use publication workbook; explicitly exclude the _versions_ draft copies."

@@ -436,6 +436,7 @@ if __name__ == "__main__":
     params = snakemake.params
 
     n = pypsa.Network(snakemake.input.network)
+    physical_line_ratings = n.meta.get("physical_line_ratings")
     Nyears = n.snapshot_weightings.objective.sum() / 8760
     buses_prev, lines_prev, links_prev = len(n.buses), len(n.lines), len(n.links)
 
@@ -511,6 +512,8 @@ if __name__ == "__main__":
         # append_bus_shapes(n, clustered_regions, type=which.split("_")[1])
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    if physical_line_ratings:
+        n.meta["physical_line_ratings"] = physical_line_ratings
     n.export_to_netcdf(snakemake.output.network)
 
     logger.info(

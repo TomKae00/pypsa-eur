@@ -697,6 +697,7 @@ if __name__ == "__main__":
     solver_name = snakemake.config["solving"]["solver"]["name"]
 
     n = pypsa.Network(snakemake.input.network)
+    physical_line_ratings = n.meta.get("physical_line_ratings")
     buses_prev, lines_prev, links_prev = len(n.buses), len(n.lines), len(n.links)
 
     load = (
@@ -805,6 +806,8 @@ if __name__ == "__main__":
     nc.buses["unit"] = "MWh_el"
 
     nc.meta = dict(snakemake.config)
+    if physical_line_ratings:
+        nc.meta["physical_line_ratings"] = physical_line_ratings
     nc.export_to_netcdf(snakemake.output.network)
 
     logger.info(

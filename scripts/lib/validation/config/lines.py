@@ -65,6 +65,10 @@ class LinesConfig(BaseModel):
         0.7,
         description="Correction factor for line capacities (`s_nom`) to approximate N-1 security and reserve capacity for reactive power flows.",
     )
+    rating_corrections: str | None = Field(
+        None,
+        description="Optional compiled physical AC line-rating YAML for the OSM network. Supports {year} from a single planning horizon; source edition and weather year remain separate. Applied before simplification, with original-line signature checks.",
+    )
     s_nom_max: float = Field(
         float("inf"),
         description="Global upper limit for the maximum capacity of each extendable line (MW).",

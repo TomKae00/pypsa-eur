@@ -1,0 +1,60 @@
+# Circuit identities reviewed against original OSM endpoints/circuit counts and
+# JAO EIC records. These bind identities, not a fixed rating or source year.
+# A binding is used only when both TSOs publish the same fixed current for
+# every EIC in the explicitly selected edition. No seasonal/DLR conversion.
+bindings:
+  maribor-kainachtal:
+    eics: [10T-AT-SI-00001T, 10T-AT-SI-00002R]
+    lines:
+      relation/3952094-380:
+        bus0: virtual_relation/3952094:0-380
+        bus1: way/83740194-380
+        v_nom: 380
+        num_parallel: 2
+    evidence: "OSM relation names Kainachtal–Maribor with cables=6; model has two circuits. JAO APG/ELES report EICs 473/474 for the same pair."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/3952094.json
+  krsko-tumbri:
+    eics: [10T-HR-SI-00004Z, 10T-HR-SI-00005X]
+    lines:
+      relation/13676214-400:
+        bus0: way/105894370-400
+        bus1: way/89818719-400
+        v_nom: 400
+        num_parallel: 1
+      relation/13676215-400:
+        bus0: way/105894370-400
+        bus1: way/89818719-400
+        v_nom: 400
+        num_parallel: 1
+    evidence: "Two OSM single circuits share Krško/Tumbri endpoints. JAO ELES/HOPS give two EICs. The association of EIC 1/2 with the two OSM records is not resolved; use only if both EICs have identical fixed current, making the allocation permutation invariant."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relations.json?relations=13676214,13676215
+  divaca-pehlin:
+    eics: [10T-HR-SI-000022]
+    lines:
+      merged_way/105899469-220+1:
+        bus0: way/96747435-220
+        bus1: way/96722667-220
+        v_nom: 220
+        num_parallel: 1
+    evidence: "Single 220-kV route between Divača and Pehlin; original endpoints and whole-route geometry align. JAO ELES/HOPS give one shared EIC; reporting lengths are national shares, not parallel circuits."
+    evidence_url: https://api.openstreetmap.org/api/0.6/ways.json?ways=105899469,130796263
+  sokolnice-stupava:
+    eics: [10T-CZ-SK-00005Q]
+    lines:
+      relation/5136303-400:
+        bus0: way/27849030-400
+        bus1: way/33881667-400
+        v_nom: 400
+        num_parallel: 1
+    evidence: "OSM route ref 497, cables=3; endpoints align with Sokolnice/Stupava. JAO CEPS/SEPS report the same EIC. JAO 380-kV label and OSM/model 400-kV label are retained separately; compute MVA at model nominal voltage from the agreed current, without overwriting impedance."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/5136303.json
+  sokolnice-krizovany:
+    eics: [10T-CZ-SK-00003U]
+    lines:
+      relation/5167896-400:
+        bus0: way/27849030-400
+        bus1: way/51982806-400
+        v_nom: 400
+        num_parallel: 1
+    evidence: "OSM route ref 424, cables=3; endpoints align with Sokolnice/Križovany. Same CEPS/SEPS EIC. Require agreement in the selected edition; retain model voltage for MVA conversion."
+    evidence_url: https://api.openstreetmap.org/api/0.6/relation/5167896.json

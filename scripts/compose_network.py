@@ -120,7 +120,10 @@ if __name__ == "__main__":
     sanitize_custom_columns(n)
     sanitize_carriers(n, config)
     sanitize_locations(n)
+    physical_line_ratings = n.meta.get("physical_line_ratings")
     n.meta = dict(config, **dict(wildcards=dict(snakemake.wildcards)))
+    if physical_line_ratings:
+        n.meta["physical_line_ratings"] = physical_line_ratings
     price_inputs = {}
     for name, configured, path in (
         ("fuel", params.conventional.get("fuel_price_file"), inputs.fuel_price),
