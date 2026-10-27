@@ -5,10 +5,10 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --exclusive
-#SBATCH --time=24:00:00
+#SBATCH --time=06:00:00
 #SBATCH --output=slurm-bornholm-pdhg-exp-%j.out
 
-# Run a solver-only experiment against the already-built Bornholm baseline.
+# Six-hour wall-clock budget per test. The Gurobi overlay imposes a shorter\n# optimizer time limit to leave room for Snakemake and result export.\n# Run a solver-only experiment against the already-built Bornholm baseline.
 # The experiment gets its own results, solver logs and network input symlink.
 # It NEVER recomposes or rewrites the baseline network.
 set -euo pipefail
