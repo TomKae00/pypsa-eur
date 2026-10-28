@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MIT
 """
-Short chronological Bornholm diagnostic using the native solve constraints.
+Bornholm short diagnostics and annual pilots using the native solve constraints.
 
 This is a feasibility/solver test, not an annual investment result. Annual flow
 budgets, annual HVC feedstock and capital costs are prorated to the window;
 physical power/energy capacities and one-hour storage chronology are retained.
+The explicit annual mode retains the complete source year without prorating.
 """
 
 import argparse
@@ -13,6 +14,7 @@ import hashlib
 import json
 import logging
 import resource
+import socket
 import time
 from pathlib import Path
 
@@ -241,12 +243,65 @@ def short_network(source, hours, start=0):
     return n
 
 
+def select_network(source, hours, start=0, annual=False):
+    """Keep the annual source intact or construct an explicitly shortened test."""
+    if not annual:
+        return short_network(source, hours, start)
+    require(
+        hours == len(source.snapshots) == 8760 and start == 0,
+        "Annual mode requires all 8760 hours and start=0",
+    )
+    # Avoid duplicating the full annual time-series tables in memory.
+    source.meta = copy.deepcopy(source.meta)
+    source.meta["diagnostic"] = {
+        "hours": hours,
+        "start_offset": 0,
+        "annual_fraction": 1.0,
+        "interpretation": "full-year pilot; source annual budgets, inventories and costs retained",
+    }
+    return source
+
+
+def memory_snapshot(path=Path("/proc/meminfo")):
+    """Read Linux physical RAM in decimal GB, as used by Gurobi limits."""
+    values = {}
+    for line in path.read_text().splitlines():
+        key, value = line.split(":", 1)
+        if key in ("MemTotal", "MemAvailable"):
+            values[key] = int(value.split()[0]) * 1024 / 1e9
+    require(set(values) == {"MemTotal", "MemAvailable"}, "Cannot determine node memory")
+    require(
+        0 < values["MemAvailable"] <= values["MemTotal"], "Invalid node memory report"
+    )
+    return values
+
+
+def soft_memory_limit(snapshot, requested=None):
+    """Reserve headroom for Python and allocations outside Gurobi's accounting."""
+    automatic = 0.75 * snapshot["MemAvailable"]
+    if requested is None:
+        return automatic
+    require(
+        np.isfinite(requested) and requested > 0,
+        "Positive finite memory limit required",
+    )
+    return min(float(requested), automatic)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--variant", choices=["original", "simplified"], default="original"
     )
     parser.add_argument("--hours", type=int, default=24)
+    parser.add_argument(
+        "--annual", action="store_true", help="Keep the complete unscaled annual model"
+    )
+    parser.add_argument(
+        "--soft-mem-limit-gb",
+        type=float,
+        help="Optional Gurobi cap, also limited to 75%% of available RAM",
+    )
     parser.add_argument(
         "--start", type=int, default=0, help="Hourly offset into source year"
     )
@@ -270,9 +325,23 @@ def main():
     started = time.monotonic()
     report = {
         "arguments": {**vars(args), "output_dir": str(args.output_dir)},
-        "status": "failed",
+        "status": "running",
+        "node": socket.gethostname(),
     }
+
+    def checkpoint(phase):
+        report["phase"] = phase
+        report["elapsed_seconds"] = time.monotonic() - started
+        report["peak_rss_GiB"] = (
+            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024**2
+        )
+        temporary = args.output_dir / "summary.json.tmp"
+        temporary.write_text(json.dumps(report, indent=2) + "\n")
+        temporary.replace(args.output_dir / "summary.json")
+        logger.info("Phase: %s (%.1f seconds)", phase, report["elapsed_seconds"])
+
     try:
+        checkpoint("initialising")
         report.update(code_provenance())
         configfiles, run = variant_settings(args.variant)
         context = mock_snakemake(
@@ -284,8 +353,10 @@ def main():
         set_scenario_config(context)
         config = context.config
         source_path = Path(context.input.network)
+        checkpoint("loading_source")
         source = pypsa.Network(source_path)
         inputs_path = source_path.parent.parent / "gas_input_locations_simplified.csv"
+        checkpoint("preflight")
         report["preflight"] = check_source(
             source, pd.read_csv(inputs_path, index_col=0), args.variant
         )
@@ -311,7 +382,8 @@ def main():
             and not options.get("load_sinks", {}).get("enable"),
             "Diagnostic must not introduce balancing slack",
         )
-        n = short_network(source, args.hours, args.start)
+        n = select_network(source, args.hours, args.start, args.annual)
+        checkpoint("preparing_network")
         prepare_network(
             n,
             config=config,
@@ -321,6 +393,7 @@ def main():
             co2_sequestration_potential=context.params.co2_sequestration_potential,
             limit_max_growth=context.params.sector["limit_max_growth"],
         )
+        checkpoint("exporting_input")
         n.export_to_netcdf(args.output_dir / "input.nc")
         solving = context.params.solving
         model_kwargs, solve_kwargs = collect_kwargs(
@@ -336,6 +409,10 @@ def main():
         solver_options.update(threads=args.threads, TimeLimit=args.time_limit)
         solve_kwargs.update(solver_name="gurobi", solver_options=solver_options)
         report["solver_options"] = solver_options
+        report["diagnostic"] = n.meta["diagnostic"]
+        if args.annual:
+            report["node_memory_before_model_GB"] = memory_snapshot()
+        checkpoint("building_model")
         create_optimization_model(
             n,
             config=config,
@@ -350,29 +427,44 @@ def main():
             constraints=int(n.model.ncons),
             diagnostic=n.meta["diagnostic"],
         )
+        if args.annual or args.soft_mem_limit_gb is not None:
+            snapshot = memory_snapshot()
+            report["node_memory_before_solver_GB"] = snapshot
+            solver_options["SoftMemLimit"] = soft_memory_limit(
+                snapshot, args.soft_mem_limit_gb
+            )
+            logger.info(
+                "Gurobi SoftMemLimit=%.2f GB; available node RAM=%.2f GB",
+                solver_options["SoftMemLimit"],
+                snapshot["MemAvailable"],
+            )
+        checkpoint("solving")
         status, condition = n.optimize.solve_model(**solve_kwargs)
-        report.update(status=str(status), termination_condition=str(condition))
+        report.update(
+            status=str(status),
+            solver_status=str(status),
+            termination_condition=str(condition),
+        )
         require(
             str(status) == "ok" and str(condition) == "optimal",
-            f"Diagnostic did not converge optimally: {status}/{condition}; inspect solver.log",
+            f"Run did not converge optimally: {status}/{condition}; inspect solver.log",
         )
         report["objective"] = float(n.objective)
         n.meta["solve_result"] = {
             "status": str(status),
             "termination_condition": str(condition),
         }
+        checkpoint("exporting_solution")
         n.export_to_netcdf(args.output_dir / "solved.nc")
+        checkpoint("complete")
     except Exception as error:
+        report["failed_phase"] = report.get("phase")
+        report["status"] = "failed"
         report["error"] = f"{type(error).__name__}: {error}"
+        checkpoint("failed")
         raise
     finally:
-        report["elapsed_seconds"] = time.monotonic() - started
-        report["peak_rss_GiB"] = (
-            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024**2
-        )
-        (args.output_dir / "summary.json").write_text(
-            json.dumps(report, indent=2) + "\n"
-        )
+        checkpoint(report["phase"])
 
 
 if __name__ == "__main__":

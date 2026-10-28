@@ -189,3 +189,23 @@ def test_real_build_reaches_workflow_without_git_on_host(diagnostic_job):
         "run",
         "snakemake",
     ]
+
+
+@pytest.mark.parametrize("variant", ["original", "simplified"])
+def test_annual_job_selects_full_year_without_rebuild(diagnostic_job, variant):
+    root, _, env = diagnostic_job
+    script = Path("scripts/bornholm_annual_barrier.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script), variant], env=env, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    assert not (root / "build_calls.txt").exists()
+    args = json.loads((root / "solve_args.json").read_text())
+    assert "--annual" in args
+    assert args[args.index("--hours") + 1] == "8760"
+    assert args[args.index("--variant") + 1] == variant
+    assert args[args.index("--time-limit") + 1] == "72000"
+    assert (
+        args[args.index("--output-dir") + 1]
+        == f"results/bornholm_annual_barrier/test-job_{variant}_8760h_barrier"
+    )

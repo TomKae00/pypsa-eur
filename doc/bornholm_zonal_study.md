@@ -588,3 +588,55 @@ including execution of the real build shell script with Git removed from its
 PATH and the provenance Python module running in the test runtime. The model
 workflow was mocked in that regression test; no Sophia rebuild was performed.
 Lint, formatting, shell syntax and whitespace checks passed.
+
+### Full-year barrier pilots
+
+After the successful 24-hour and 168-hour barrier diagnostics, full-year pilots
+can use the already rebuilt original and simplified networks. The annual wrapper
+uses explicit `--annual --hours 8760` mode in the same runner. It retains the
+source annual constraints, costs, generator energy quotas, HVC inventories and
+storage chronology; it does not apply the short-window prorating function or
+rebuild source networks. Native solve preparation and supplementary constraints
+remain in use. Source preflight, provenance and simplified/reference comparison
+checks remain enabled.
+
+```bash
+git pull --ff-only origin feature/bornholm-energy-island
+sbatch scripts/bornholm_annual_barrier.sbatch original
+sbatch scripts/bornholm_annual_barrier.sbatch simplified
+```
+
+The two independent pilots can run in parallel, each on one exclusive workq node
+with four CPUs, a 24-hour Slurm walltime and a 20-hour Gurobi solver limit. The
+solver is the same native barrier preset used for the weekly reference, including
+Method=2, Crossover=0 and BarConvTol=1e-5. The main Bornholm full-year PDHG preset is
+not edited. Each job writes fresh results under
+`results/bornholm_annual_barrier/<job-id>_<variant>_8760h_barrier/` and its launcher
+log is `slurm-bornholm-annual-barrier-<job-id>.out`.
+
+The runner records physical RAM and available RAM on the allocated node. After
+Linopy model construction, Gurobi's `SoftMemLimit` is set to 75% of then-available
+physical RAM in decimal GB, leaving headroom for other allocations. A CLI memory
+cap can lower this value but cannot raise it. This parameter covers Gurobi's
+tracked memory, not all Python/Linopy allocations; it is checked only at graceful
+termination points, so an OS-level OOM remains possible. It changes the permitted
+computational resources, not physical capacities or model assumptions.
+
+The summary is checkpointed atomically at loading, preflight, preparation, export,
+model construction and solving phases. A caught failure records the previous
+phase and error. If the OS kills the process, the last checkpoint and Slurm
+accounting are needed; a final summary cannot be guaranteed. Only an optimally
+terminated run exports `solved.nc`. A solver time/memory limit is a stopped pilot,
+not an accepted annual solution.
+
+Memory failures often arise in presolve, ordering or factorisation, but annual
+model construction/loading must happen first and memory can also grow later.
+An early failure is not guaranteed. Inspect the phase log and `Barrier statistics`
+before making runtime estimates or deciding on larger-memory hardware.
+
+Development checks: 26 targeted annual/diagnostic/provenance/job-control tests
+passed, including annual-input invariance, memory-budget units/headroom, a
+simulated solver memory failure with preserved progress, and selection of the
+correct annual variant without rebuilding. Lint, format, shell syntax and
+whitespace checks passed. No full annual model was built in development and no
+Sophia job was submitted here.
