@@ -1,4 +1,115 @@
-# Hourly, sector-coupled Bornholm comparison
+# Sector-coupled Bornholm comparison
+
+## Current submission: all eight scenarios at three-hour resolution
+
+Use `config/config.bornholm-3h.yaml` after the main study configuration. It sets
+solar and tracking solar to one resource class, onshore wind to two, and offshore
+AC/DC/floating wind to three. Floating offshore wind previously inherited one
+class; it now also follows the requested three-class offshore setting. Dedicated
+Bornholm project wind remains one fixed site. All 52 bidding zones, the full
+2013 weather year, 2035 demand/cost assumptions and the original sector
+formulation are retained. This is the eight-case study, not eight copies of the
+separate simplified-baseline experiment. Spatial CO2, the CO2 network and capture
+technologies retain the original configuration.
+
+Native chronological averaging produces 2,920 snapshots, each with three-hour
+objective, generator and storage weights. Annual costs, emissions budgets,
+feedstock quantities and physical storage capacities are not prorated. Mean
+renewable availability and demand smooth within-block variability, so these
+results have a different temporal approximation from the hourly study.
+
+```bash
+cd /home/s253303/projects/pypsa-eur-bornholm
+git pull --ff-only origin feature/bornholm-energy-island
+sbatch scripts/bornholm_study_workq.sbatch
+```
+
+This single submission performs the following:
+
+1. A workq controller runs Snakemake with `--executor cluster-generic` via the
+   profile `profiles/bornholm-workq`. One DAG covers all eight composed networks.
+   Up to eight rule jobs can run concurrently on separate exclusive workq nodes,
+   using up to four CPUs each. Dependencies determine which jobs are ready.
+2. Native `run.shared_resources.policy: base` shares eligible preprocessing
+   outputs, including weather profiles, clustered geography and the time weights.
+   Scenario-specific composition and horizon-specific resources retain their
+   own paths. Processed costs and one unrelated postprocessing output are
+   excluded from sharing to keep input/output/log wildcard handling consistent.
+3. All composed networks pass comparison checks, including time weights, common
+   gas/storage inputs and scenario definitions. Source preflight also checks
+   undefined buses, positive fixed gas capacities, annual gas supply, resource
+   classes and the study namespace. No solver is submitted if these checks fail.
+4. A Slurm array `0-7` launches exactly eight independent native annual solves,
+   each on an exclusive workq node, with four-thread Gurobi barrier, no crossover,
+   `BarConvTol=1e-5`, 24-hour job walltime and a 20-hour solver limit. They have no
+   dependency on a solved baseline. Availability of workq nodes and Gurobi licences
+   determines how many actually start together.
+5. A workq comparison job runs after all eight solves succeed. Slurm cancels this
+   dependent check if its success dependency becomes impossible.
+
+The controller, worker submission bridge, solve array and final check all specify
+workq. The controller and solve/check scripts reject execution in any other
+partition. Host Slurm commands are used through a filesystem bridge, while each
+worker re-enters the existing `~/bin/pixi-sophia` container wrapper. Neither host
+Git/Python nor container Slurm executables are required. The cluster-generic
+plugin is already declared in the Pixi environment. All nodes must see the same
+project filesystem and wrapper, as in the existing Sophia jobs.
+
+The native solve entry point and its configured solve mode remain in use,
+including supplementary constraints and the expandable-grid scenarios. Solver
+memory is capped at the smaller of 70 decimal GB and 75% of available RAM before
+native solving. This is Gurobi-accounted memory, not a whole-process cap; OS kills
+and memory growth beyond graceful check points remain possible. The reduction
+in variable count does not establish that factorisation fits workq. Three-hour
+barrier runs can still stop for memory, time or infeasibility. No automatic
+technology removal, solver fallback or change of partition is performed.
+
+The overlay uses a separate namespace, leaving prior hourly composed/solved
+networks and diagnostic results available:
+
+```text
+resources/bornholm_3h_s1_w2_o3/bornholm_zonal_<case>/networks/composed_2035.nc
+results/bornholm_3h_s1_w2_o3/bornholm_zonal_<case>/networks/solved_2035.nc
+results/bornholm_3h_s1_w2_o3/bornholm_zonal_<case>/summary.json
+results/bornholm_3h_s1_w2_o3/bornholm_zonal_<case>/logs/solve_network/solver_2035.log
+```
+
+Array mapping: `0 baseline`, `1 radial`, `2 hybrid`, `3 radial_de`, `4 optimised`,
+`5 open`, `6 baseline_expandable`, `7 open_expandable`. Solves refuse to overwrite
+an existing solved network. A non-optimal output from the native entry point is
+renamed `failed_2035.nc`, not accepted as a canonical solved result.
+
+```bash
+# Optional alternatives: build only, or inspect the build DAG without workers.
+sbatch scripts/bornholm_study_workq.sbatch build
+sbatch scripts/bornholm_study_workq.sbatch dry-run
+
+# Live state, including the partition for every job.
+watch -n 5 'squeue -u "$USER" -o "%.18i %.25j %.10P %.12T %.12M %.25R"'
+
+# Follow baseline solver iterations after its solve starts.
+tail -n 30 -F results/bornholm_3h_s1_w2_o3/bornholm_zonal_baseline/logs/solve_network/solver_2035.log
+```
+
+The controller log is `slurm-bornholm-study-build-<id>.out`; worker logs and job
+IDs are under `results/bornholm_3h_s1_w2_o3/submissions/<controller-id>/`. That
+directory also records the solve array and final comparison job IDs. Solve task
+logs are `slurm-bornholm-study-solve-<array-id>_<index>.out`.
+
+The sections below document the original hourly configuration and earlier
+diagnostic submissions; use the new command above for this three-hour campaign.
+
+Development validation: 69 targeted tests passed (two unrelated weather-profile
+integration tests excluded). A native eight-scenario DAG dry-run expanded 216
+build jobs from an empty resource cache, with eight distinct composition jobs,
+one clustered network, one project profile and one time-aggregation scheme.
+Remote HTTP metadata checks were skipped for this development dry-run. The real
+cluster-generic executor also completed a small dependency graph against fake
+Slurm commands: one shared task ran once, followed by eight dependent tasks;
+every submission specified workq. Solver handoff, memory cap, failed-output
+rejection and build/check failure propagation were tested. These tests do not
+establish annual Gurobi memory use or full-dataset physical feasibility. No
+Sophia jobs were submitted from development.
 
 `config/config.bornholm.yaml` now defines the full study. It replaces the former
 90-cluster, 3-hour electricity-only configuration. The separate smoke configuration

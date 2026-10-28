@@ -12,7 +12,7 @@ def code_provenance(root=Path(".")):
     """Record code hashes and, when available, the repository commit."""
     root = Path(root)
     paths = [root / name for name in ["Snakefile", "pixi.toml", "pixi.lock"]]
-    for directory in ["scripts", "rules", "config"]:
+    for directory in ["scripts", "rules", "config", "profiles"]:
         paths.extend(
             p
             for p in (root / directory).rglob("*")

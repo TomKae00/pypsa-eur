@@ -120,18 +120,26 @@ def annual_gas_supply_check(n):
     }
 
 
-def check_source(n, gas_inputs, variant="original"):
+def check_source(n, gas_inputs, variant="original", *, step_hours=1):
     variant_settings(variant)
     require(
-        len(n.snapshots) == 8760, "Diagnostic requires the rebuilt full-year source"
-    )
-    require(np.allclose(n.snapshot_weightings, 1), "Source must have hourly weights")
-    require(
-        n.snapshots.equals(pd.date_range(n.snapshots[0], periods=8760, freq="h")),
-        "Source must have consecutive hourly snapshots",
+        len(n.snapshots) * step_hours == 8760, "Requires the rebuilt full-year source"
     )
     require(
-        n.buses.carrier.eq("AC").sum() == 52, "Expected 52 electricity bidding zones"
+        np.allclose(n.snapshot_weightings, step_hours),
+        "Source has incorrect physical weights",
+    )
+    require(
+        n.snapshots.equals(
+            pd.date_range(
+                "2013-01-01", periods=8760 // step_hours, freq=f"{step_hours}h"
+            )
+        ),
+        "Source must cover the consecutive configured year",
+    )
+    require(
+        n.buses.drop(index="BEI_HUB", errors="ignore").carrier.eq("AC").sum() == 52,
+        "Expected 52 electricity bidding zones",
     )
     settings = {
         "gas_network": True,

@@ -9,6 +9,9 @@ import numpy as np
 import pandas as pd
 import pypsa
 import yaml
+from snakemake.utils import update_config
+
+from scripts._helpers import get_temporal_resolution
 
 
 def require(condition, message):
@@ -32,12 +35,28 @@ def project_links(n):
     return n.links.index[n.links.bus0.eq("BEI_HUB") | n.links.bus1.eq("BEI_HUB")]
 
 
+def expected_timing(config):
+    """Derive chronological snapshots and physical weights from the study config."""
+    hourly = pd.date_range(**config["snapshots"], freq="h")
+    if config.get("enable", {}).get("drop_leap_day", False):
+        hourly = hourly[~((hourly.month == 2) & (hourly.day == 29))]
+    resolution = get_temporal_resolution(config["clustering"]["temporal"])
+    weights = pd.Series(1.0, index=hourly)
+    if resolution is not None:
+        require(
+            resolution[0] == "averaging", "Study checks require chronological averaging"
+        )
+        weights = weights.resample(resolution[1]).sum()
+        weights = weights[weights.gt(0)]
+    return weights
+
+
 def check_networks(networks, config, *, solved=False):
     baseline = networks["baseline"]
     definitions = scenarios(config)
     cables = pd.read_csv(config["energy_islands"]["links"])
     project_profiles = []
-    expected = pd.date_range(**config["snapshots"], freq="h")
+    timing = expected_timing(config)
     buses = electricity_buses(baseline)
     require("BEI_HUB" not in baseline.buses.index, "Baseline contains the project hub")
     require(
@@ -48,8 +67,14 @@ def check_networks(networks, config, *, solved=False):
         "Electricity buses do not cover the configured study countries",
     )
     for case, n in networks.items():
-        require(n.snapshots.equals(expected), f"{case}: expected the full hourly year")
-        require(np.allclose(n.snapshot_weightings, 1.0), f"{case}: non-hourly weights")
+        require(
+            n.snapshots.equals(timing.index),
+            f"{case}: expected the full configured year",
+        )
+        require(
+            np.allclose(n.snapshot_weightings.to_numpy(), timing.to_numpy()[:, None]),
+            f"{case}: incorrect physical snapshot weights",
+        )
         spec = definitions[case]
         enabled = spec["energy_islands"]["enabled"]
         sector = n.meta.get("sector", {})
@@ -314,6 +339,7 @@ def check_networks(networks, config, *, solved=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config/config.bornholm.yaml")
+    parser.add_argument("--overlay", action="append", default=[])
     parser.add_argument("--solved", action="store_true")
     parser.add_argument(
         "--scenarios",
@@ -322,6 +348,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text())
+    for overlay in args.overlay:
+        update_config(config, yaml.safe_load(Path(overlay).read_text()))
     horizon = config["planning_horizons"][0]
     root, stage = ("results", "solved") if args.solved else ("resources", "composed")
     selected = args.scenarios or list(scenarios(config))
@@ -329,6 +357,8 @@ if __name__ == "__main__":
     if unknown:
         parser.error(f"Unknown scenarios: {sorted(unknown)}")
     selected = list(dict.fromkeys(["baseline", *selected]))
+    prefix = config["run"].get("prefix", "")
+    root = str(Path(root) / prefix)
     networks = {
         case: pypsa.Network(
             f"{root}/bornholm_zonal_{case}/networks/{stage}_{horizon}.nc"

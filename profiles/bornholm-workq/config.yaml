@@ -1,0 +1,13 @@
+# One DAG, independent rule jobs on multiple workq nodes. Existing Pixi plugin.
+executor: cluster-generic
+jobs: 8
+local-cores: 1
+max-threads: 4
+latency-wait: 120
+rerun-incomplete: true
+keep-going: true
+max-jobs-per-second: 2
+max-status-checks-per-second: 1
+cluster-generic-submit-cmd: python scripts/bornholm_workq_client.py submit
+cluster-generic-status-cmd: python scripts/bornholm_workq_client.py status
+cluster-generic-cancel-cmd: python scripts/bornholm_workq_client.py cancel

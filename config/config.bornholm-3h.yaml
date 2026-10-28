@@ -1,0 +1,45 @@
+# Layer after config.bornholm.yaml. All eight study scenarios, one common resolution.
+run:
+  prefix: bornholm_3h_s1_w2_o3
+  shared_resources:
+    # Native sharing of common preprocessing; composed networks remain per scenario.
+    policy: base
+    # Keep output/log wildcards aligned, including costs requested with a
+    # concrete year by compose_network's input function.
+    exclude: [temp_ambient_air_temporal_aggregate.nc, costs_]
+clustering:
+  temporal:
+    averaging: 3h
+    segmentation: false
+    representative: false
+renewable:
+  solar:
+    resource_classes: 1
+  solar-hsat:
+    resource_classes: 1
+  onwind:
+    resource_classes: 2
+  offwind-ac:
+    resource_classes: 3
+  offwind-dc:
+    resource_classes: 3
+  offwind-float:
+    resource_classes: 3
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-study-workq
+  solver_options:
+    gurobi-study-workq:
+      threads: 4
+      method: 2
+      crossover: 0
+      BarConvTol: 1.0e-5
+      Seed: 123
+      AggFill: 0
+      PreDual: 0
+      GURO_PAR_BARDENSETHRESH: 200
+      IISMethod: 1
+      TimeLimit: 72000
+      # The runner can lower this further using available physical RAM.
+      SoftMemLimit: 70

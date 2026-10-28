@@ -320,9 +320,9 @@ def test_bornholm_uses_native_weather_and_load_defaults():
 @pytest.mark.parametrize(
     "fault,message",
     [
-        ("wrong_weather_year", "full hourly year"),
+        ("wrong_weather_year", "full configured year"),
         ("baseline_hub", "Baseline contains the project hub"),
-        ("nonhourly", "full hourly year"),
+        ("nonhourly", "full configured year"),
         ("missing_copper", "missing shared-price connection"),
         ("double_cost", "double-counted investment"),
         ("stale_pipeline_config", "stale or inconsistent sector setting"),
