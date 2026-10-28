@@ -10,7 +10,10 @@ import pypsa
 import pytest
 import yaml
 
-from scripts.prepare_sector_network import add_h2_gas_infrastructure
+from scripts.prepare_sector_network import (
+    add_h2_gas_infrastructure,
+    gas_storage_minimum_capacities,
+)
 
 
 def test_simplified_run_inherits_native_gas_connectivity():
@@ -28,7 +31,10 @@ def test_simplified_run_inherits_native_gas_connectivity():
 
 
 @pytest.mark.parametrize("hydrogen", [False, True])
-def test_default_gas_candidates_keep_existing_pipes_fixed(tmp_path, hydrogen):
+@pytest.mark.parametrize("other_stores", [0, 102])
+def test_default_gas_candidates_keep_existing_pipes_fixed(
+    tmp_path, hydrogen, other_stores
+):
     options = yaml.safe_load(Path("config/config.default.yaml").read_text())["sector"]
     options.update(
         gas_network=True,
@@ -45,6 +51,12 @@ def test_default_gas_candidates_keep_existing_pipes_fixed(tmp_path, hydrogen):
     n = pypsa.Network()
     nodes = pd.Index(["DKE1", "DE00", "SE04"])
     n.add("Bus", nodes, carrier="AC", location=nodes, x=[12, 13, 14], y=[55, 54, 56])
+    n.add(
+        "Store",
+        [f"CO2 store {i}" for i in range(other_stores)],
+        bus="DKE1",
+        carrier="co2 stored",
+    )
     costs = pd.DataFrame(
         {"capital_cost": 1.0, "efficiency": 0.7, "lifetime": 30.0, "fuel": 20.0},
         index=[
@@ -71,7 +83,12 @@ def test_default_gas_candidates_keep_existing_pipes_fixed(tmp_path, hydrogen):
     pipes.to_csv(pipes_path)
     pd.DataFrame(columns=["salt"]).to_csv(caverns_path)
     inputs = pd.DataFrame(
-        {"lng": 0.0, "pipeline": 0.0, "production": 1000.0, "storage": 1.0},
+        {
+            "lng": 0.0,
+            "pipeline": 0.0,
+            "production": 1000.0,
+            "storage": [1.0, 10.0, 1000.0],
+        },
         index=nodes,
     )
     spatial = SimpleNamespace(
@@ -113,3 +130,27 @@ def test_default_gas_candidates_keep_existing_pipes_fixed(tmp_path, hydrogen):
     assert not n.generators.loc[
         n.generators.carrier.eq("gas"), "p_nom_extendable"
     ].any()
+    # The two CO2-store counts formerly produced different gas minimum bounds.
+    expected = pd.Series(
+        [1000.0, 10000.0, 960400.0], index=nodes + " gas Store", name="e_nom_min"
+    )
+    pd.testing.assert_series_equal(
+        n.stores.loc[expected.index, "e_nom_min"], expected, check_names=False
+    )
+
+
+def test_storage_clipping_keeps_zero_gas_nodes_and_maps_by_name():
+    inputs = pd.DataFrame({"storage": [1.0, 10.0, 1000.0]}, index=["A", "B", "C"])
+    index = pd.Index(["C gas Store", "absent gas Store", "A gas Store", "B gas Store"])
+    result = gas_storage_minimum_capacities(inputs, index)
+    pd.testing.assert_series_equal(
+        result, pd.Series([940600.0, 0.0, 1000.0, 10000.0], index=index, name="storage")
+    )
+
+
+@pytest.mark.parametrize("invalid", [-1.0, float("inf")])
+def test_storage_rejects_invalid_reported_capacity(invalid):
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        gas_storage_minimum_capacities(
+            pd.DataFrame({"storage": [invalid]}, index=["A"]), pd.Index(["A gas Store"])
+        )

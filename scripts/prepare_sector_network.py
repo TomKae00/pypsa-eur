@@ -1574,6 +1574,25 @@ def add_electricity_grid_connection(n, costs):
     n.generators.loc[gens, "capital_cost"] += costs.at[name, "capital_cost"]
 
 
+def gas_storage_minimum_capacities(gas_input_nodes, gas_stores):
+    """
+    Map reported GWh to MWh and clip over the modelled gas stores only.
+
+    Keep the native 98th-percentile rule, including zero-capacity gas nodes.
+    Unrelated CO2, hydrogen or heat stores must not change this threshold.
+    """
+    capacities = (
+        gas_input_nodes["storage"]
+        .rename(lambda x: x + " gas Store")
+        .reindex(gas_stores)
+        .fillna(0.0)
+        * 1e3
+    )
+    if not np.isfinite(capacities).all() or (capacities < 0).any():
+        raise ValueError("Gas storage inputs must be finite and non-negative")
+    return capacities.clip(upper=capacities.quantile(0.98))
+
+
 def add_h2_gas_infrastructure(
     n,
     costs,
@@ -1812,17 +1831,9 @@ def add_h2_gas_infrastructure(
 
         # add existing gas storage capacity
         gas_i = n.stores.carrier == "gas"
-        e_nom = (
-            gas_input_nodes["storage"]
-            .rename(lambda x: x + " gas Store")
-            .reindex(n.stores.index)
-            .fillna(0.0)
-            * 1e3
-        )  # MWh_LHV
-        e_nom.clip(
-            upper=e_nom.quantile(0.98), inplace=True
-        )  # limit extremely large storage
-        n.stores.loc[gas_i, "e_nom_min"] = e_nom
+        n.stores.loc[gas_i, "e_nom_min"] = gas_storage_minimum_capacities(
+            gas_input_nodes, n.stores.index[gas_i]
+        )
 
         # add candidates for new gas pipelines to achieve full connectivity
 

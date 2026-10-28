@@ -115,6 +115,22 @@ def check_networks(networks, config, *, solved=False):
             check_dtype=False,
             check_index_type=False,
         )
+        gas_stores = n.stores.index[n.stores.carrier.eq("gas")]
+        baseline_stores = baseline.stores.index[baseline.stores.carrier.eq("gas")]
+        storage_columns = [
+            "bus",
+            "e_nom_min",
+            "e_nom_max",
+            "e_nom_extendable",
+            "capital_cost",
+        ]
+        pd.testing.assert_frame_equal(
+            n.stores.loc[gas_stores, storage_columns].sort_index(),
+            baseline.stores.loc[baseline_stores, storage_columns].sort_index(),
+            check_dtype=False,
+            check_index_type=False,
+            obj=f"{case}: shared gas-storage inputs",
+        )
         grid_policy = spec.get("electricity", {}).get(
             "transmission_limit", config["electricity"]["transmission_limit"]
         )

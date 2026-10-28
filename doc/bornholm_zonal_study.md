@@ -431,3 +431,85 @@ The eight sector networks must be rebuilt with the restored native gas connectiv
 and corrected gas capacities, pass the updated comparison checker, and complete
 a diagnostic baseline solve before a new full-year pilot on Sophia. Existing
 geography and hydro corrections remain. No HPC job was submitted from this audit.
+
+### Gas-storage correction and short solver diagnostic
+
+Gas storage retains the native reported GWh-to-MWh conversion and 98th-percentile
+clipping rule, but the percentile now includes **only modelled gas stores**,
+including zero-capacity gas nodes. Previously the series was expanded to all
+stores first; adding or removing CO2/H2/heat stores changed the clipping threshold
+and hence mandatory gas-storage investments. This is a correction to the input
+calculation and changes the old baseline's bounds. Rebuild both original and
+simplified composed networks before comparing them. The comparison checks now
+reject mismatched gas-storage bounds and costs.
+
+The next run uses the **original baseline**, with existing capture options,
+spatial CO2, CO2 transport, methanation, all 52 bidding zones and all other baseline
+sector technologies retained. The previously corrected gas-capacity preprocessing
+and restored native connectivity candidates are included. Existing gas pipelines
+remain fixed. No emissions-budget relaxation, load shedding or invented imports
+are introduced.
+
+From the repository root on Sophia:
+
+```bash
+git pull --ff-only origin feature/bornholm-energy-island
+sbatch scripts/bornholm_diagnostic.sbatch all 24 barrier
+```
+
+This requests one exclusive workq node, four CPUs and four hours of walltime.
+It first backs up and rebuilds the gas inputs and original composed baseline using
+`scripts/bornholm_gas_capacity_rebuild.sbatch`, then runs a separate 24-hour solve
+with a one-hour Gurobi time limit. Barrier uses the native `gurobi-default` preset
+with four threads and the diagnostic time limit. The main full-year solver preset
+is unchanged. A failed rebuild prevents the solve.
+
+The diagnostic preserves one-hour physical storage chronology and power/energy
+capacity bounds. Annual flow budgets, generator energy quotas and capital costs
+are prorated by hours/8760. Annual non-sequestered HVC feedstock is also prorated,
+with mandatory depletion imposed at the diagnostic endpoint as in the native
+annual construction. Geological storage's flow limit is added by native
+`prepare_network` using the shortened horizon. Native supplementary constraints
+are added by `create_optimization_model`; a configured external constraint hook
+must exist and is not silently bypassed. This is a short-window feasibility and
+solver diagnostic, not an annual investment result. Cyclic stores cycle over the
+short window, so the test cannot establish seasonal or full-year feasibility.
+
+Preflight checks reject undefined buses, conflicting capacity bounds, zero-capacity
+existing gas pipelines, stale gas-storage bounds and stale sector flags. An
+optimistic annual max-flow check also tests a necessary condition for fixed direct
+and industrial gas demand: it deliberately relaxes upstream conversion inputs,
+competition for fuels and variable gas consumption for heat/power. In particular,
+unlimited methanation candidates are treated as unlimited supply in this check;
+passing it does not establish energy-system feasibility.
+
+Each submission writes a fresh directory under
+`results/bornholm_diagnostic/<job-id>_<hours>h_<method>/` containing `python.log`,
+`solver.log`, `input.nc`, `summary.json`, and, only after optimal termination,
+`solved.nc`. The summary records model size, elapsed time, process peak RSS, actual
+solver options, source-network hash and the external constraint hook's hash when
+present. Slurm accounting provides the job-wide memory observation. Failed
+preflight/solves leave a summary and return a failing exit code.
+
+After the first diagnostic passes, use the already rebuilt source for a week or
+a PDHG comparison; these are subsequent submissions, not automatically launched:
+
+```bash
+sbatch scripts/bornholm_diagnostic.sbatch solve 168 barrier
+sbatch scripts/bornholm_diagnostic.sbatch solve 24 pdhg
+```
+
+Do not infer full-year memory requirements or seasonal feasibility from an optimal
+24-hour result. No cluster job was submitted from this development environment.
+
+Development validation for this revision: 58 focused tests passed across the gas
+preprocessing, gas/storage integration, scenario comparison, diagnostic accounting,
+preflight and job-control suites. Two existing offshore weather integration cases
+were deselected. Native solve-rule parameter expansion was checked, including the
+resolved tracked `data/custom_extra_functionality.py` hook (a no-op in this
+checkout). Lint, formatting, shell syntax and diff-whitespace checks passed.
+Separately, a 24-hour smoke test of the supplied **old original** composed network
+built 168,242 variables and reached optimal termination with HiGHS in 100.94 solver
+seconds using the built-in sector constraints. This checks short-model
+construction; it is not a rebuild of the corrected source or a Gurobi/Sophia
+performance result.

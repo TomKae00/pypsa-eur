@@ -194,6 +194,15 @@ def comparison():
     n.add("Bus", "DK H2", carrier="H2", location="DKE1")
     n.add("Bus", ["DK gas", "DE gas"], carrier="gas", location=["DKE1", "DE00"])
     n.add(
+        "Store",
+        "DK gas Store",
+        bus="DK gas",
+        carrier="gas",
+        e_nom_extendable=True,
+        e_nom_min=1000,
+        capital_cost=10,
+    )
+    n.add(
         "Link",
         "existing gas",
         bus0="DK gas",
@@ -399,3 +408,10 @@ def test_comparison_accepts_different_gas_investment_results(comparison):
     networks["hybrid"].links.at["common gas candidate", "p_nom_opt"] = 200
     networks["open"].links.at["common gas candidate", "p_nom_opt"] = 300
     check_networks(networks, config)
+
+
+def test_comparison_rejects_changed_gas_storage_bounds(comparison):
+    networks, config = comparison
+    networks["hybrid"].stores.at["DK gas Store", "e_nom_min"] = 2000
+    with pytest.raises(AssertionError, match="shared gas-storage inputs"):
+        check_networks(networks, config)
