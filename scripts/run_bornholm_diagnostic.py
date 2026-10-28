@@ -13,7 +13,6 @@ import hashlib
 import json
 import logging
 import resource
-import subprocess
 import time
 from pathlib import Path
 
@@ -23,6 +22,7 @@ import pandas as pd
 import pypsa
 
 from scripts._helpers import mock_snakemake, set_scenario_config
+from scripts.bornholm_provenance import code_provenance
 from scripts.prepare_sector_network import gas_storage_minimum_capacities
 from scripts.solve_network import (
     collect_kwargs,
@@ -273,6 +273,7 @@ def main():
         "status": "failed",
     }
     try:
+        report.update(code_provenance())
         configfiles, run = variant_settings(args.variant)
         context = mock_snakemake(
             "solve_network",
@@ -288,9 +289,6 @@ def main():
         report["preflight"] = check_source(
             source, pd.read_csv(inputs_path, index_col=0), args.variant
         )
-        report["git_commit"] = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip()
         report["source"] = str(source_path)
         report["source_sha256"] = hashlib.sha256(source_path.read_bytes()).hexdigest()
         hook = context.params.custom_extra_functionality

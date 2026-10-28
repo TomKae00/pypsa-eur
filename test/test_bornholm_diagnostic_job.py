@@ -151,3 +151,41 @@ def test_build_stage_stops_before_solving(diagnostic_job, variant):
         assert not (root / "solve_args.json").exists()
     assert (root / "build_calls.txt").read_text().splitlines() == expected
     assert not (root / "results/bornholm_diagnostic").exists()
+
+
+def test_real_build_reaches_workflow_without_git_on_host(diagnostic_job):
+    import shutil
+
+    root, _, env = diagnostic_job
+    (root / "config").mkdir()
+    (root / "config/config.bornholm.yaml").touch()
+    shutil.copy("scripts/bornholm_provenance.py", root / "scripts")
+    # Keep the ordinary backup utilities, but remove Git from the batch PATH.
+    binary_dir = root / "bin"
+    binary_dir.mkdir()
+    for name in ["date", "mkdir", "cp"]:
+        (binary_dir / name).symlink_to(shutil.which(name))
+    wrapper = Path(env["PIXI_SOPHIA"])
+    wrapper.write_text(
+        f"#!{sys.executable}\nimport json,subprocess,sys\n"
+        'open("solve_args.json", "w").write(json.dumps(sys.argv[1:]))\n'
+        'if sys.argv[1:3] == ["run", "python"]:\n'
+        "    sys.exit(subprocess.call([sys.executable, *sys.argv[3:]]))\n"
+    )
+    script = Path("scripts/bornholm_gas_capacity_rebuild.sbatch").resolve()
+    result = subprocess.run(
+        [shutil.which("bash"), str(script), "build"],
+        env=env | {"PATH": str(binary_dir)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    (report_path,) = root.glob("gas_capacity_backup_*/code_provenance.json")
+    report = json.loads(report_path.read_text())
+    assert report["git_commit"] is None
+    assert "FileNotFoundError" in report["git_provenance_error"]
+    assert "scripts/bornholm_provenance.py" in report["code_files_sha256"]
+    assert json.loads((root / "solve_args.json").read_text())[:2] == [
+        "run",
+        "snakemake",
+    ]

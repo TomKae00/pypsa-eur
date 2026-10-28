@@ -38,8 +38,7 @@ target="resources/${name}/networks/composed_2035.nc"
 if [[ "$mode" == build ]]; then
   backup_dir="gas_capacity_backup_$(date +%Y%m%dT%H%M%S)_${SLURM_JOB_ID}_${variant}"
   mkdir -p "$backup_dir"
-  git rev-parse HEAD > "$backup_dir/git_head.txt"
-  git diff HEAD > "$backup_dir/code_changes.patch"
+  "$pixi_wrapper" run python -m scripts.bornholm_provenance --output-dir "$backup_dir"
   for item in "$target" \
       "resources/${name}/gas_network.csv" \
       "resources/${name}/gas_network_clustered.csv" \

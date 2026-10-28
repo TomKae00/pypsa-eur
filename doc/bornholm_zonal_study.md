@@ -570,3 +570,21 @@ Validation of the parallel submission path: all nine job-control tests passed,
 including stopping after build/input checks without launching a solver for either
 variant. Shell syntax, lint, formatting and whitespace checks passed. The native
 solver/model formulation is unchanged by this scheduling update.
+
+### Compute-node Git availability
+
+Sophia build job 4920111 stopped during backup bookkeeping with exit 127 because
+host `git` was absent from the batch PATH, before invoking the network workflow.
+Revision bookkeeping now runs through the existing Pixi wrapper. The new
+`scripts/bornholm_provenance.py` always hashes the scripts, workflow rules,
+configuration and environment manifests, and records a Git commit/diff only when
+Git is available. Missing/failing Git is recorded explicitly and does not stop a
+model job. The diagnostic solver also uses this helper so it cannot fail later
+on the same mandatory Git command. Model inputs, solver settings and dependencies
+are unchanged by this fix.
+
+Validation: 21 targeted provenance, diagnostic and job-control tests passed,
+including execution of the real build shell script with Git removed from its
+PATH and the provenance Python module running in the test runtime. The model
+workflow was mocked in that regression test; no Sophia rebuild was performed.
+Lint, formatting, shell syntax and whitespace checks passed.
