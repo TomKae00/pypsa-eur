@@ -17,8 +17,8 @@ hours="${2:-24}"
 method="${3:-barrier}"
 variant="${4:-original}"
 case "$stage" in
-  all|solve|dry-run) ;;
-  *) echo "Usage: sbatch scripts/bornholm_diagnostic.sbatch [all|solve|dry-run] [hours] [barrier|pdhg] [original|simplified]" >&2; exit 2 ;;
+  all|build|solve|dry-run) ;;
+  *) echo "Usage: sbatch scripts/bornholm_diagnostic.sbatch [all|build|solve|dry-run] [hours] [barrier|pdhg] [original|simplified]" >&2; exit 2 ;;
 esac
 [[ "$variant" == original || "$variant" == simplified ]] || { echo "Unknown baseline: $variant" >&2; exit 2; }
 [[ "$hours" =~ ^[0-9]+$ ]] && (( hours > 0 && hours < 8760 )) || { echo "Invalid hours: $hours" >&2; exit 2; }
@@ -37,7 +37,7 @@ if [[ "$stage" == dry-run ]]; then
   fi
   exit 0
 fi
-if [[ "$stage" == all ]]; then
+if [[ "$stage" == all || "$stage" == build ]]; then
   bash scripts/bornholm_gas_capacity_rebuild.sbatch build original
   if [[ "$variant" == simplified ]]; then
     bash scripts/bornholm_gas_capacity_rebuild.sbatch build simplified
@@ -45,6 +45,10 @@ if [[ "$stage" == all ]]; then
 fi
 if [[ "$variant" == simplified ]]; then
   "$pixi_wrapper" run python scripts/check_bornholm_simplified.py --stage composed
+fi
+if [[ "$stage" == build ]]; then
+  echo "Build and input checks complete. No solver was launched."
+  exit 0
 fi
 out="results/bornholm_diagnostic/${SLURM_JOB_ID}_${variant}_${hours}h_${method}"
 mkdir -p "$(dirname "$out")"

@@ -124,3 +124,30 @@ def test_real_rebuild_helper_uses_selected_resources(diagnostic_job, variant, ex
     assert ("config/config.bornholm-simplified.yaml" in args) == (
         variant == "simplified"
     )
+
+
+@pytest.mark.parametrize("variant", ["original", "simplified"])
+def test_build_stage_stops_before_solving(diagnostic_job, variant):
+    root, script, env = diagnostic_job
+    result = subprocess.run(
+        ["bash", str(script), "build", "24", "barrier", variant],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    expected = ["build original"]
+    if variant == "simplified":
+        expected.append("build simplified")
+        # This invocation only checks the composed pair, without optimisation.
+        assert json.loads((root / "solve_args.json").read_text()) == [
+            "run",
+            "python",
+            "scripts/check_bornholm_simplified.py",
+            "--stage",
+            "composed",
+        ]
+    else:
+        assert not (root / "solve_args.json").exists()
+    assert (root / "build_calls.txt").read_text().splitlines() == expected
+    assert not (root / "results/bornholm_diagnostic").exists()

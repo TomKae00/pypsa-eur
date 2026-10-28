@@ -532,23 +532,41 @@ before solving. Backup directories include the variant name. A simplified `solve
 submission checks the existing pair without rebuilding. Variant-specific
 preflight checks reject sources built for the wrong baseline.
 
-Submit the two diagnostics sequentially to avoid simultaneous Snakemake rebuilds
-or file changes while a diagnostic reads the composed networks:
+Prepare both sources in one build job, then submit two solve-only jobs with the
+same successful-build dependency. The two solves have no dependency on each other
+and can run in parallel on separate allocated nodes. Scheduler availability
+controls their actual start times. Each reads the prepared inputs and writes its
+own result directory; neither solve rebuilds the networks.
 
 ```bash
 git pull --ff-only origin feature/bornholm-energy-island
-reference_job=$(sbatch --parsable scripts/bornholm_diagnostic.sbatch all 24 barrier original)
-sbatch --dependency=afterany:"$reference_job" scripts/bornholm_diagnostic.sbatch all 24 barrier simplified
+build_job=$(sbatch --parsable scripts/bornholm_diagnostic.sbatch build 24 barrier simplified)
+sbatch --dependency=afterok:"$build_job" scripts/bornholm_diagnostic.sbatch solve 24 barrier original
+sbatch --dependency=afterok:"$build_job" scripts/bornholm_diagnostic.sbatch solve 24 barrier simplified
 ```
 
-The second job runs after the reference job terminates, including a failed solve;
-it independently rebuilds and validates its inputs. This allows both solver
-outcomes to be collected. Each job has its own four-hour allocation and one-hour
-solver limit. Existing commands without the fourth argument still select the
-original baseline. Neither job was submitted from development.
+Here `build ... simplified` prepares both the reference and simplified networks
+and checks shared inputs, then exits without launching a solver. A failed build
+or input comparison prevents both dependent solves from starting. Do not launch
+another rebuilding job while either solve is reading the composed sources.
+Each job has its own four-hour allocation; each solve has a one-hour solver limit.
+Existing commands without the fourth argument still select the original
+baseline. Neither job was submitted from development.
+
+The `24` argument denotes 24 modelled hourly snapshots (the first day of the source
+year), not a 24-hour job duration. `barrier` selects Gurobi's interior-point solver
+(Method=2), rather than the Bornholm PDHG preset (Method=6). The model retains the
+selected variant's technology set, with annual input accounting prorated as
+specified above. This diagnostic tests feasibility and solver progress before
+longer chronological/full-year tests.
 
 Validation of paired selection: 24 targeted diagnostic, job-control and gas/storage
 tests passed. Native solve-rule expansion selected the correct source network and
 CO2/methanation flags for each variant; DAC and SMR with capture remained true in
 both. Shell syntax, lint, format and whitespace checks passed. No full-year build
 or solver performance claim is made by these checks.
+
+Validation of the parallel submission path: all nine job-control tests passed,
+including stopping after build/input checks without launching a solver for either
+variant. Shell syntax, lint, formatting and whitespace checks passed. The native
+solver/model formulation is unchanged by this scheduling update.
