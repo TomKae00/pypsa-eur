@@ -443,7 +443,7 @@ calculation and changes the old baseline's bounds. Rebuild both original and
 simplified composed networks before comparing them. The comparison checks now
 reject mismatched gas-storage bounds and costs.
 
-The next run uses the **original baseline**, with existing capture options,
+The default diagnostic uses the **original baseline**, with existing capture options,
 spatial CO2, CO2 transport, methanation, all 52 bidding zones and all other baseline
 sector technologies retained. The previously corrected gas-capacity preprocessing
 and restored native connectivity candidates are included. Existing gas pipelines
@@ -484,7 +484,7 @@ unlimited methanation candidates are treated as unlimited supply in this check;
 passing it does not establish energy-system feasibility.
 
 Each submission writes a fresh directory under
-`results/bornholm_diagnostic/<job-id>_<hours>h_<method>/` containing `python.log`,
+`results/bornholm_diagnostic/<job-id>_<variant>_<hours>h_<method>/` containing `python.log`,
 `solver.log`, `input.nc`, `summary.json`, and, only after optimal termination,
 `solved.nc`. The summary records model size, elapsed time, process peak RSS, actual
 solver options, source-network hash and the external constraint hook's hash when
@@ -513,3 +513,42 @@ built 168,242 variables and reached optimal termination with HiGHS in 100.94 sol
 seconds using the built-in sector constraints. This checks short-model
 construction; it is not a rebuild of the corrected source or a Gurobi/Sophia
 performance result.
+
+
+### Paired original and simplified diagnostics
+
+The diagnostic now accepts a fourth submission argument, `original` (default) or
+`simplified`. The latter applies the existing
+`config/config.bornholm-simplified.yaml` overlay, including pooled CO2, no CO2
+network, no methanation, no hydrogen fuel cells and no solar thermal. DAC and SMR
+with capture remain enabled in both. Both keep 52 electricity zones and the same
+24-hour window, annual accounting adjustments, solver preset and time limit.
+The simplified formulation is an alternative assumption; pooled CO2 also changes
+the industrial capture electricity representation in this code revision.
+
+A simplified `all` submission rebuilds the original reference and the simplified
+network with corrected gas inputs, then runs the shared-input comparison checker
+before solving. Backup directories include the variant name. A simplified `solve`
+submission checks the existing pair without rebuilding. Variant-specific
+preflight checks reject sources built for the wrong baseline.
+
+Submit the two diagnostics sequentially to avoid simultaneous Snakemake rebuilds
+or file changes while a diagnostic reads the composed networks:
+
+```bash
+git pull --ff-only origin feature/bornholm-energy-island
+reference_job=$(sbatch --parsable scripts/bornholm_diagnostic.sbatch all 24 barrier original)
+sbatch --dependency=afterany:"$reference_job" scripts/bornholm_diagnostic.sbatch all 24 barrier simplified
+```
+
+The second job runs after the reference job terminates, including a failed solve;
+it independently rebuilds and validates its inputs. This allows both solver
+outcomes to be collected. Each job has its own four-hour allocation and one-hour
+solver limit. Existing commands without the fourth argument still select the
+original baseline. Neither job was submitted from development.
+
+Validation of paired selection: 24 targeted diagnostic, job-control and gas/storage
+tests passed. Native solve-rule expansion selected the correct source network and
+CO2/methanation flags for each variant; DAC and SMR with capture remained true in
+both. Shell syntax, lint, format and whitespace checks passed. No full-year build
+or solver performance claim is made by these checks.

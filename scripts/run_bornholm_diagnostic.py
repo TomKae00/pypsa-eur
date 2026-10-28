@@ -33,6 +33,16 @@ from scripts.solve_network import (
 logger = logging.getLogger(__name__)
 
 
+def variant_settings(variant):
+    require(variant in ("original", "simplified"), f"Unknown baseline: {variant}")
+    configs = ["config/config.bornholm.yaml"]
+    run = "bornholm_zonal_baseline"
+    if variant == "simplified":
+        configs.append("config/config.bornholm-simplified.yaml")
+        run = "bornholm_simplified_baseline"
+    return configs, run
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -108,7 +118,8 @@ def annual_gas_supply_check(n):
     }
 
 
-def check_source(n, gas_inputs):
+def check_source(n, gas_inputs, variant="original"):
+    variant_settings(variant)
     require(
         len(n.snapshots) == 8760, "Diagnostic requires the rebuilt full-year source"
     )
@@ -120,14 +131,26 @@ def check_source(n, gas_inputs):
     require(
         n.buses.carrier.eq("AC").sum() == 52, "Expected 52 electricity bidding zones"
     )
-    for key, expected in {
+    settings = {
         "gas_network": True,
         "gas_network_connectivity_upgrade": 1,
         "H2_network": False,
         "H2_retrofit": False,
-        "co2_spatial": True,
-        "co2_network": True,
-    }.items():
+        "co2_spatial": variant == "original",
+        "co2_network": variant == "original",
+    }
+    if variant == "simplified":
+        settings.update(
+            methanation=False, hydrogen_fuel_cell=False, solar_thermal=False
+        )
+        require(
+            n.meta.get("sector", {})
+            .get("regional_co2_sequestration_potential", {})
+            .get("enable")
+            is False,
+            "Simplified source must disable regional CO2 sequestration potential",
+        )
+    for key, expected in settings.items():
         require(
             n.meta.get("sector", {}).get(key) == expected,
             f"Stale source setting sector.{key}; rebuild baseline",
@@ -220,6 +243,9 @@ def short_network(source, hours, start=0):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--variant", choices=["original", "simplified"], default="original"
+    )
     parser.add_argument("--hours", type=int, default=24)
     parser.add_argument(
         "--start", type=int, default=0, help="Hourly offset into source year"
@@ -247,10 +273,11 @@ def main():
         "status": "failed",
     }
     try:
+        configfiles, run = variant_settings(args.variant)
         context = mock_snakemake(
             "solve_network",
-            configfiles="config/config.bornholm.yaml",
-            run="bornholm_zonal_baseline",
+            configfiles=configfiles,
+            run=run,
             horizon="2035",
         )
         set_scenario_config(context)
@@ -259,7 +286,7 @@ def main():
         source = pypsa.Network(source_path)
         inputs_path = source_path.parent.parent / "gas_input_locations_simplified.csv"
         report["preflight"] = check_source(
-            source, pd.read_csv(inputs_path, index_col=0)
+            source, pd.read_csv(inputs_path, index_col=0), args.variant
         )
         report["git_commit"] = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], text=True

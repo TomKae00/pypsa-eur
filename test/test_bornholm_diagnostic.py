@@ -204,3 +204,33 @@ def test_preflight_rejects_bad_source(fault, message):
         n.stores.at["A gas Store", "e_nom_max"] = 0
     with pytest.raises(ValueError, match=message):
         check_source(n, gas_inputs)
+
+
+def test_simplified_preflight_accepts_only_simplified_flags():
+    from scripts.run_bornholm_diagnostic import check_source, variant_settings
+
+    n, inputs = preflight_source()
+    with pytest.raises(ValueError, match="Simplified source"):
+        check_source(n, inputs, "simplified")
+    n.meta["sector"].update(
+        co2_spatial=False,
+        co2_network=False,
+        methanation=False,
+        hydrogen_fuel_cell=False,
+        solar_thermal=False,
+        regional_co2_sequestration_potential={"enable": False},
+    )
+    assert (
+        check_source(n, inputs, "simplified")["annual_gas_check"][
+            "optimistic_supply_shortfall_TWh"
+        ]
+        == 0
+    )
+    with pytest.raises(ValueError, match="co2_spatial"):
+        check_source(n, inputs, "original")
+    configs, run = variant_settings("simplified")
+    assert configs == [
+        "config/config.bornholm.yaml",
+        "config/config.bornholm-simplified.yaml",
+    ]
+    assert run == "bornholm_simplified_baseline"

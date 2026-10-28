@@ -14,7 +14,7 @@ import pytest
 def diagnostic_job(tmp_path):
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/bornholm_gas_capacity_rebuild.sbatch").write_text(
-        '#!/bin/bash\nprintf "%s\\n" "$1" > build_stage.txt\nexit "${MOCK_BUILD_EXIT:-0}"\n'
+        '#!/bin/bash\nprintf "%s\\n" "$1" > build_stage.txt\nprintf "%s\\n" "$*" >> build_calls.txt\nexit "${MOCK_BUILD_EXIT:-0}"\n'
     )
     wrapper = tmp_path / "pixi-mock"
     wrapper.write_text(
@@ -76,3 +76,51 @@ def test_diagnostic_dry_run_does_not_solve(diagnostic_job):
     )
     assert (root / "build_stage.txt").read_text().strip() == "dry-run"
     assert not (root / "solve_args.json").exists()
+
+
+def test_simplified_rebuilds_both_sources_and_selects_overlay(diagnostic_job):
+    root, script, env = diagnostic_job
+    result = subprocess.run(
+        ["bash", str(script), "all", "24", "barrier", "simplified"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (root / "build_calls.txt").read_text().splitlines() == [
+        "build original",
+        "build simplified",
+    ]
+    args = json.loads((root / "solve_args.json").read_text())
+    assert args[args.index("--variant") + 1] == "simplified"
+    assert args[args.index("--output-dir") + 1].endswith(
+        "test-job_simplified_24h_barrier"
+    )
+
+
+@pytest.mark.parametrize(
+    "variant, expected",
+    [
+        ("original", "bornholm_zonal_baseline"),
+        ("simplified", "bornholm_simplified_baseline"),
+    ],
+)
+def test_real_rebuild_helper_uses_selected_resources(diagnostic_job, variant, expected):
+    root, _, env = diagnostic_job
+    (root / "config").mkdir()
+    (root / "config/config.bornholm.yaml").touch()
+    (root / "config/config.bornholm-simplified.yaml").touch()
+    script = Path("scripts/bornholm_gas_capacity_rebuild.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script), "dry-run", variant],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    args = json.loads((root / "solve_args.json").read_text())
+    assert args[:2] == ["run", "snakemake"]
+    assert args[-1] == f"resources/{expected}/networks/composed_2035.nc"
+    assert ("config/config.bornholm-simplified.yaml" in args) == (
+        variant == "simplified"
+    )
