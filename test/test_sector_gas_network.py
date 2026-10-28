@@ -13,12 +13,25 @@ import yaml
 from scripts.prepare_sector_network import add_h2_gas_infrastructure
 
 
-@pytest.mark.parametrize("connectivity,hydrogen", [(0, False), (1, False), (0, True)])
-def test_pipeline_candidates_are_optional(tmp_path, connectivity, hydrogen):
+def test_simplified_run_inherits_native_gas_connectivity():
+    defaults = yaml.safe_load(Path("config/config.default.yaml").read_text())["sector"]
+    base = yaml.safe_load(Path("config/config.bornholm.yaml").read_text())["sector"]
+    simplified = yaml.safe_load(
+        Path("config/config.bornholm-simplified.yaml").read_text()
+    )["sector"]
+    effective = {**defaults, **base, **simplified}
+    assert (
+        effective["gas_network_connectivity_upgrade"]
+        == defaults["gas_network_connectivity_upgrade"]
+        == 1
+    )
+
+
+@pytest.mark.parametrize("hydrogen", [False, True])
+def test_default_gas_candidates_keep_existing_pipes_fixed(tmp_path, hydrogen):
     options = yaml.safe_load(Path("config/config.default.yaml").read_text())["sector"]
     options.update(
         gas_network=True,
-        gas_network_connectivity_upgrade=connectivity,
         H2_network=hydrogen,
         H2_retrofit=False,
         hydrogen_fuel_cell=False,
@@ -83,11 +96,16 @@ def test_pipeline_candidates_are_optional(tmp_path, connectivity, hydrogen):
     assert existing.bus0 == "DKE1 gas" and existing.bus1 == "DE00 gas"
     assert existing.p_min_pu == -1
     new_gas = n.links[n.links.carrier.eq("gas pipeline new")]
-    assert len(new_gas) == connectivity
+    assert len(new_gas) == 1
     assert new_gas.p_nom_extendable.all()
+    # The already connected 5 GW corridor is not offered as a reinforcement.
+    assert not (
+        new_gas.bus0.isin(["DKE1 gas", "DE00 gas"])
+        & new_gas.bus1.isin(["DKE1 gas", "DE00 gas"])
+    ).any()
     assert n.links.carrier.eq("H2 pipeline").any() == hydrogen
     assert not n.links.carrier.eq("H2 pipeline retrofitted").any()
-    # Disabling pipelines must not remove regional hydrogen or conversion/storage.
+    # Disabling H2 pipelines retains regional hydrogen conversion and storage.
     assert n.buses[n.buses.carrier.eq("gas")].location.tolist() == list(nodes)
     assert n.buses[n.buses.carrier.eq("H2")].location.tolist() == list(nodes)
     assert n.links.loc[n.links.carrier.eq("H2 Electrolysis"), "p_nom_extendable"].all()

@@ -15,11 +15,11 @@ is retained for debugging; it is not the analysis run.
 | Weather input | Native archived `europe-2013-sarah3-era5` cutout (SARAH-3/ERA5) |
 | Electricity-load profile year | Native `load.fixed_year: false`, using the snapshot year (2013) |
 | Sector demand base year | Native 2023 energy totals; native 2035 technology and end-use assumptions |
-| Sectors | Electricity, heating, transport, industry, biomass, shipping, aviation, agriculture, hydrogen and gas infrastructure |
+| Sectors | Electricity, heating, transport, industry, biomass, agriculture, hydrogen and gas infrastructure; shipping and aviation disabled in the current performance configuration |
 | CO2 constraint | Native relative budget: 25% of the configured 1990 reference emissions, covering the enabled sectors |
 | Main electricity grid | Native OSM 0.7 plus the covered TYNDP 2026 project subset for 2035; fixed background (`vfixed`) |
 | Grid benchmarks | The same installed planned assets, with native further reinforcement (`vopt`) |
-| Gas / hydrogen transmission | Existing gas pipelines fixed; no new gas pipelines or hydrogen pipelines/retrofits, in all eight cases |
+| Gas / hydrogen transmission | Existing gas pipelines fixed; native gas connectivity candidates enabled; hydrogen pipelines/retrofits disabled, in all eight cases |
 | Losses | Native sector DC and distribution losses; AC loss approximation disabled |
 | Renewable resource classes | Three for onshore wind, offshore AC/DC wind and solar |
 | Project counterfactual | Project site reserved from generic offshore development in every case |
@@ -46,37 +46,43 @@ not inferred from `n_clusters` (which is not a target in administrative mode).
 
 ### Common pipeline assumption
 
-The Bornholm configuration uses the existing sector switches:
+The Bornholm configuration retains the native natural-gas connectivity default:
 
 ```yaml
 sector:
   gas_network: true
-  gas_network_connectivity_upgrade: 0
+  gas_network_connectivity_upgrade: 1
   H2_network: false
   H2_retrofit: false
 ```
 
-`gas_network: true` retains regional gas balances, the existing gas pipelines
-and native supply entry points. With `H2_retrofit: false`, existing pipelines
-are already fixed by native PyPSA-Eur. Setting connectivity upgrades to zero
-also suppresses the additional candidate pipelines otherwise used to connect
-isolated regions. The implementation now skips the NetworkX augmentation call
-for zero, which that function does not itself accept.
+`gas_network: true` retains regional gas balances, existing pipelines and native
+supply entry points. With `H2_retrofit: false`, existing pipeline capacities stay
+fixed by native PyPSA-Eur. Connectivity level 1 generates additional investment
+candidates to connect disconnected parts of the gas graph. Their capacities are
+endogenous and carry the native investment costs. The candidate graph only counts
+existing connections above 1,500 MW; a weaker existing corridor may therefore be
+offered an additional candidate. This does not enable general reinforcement of
+already connected, larger corridors.
 
-`H2_network: false` removes interregional hydrogen pipelines; it does not disable
-regional hydrogen production, consumption or storage. There is no separate
-committed 2035 hydrogen-backbone dataset in this study, so this is a **no hydrogen
-pipeline network** assumption, not a fixed planned 2035 hydrogen network. Gas
-and hydrogen storage, conversion, heat supply and other local sector investments
-retain their native flexibility. Hydropower is not disabled by these switches.
+The former Bornholm override of zero and its custom NetworkX guard have been
+reverted. All eight cases share existing pipeline inputs and the same candidate
+set and investment costs. Optimal new-gas investments may differ across cases.
+Previously composed networks recording connectivity zero are stale and must be
+rebuilt before solving or comparing cases.
 
-This is a controlled infrastructure assumption for assessing Bornholm, not a
-necessary consequence of fixing electricity transmission. It applies equally
-to both `vopt` benchmarks so their comparison isolates electricity-grid
-reinforcement. Disconnected gas regions may consequently be unable to use gas;
-the model must meet their demands through the remaining technologies. Check
-feasibility in the rebuilt baseline. Disabling pipeline investment does not
-establish that the full hourly sector solve will fit on a smaller HPC node.
+`H2_network: false` still removes interregional hydrogen pipeline candidates;
+regional hydrogen production, consumption and storage remain available.
+`H2_retrofit: false` is already the upstream default. The hydrogen-network
+restriction is a separate study assumption and is not required to keep existing
+methane pipelines fixed.
+
+The gas-data preprocessing correction preserves accepted source capacities and
+lengths when applying selective replacements. Previously, accepted values became
+NaN and clustering could sum missing capacities to zero. In the configured
+SciGRID 1.1.2 dataset, the HU-RS source segment retains about 5,465 MW after this
+correction. Restoring connectivity candidates does not replace correcting the
+existing pipeline inputs. Rebuild gas-dependent resources before another solve.
 
 ### Shared geography and reservoir corrections
 
@@ -107,7 +113,7 @@ full `build` stage before any `solve`, so the changed base-network script and it
 explicit bidding-zone input rebuild dependent regions, plants and networks.
 Existing retrieved datasets and unchanged weather cutouts can be reused. The
 comparison checker rejects the old pipeline settings and checks that every case
-retains the same fixed gas network with no gas or hydrogen pipeline candidates.
+retains the same existing gas network and native gas candidate inputs, with no hydrogen pipeline candidates.
 
 ### Scenario comparisons
 
@@ -421,6 +427,7 @@ A check using the available native zone polygons and Swedish plant coordinates
 assigns Ringhals 3/4 and Oskarshamn 3 to SE03 and keeps Forsmark 1/2/3 in SE03.
 This checks the mapping method, not a completed 2035 network rebuild.
 
-The eight sector networks must now be rebuilt with these pipeline, geography
-and hydro corrections, pass the comparison checker, and complete a new baseline
-pilot on Sophia. No new HPC build or solve was submitted for this revision.
+The eight sector networks must be rebuilt with the restored native gas connectivity
+and corrected gas capacities, pass the updated comparison checker, and complete
+a diagnostic baseline solve before a new full-year pilot on Sophia. Existing
+geography and hydro corrections remain. No HPC job was submitted from this audit.

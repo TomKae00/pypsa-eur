@@ -1838,15 +1838,14 @@ def add_h2_gas_infrastructure(
         # find all complement edges
         complement_edges = pd.DataFrame(complement(G).edges, columns=["bus0", "bus1"])
 
-        # Zero disables candidates while retaining existing regional gas assets.
-        # NetworkX requires positive k, so do not call it for this configuration.
-        k_edge = options["gas_network_connectivity_upgrade"]
-        if k_edge != 0 and len(complement_edges) > 0:
+        # check if network is already fully connected and only add new pipelines if not
+        if len(complement_edges) > 0:
             complement_edges["length"] = complement_edges.apply(
                 haversine, axis=1, args=(n,)
             )
 
             # apply k_edge_augmentation weighted by length of complement edges
+            k_edge = options["gas_network_connectivity_upgrade"]
             if augmentation := list(
                 k_edge_augmentation(G, k_edge, avail=complement_edges.values)
             ):

@@ -203,6 +203,17 @@ def comparison():
         p_min_pu=-1,
         length=200,
     )
+    n.add(
+        "Link",
+        "common gas candidate",
+        bus0="DK gas",
+        bus1="DE gas",
+        carrier="gas pipeline new",
+        p_nom_extendable=True,
+        p_min_pu=-1,
+        length=200,
+        capital_cost=100,
+    )
     n.add("Load", "heat service", bus="DK heat", p_set=100)
     n.add(
         "Link",
@@ -290,6 +301,11 @@ def test_bornholm_uses_native_weather_and_load_defaults():
         == defaults["energy"]["energy_totals_year"]
     )
     assert config["planning_horizons"] == [2035]
+    assert (
+        config["sector"]["gas_network_connectivity_upgrade"]
+        == defaults["sector"]["gas_network_connectivity_upgrade"]
+        == 1
+    )
 
 
 @pytest.mark.parametrize(
@@ -301,8 +317,10 @@ def test_bornholm_uses_native_weather_and_load_defaults():
         ("missing_copper", "missing shared-price connection"),
         ("double_cost", "double-counted investment"),
         ("stale_pipeline_config", "stale or inconsistent sector setting"),
+        ("stale_gas_connectivity", "stale or inconsistent sector setting"),
         ("expandable_gas", "existing gas pipelines are expandable"),
-        ("new_gas", "new gas pipeline candidates are present"),
+        ("new_gas", "gas pipeline candidate set differs"),
+        ("fixed_gas_candidate", "gas pipeline candidates are not expandable"),
         ("new_hydrogen", "hydrogen pipelines are present"),
         ("retrofitted_hydrogen", "hydrogen pipelines are present"),
     ],
@@ -324,8 +342,12 @@ def test_comparison_rejects_invalid_runs(comparison, fault, message):
         networks["hybrid"].links.at["BEI_TO_DE-reversed", "capital_cost"] = 200
     elif fault == "stale_pipeline_config":
         networks["hybrid"].meta["sector"]["H2_network"] = True
+    elif fault == "stale_gas_connectivity":
+        networks["hybrid"].meta["sector"]["gas_network_connectivity_upgrade"] = 0
     elif fault == "expandable_gas":
         networks["hybrid"].links.at["existing gas", "p_nom_extendable"] = True
+    elif fault == "fixed_gas_candidate":
+        networks["hybrid"].links.at["common gas candidate", "p_nom_extendable"] = False
     elif fault in {"new_gas", "new_hydrogen", "retrofitted_hydrogen"}:
         carrier = {
             "new_gas": "gas pipeline new",
@@ -363,3 +385,17 @@ def test_comparison_rejects_changed_background_gas_capacity(comparison):
     networks["open_expandable"].links.at["existing gas", "p_nom"] = 10000
     with pytest.raises(AssertionError):
         check_networks(networks, config)
+
+
+def test_comparison_rejects_changed_gas_candidate_cost(comparison):
+    networks, config = comparison
+    networks["hybrid"].links.at["common gas candidate", "capital_cost"] = 200
+    with pytest.raises(AssertionError):
+        check_networks(networks, config)
+
+
+def test_comparison_accepts_different_gas_investment_results(comparison):
+    networks, config = comparison
+    networks["hybrid"].links.at["common gas candidate", "p_nom_opt"] = 200
+    networks["open"].links.at["common gas candidate", "p_nom_opt"] = 300
+    check_networks(networks, config)

@@ -55,7 +55,7 @@ def check_networks(networks, config, *, solved=False):
         sector = n.meta.get("sector", {})
         for key, value in {
             "gas_network": True,
-            "gas_network_connectivity_upgrade": 0,
+            "gas_network_connectivity_upgrade": 1,
             "H2_network": False,
             "H2_retrofit": False,
         }.items():
@@ -68,9 +68,38 @@ def check_networks(networks, config, *, solved=False):
             not n.links.loc[gas_pipes, "p_nom_extendable"].any(),
             f"{case}: existing gas pipelines are expandable",
         )
+        gas_candidates = n.links.index[n.links.carrier.eq("gas pipeline new")]
+        baseline_candidates = baseline.links.index[
+            baseline.links.carrier.eq("gas pipeline new")
+        ]
         require(
-            not n.links.carrier.eq("gas pipeline new").any(),
-            f"{case}: new gas pipeline candidates are present",
+            gas_candidates.sort_values().equals(baseline_candidates.sort_values()),
+            f"{case}: gas pipeline candidate set differs from baseline",
+        )
+        require(
+            n.links.loc[gas_candidates, "p_nom_extendable"].all(),
+            f"{case}: gas pipeline candidates are not expandable",
+        )
+        # Candidate inputs are shared; realised investments may differ after solving.
+        candidate_columns = [
+            "bus0",
+            "bus1",
+            "p_nom",
+            "p_nom_min",
+            "p_nom_max",
+            "p_nom_extendable",
+            "p_min_pu",
+            "p_max_pu",
+            "efficiency",
+            "length",
+            "capital_cost",
+            "lifetime",
+        ]
+        pd.testing.assert_frame_equal(
+            n.links.loc[gas_candidates, candidate_columns].sort_index(),
+            baseline.links.loc[baseline_candidates, candidate_columns].sort_index(),
+            check_dtype=False,
+            check_index_type=False,
         )
         require(
             not n.links.carrier.str.startswith("H2 pipeline").any(),

@@ -56,6 +56,7 @@ def main():
         "hydrogen_turbine": True,
         "tes": True,
         "gas_network": True,
+        "gas_network_connectivity_upgrade": 1,
         "H2_network": False,
         "H2_retrofit": False,
     }
