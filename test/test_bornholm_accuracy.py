@@ -50,6 +50,13 @@ def context():
     )
 
 
+def profile_settings(profile, default_focus=1):
+    spec = accuracy.PROFILES[profile] if profile else {}
+    return spec.get("NumericFocus", 1 if profile else default_focus), spec.get(
+        "threads", 8
+    )
+
+
 def test_pair_changes_only_focus_and_uses_independent_outputs(tmp_path):
     first, second = context(), context()
     options = [
@@ -67,8 +74,8 @@ def test_pair_changes_only_focus_and_uses_independent_outputs(tmp_path):
 
 
 def test_invalid_thread_count_rejected(tmp_path):
-    with pytest.raises(ValueError, match="eight threads"):
-        accuracy.configure_context(context(), tmp_path, 0, 16)
+    with pytest.raises(ValueError, match="eight or 16 threads"):
+        accuracy.configure_context(context(), tmp_path, 0, 4)
 
 
 def test_effective_options_survive_real_snakemake_params_access(tmp_path):
@@ -205,7 +212,10 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
         e_cyclic=True,
         capital_cost=0.1,
     )
-    options = accuracy.configure_context(context(), tmp_path, 1, 8, profile=profile)
+    focus, threads = profile_settings(profile)
+    options = accuracy.configure_context(
+        context(), tmp_path, focus, threads, profile=profile
+    )
     status, condition = n.optimize(solver_name="gurobi", **options)
     assert str(condition) == "optimal"
     n.export_to_netcdf(tmp_path / "candidate.nc")
@@ -213,7 +223,7 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
     assert q["values"]["ObjVal"] == pytest.approx(n.objective)
     assert np.isfinite(q["values"]["MaxMemUsed"])
     assert accuracy.coal_check(n)["same_dispatch_avoidable_cost_eur"] < 1
-    if profile == "nf1_crossover":
+    if options["crossover"] != 0:
         # A poor earlier log row must not reject a clean final basic solution.
         assert (
             accuracy.accuracy_issues(
@@ -292,7 +302,9 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         assert init_globals["snakemake"] is ctx
         assert ctx.params.solving["solver_options"]["test"]["SoftMemLimit"] == 90
         # Simulate a poor pre-cleanup barrier row for the crossover profile.
-        gap = 200e6 if profile == "nf1_crossover" else 0
+        gap = (
+            200e6 if accuracy.PROFILES.get(profile, {}).get("crossover", 0) != 0 else 0
+        )
         Path(ctx.log.solver).write_text(f"9 {123 + gap:.8e} 1.23000000e+02 0 0 0 1s\n")
         if native_failure:
             exec(
@@ -307,9 +319,9 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         return {"n": n}
 
     monkeypatch.setattr(accuracy.runpy, "run_path", native)
-    focus = 1 if profile else 0
+    focus, threads = profile_settings(profile, default_focus=0)
     if passes:
-        accuracy.solve(focus, 8, directory, profile=profile)
+        accuracy.solve(focus, threads, directory, profile=profile)
     else:
         exception, match = (
             (RuntimeError, "Discarding solution")
@@ -317,7 +329,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
             else (ValueError, "needs review")
         )
         with pytest.raises(exception, match=match):
-            accuracy.solve(focus, 8, directory, profile=profile)
+            accuracy.solve(focus, threads, directory, profile=profile)
     report = json.loads((directory / "summary.json").read_text())
     assert report["status"] == ("checks_passed" if passes else "failed")
     assert (directory / "candidate_2035.nc").exists() == (
@@ -327,16 +339,18 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     if native_failure:
         assert report["solver_quality"]["values"]["Status"] == 13
         assert report["native_termination_condition"] == "suboptimal"
-        expected_gap = 200e6 if profile == "nf1_crossover" else 0
+        expected_gap = (
+            200e6 if accuracy.PROFILES.get(profile, {}).get("crossover", 0) != 0 else 0
+        )
         assert report["barrier_final"]["displayed_separation_eur"] == expected_gap
-    if profile == "nf1_crossover":
+    if accuracy.PROFILES.get(profile, {}).get("crossover", 0) != 0:
         assert (
             report["screening_basis"] == "returned_solution_quality_crossover_enabled"
         )
     assert previous.read_text() == "previous completed solution"
     assert original.read_text() == "unchanged source"
     with pytest.raises(FileExistsError):
-        accuracy.solve(focus, 8, directory, profile=profile)
+        accuracy.solve(focus, threads, directory, profile=profile)
 
 
 @pytest.mark.parametrize(
@@ -369,7 +383,7 @@ def test_sweep_changes_one_setting_and_preserves_physical_inputs(
 
 
 def test_profile_focus_mismatch_rejected(tmp_path):
-    with pytest.raises(ValueError, match="require NumericFocus=1"):
+    with pytest.raises(ValueError, match="NumericFocus does not match profile"):
         accuracy.configure_context(context(), tmp_path, 2, 8, profile="nf1")
 
 
@@ -388,14 +402,17 @@ def test_sweep_options_survive_real_snakemake_params_access(tmp_path, profile):
         "solve_network",
         None,
     )
-    options = accuracy.configure_context(native, tmp_path, 1, 8, profile=profile)
+    focus, threads = profile_settings(profile)
+    options = accuracy.configure_context(
+        native, tmp_path, focus, threads, profile=profile
+    )
     assert native.params.solving["solver_options"]["test"] == options
     for key, value in accuracy.PROFILES[profile].items():
         if key != "label":
             assert native.params.solving["solver_options"]["test"][key] == value
 
 
-@pytest.mark.parametrize("task,profile", list(enumerate(accuracy.PROFILES)))
+@pytest.mark.parametrize("task,profile", list(enumerate(accuracy.ORIGINAL_SWEEP)))
 def test_sweep_array_handoff(tmp_path, task, profile):
     wrapper = tmp_path / "pixi-sophia"
     wrapper.write_text(
@@ -454,8 +471,9 @@ def test_compare_sweep_reports_options_failures_and_common_input(tmp_path, capsy
     for index, (profile, spec) in enumerate(accuracy.PROFILES.items()):
         directory = tmp_path / spec["label"]
         directory.mkdir()
+        focus, threads = profile_settings(profile)
         options = accuracy.configure_context(
-            context(), directory, 1, 8, profile=profile
+            context(), directory, focus, threads, profile=profile
         )
         (directory / "summary.json").write_text(
             json.dumps(
@@ -473,11 +491,15 @@ def test_compare_sweep_reports_options_failures_and_common_input(tmp_path, capsy
         )
     accuracy.compare(tmp_path)
     output = json.loads(capsys.readouterr().out)
-    assert len(output["runs"]) == 4
+    assert len(output["runs"]) == len(accuracy.PROFILES)
     assert output["runs"]["tol8_nf1_t8"]["Gurobi_status"] == 13
     homogeneous = output["runs"]["tol8_nf1_homogeneous_t8"]["solver_options"]
     assert homogeneous["BarConvTol"] == 1e-8
     assert homogeneous["BarHomogeneous"] == 1
+    assert output["runs"]["tol8_nf1_t16"]["threads"] == 16
+    assert (
+        output["runs"]["tol8_nf0_homogeneous_t8"]["solver_options"]["NumericFocus"] == 0
+    )
     path = tmp_path / "tol8_nf1_homogeneous_t8/summary.json"
     report = json.loads(path.read_text())
     report["source_sha256"] = "different"
@@ -549,3 +571,148 @@ def test_crossover_retains_coal_cost_screen(value):
         {"displayed_separation_eur": 0},
         crossover=-1,
     )
+
+
+@pytest.mark.parametrize(
+    "trial,reference,changed",
+    [
+        ("nf1_t16", "nf1", "threads"),
+        ("nf1_homogeneous_t16", "nf1_homogeneous", "threads"),
+        ("nf1_homogeneous_crossover", "nf1_homogeneous", "crossover"),
+        ("nf0_homogeneous", "nf1_homogeneous", "NumericFocus"),
+    ],
+)
+def test_followup_changes_only_one_setting_from_existing_reference(
+    tmp_path, trial, reference, changed
+):
+    first, second = context(), context()
+    focus, threads = profile_settings(reference)
+    base = accuracy.configure_context(
+        first, tmp_path / reference, focus, threads, profile=reference
+    )
+    focus, threads = profile_settings(trial)
+    options = accuracy.configure_context(
+        second, tmp_path / trial, focus, threads, profile=trial
+    )
+    assert {key for key in options if options[key] != base[key]} == {changed}
+    assert options["TimeLimit"] == base["TimeLimit"] == 72000
+    assert options["SoftMemLimit"] == base["SoftMemLimit"] == 100
+    assert first.input.network == second.input.network == "original.nc"
+    assert second.threads == threads
+
+
+def test_profile_rejects_mismatched_thread_count(tmp_path):
+    with pytest.raises(ValueError, match="Thread count does not match profile"):
+        accuracy.configure_context(context(), tmp_path, 1, 8, profile="nf1_t16")
+
+
+@pytest.mark.parametrize("task,profile", list(enumerate(accuracy.FOLLOWUP_PROFILES)))
+def test_followup_array_handoff(tmp_path, task, profile):
+    wrapper = tmp_path / "pixi-sophia"
+    wrapper.write_text(
+        "#!/bin/bash\npython3 -c 'import sys,json; print(json.dumps(sys.argv[1:]))' \"$@\"\n"
+    )
+    wrapper.chmod(0o755)
+    script = Path("scripts/bornholm_solver_followup_workq.sbatch").resolve()
+    env = os.environ | {
+        "SLURM_SUBMIT_DIR": str(tmp_path),
+        "SLURM_JOB_PARTITION": "workq",
+        "SLURM_CPUS_PER_TASK": "16",
+        "SLURM_ARRAY_TASK_ID": str(task),
+        "SLURM_ARRAY_JOB_ID": "789",
+        "PIXI_SOPHIA": str(wrapper),
+    }
+    result = subprocess.run(
+        ["bash", str(script)], env=env, text=True, capture_output=True
+    )
+    assert result.returncode == 0, result.stderr
+    args = json.loads(result.stdout)
+    assert args[args.index("--profile") + 1] == profile
+    assert int(args[args.index("--threads") + 1]) == profile_settings(profile)[1]
+    assert (
+        args[args.index("--output-dir") + 1]
+        == "results/bornholm_accuracy/789/" + accuracy.PROFILES[profile]["label"]
+    )
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"SLURM_JOB_PARTITION": "fatq"},
+        {"SLURM_CPUS_PER_TASK": "8"},
+        {"SLURM_ARRAY_TASK_ID": "4"},
+    ],
+)
+def test_followup_rejects_wrong_allocation(tmp_path, override):
+    script = Path("scripts/bornholm_solver_followup_workq.sbatch").resolve()
+    env = (
+        os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "16",
+            "SLURM_ARRAY_TASK_ID": "0",
+        }
+        | override
+    )
+    result = subprocess.run(
+        ["bash", str(script)], env=env, text=True, capture_output=True
+    )
+    assert result.returncode == 2
+
+
+@pytest.mark.parametrize("profile", accuracy.FOLLOWUP_PROFILES)
+def test_cli_derives_focus_and_threads_from_followup_profile(
+    tmp_path, monkeypatch, profile
+):
+    calls = []
+    monkeypatch.setattr(
+        accuracy, "solve", lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_bornholm_accuracy", "--profile", profile, "--output-dir", str(tmp_path)],
+    )
+    accuracy.main()
+    assert calls == [((*profile_settings(profile), tmp_path), {"profile": profile})]
+
+
+def test_compare_across_arrays_keeps_labels_and_allows_thread_experiment(
+    tmp_path, capsys
+):
+    first, second = tmp_path / "4929796", tmp_path / "followup"
+    for root, profiles in [
+        (first, accuracy.ORIGINAL_SWEEP),
+        (second, accuracy.FOLLOWUP_PROFILES),
+    ]:
+        for profile in profiles:
+            spec = accuracy.PROFILES[profile]
+            directory = root / spec["label"]
+            directory.mkdir(parents=True)
+            focus, threads = profile_settings(profile)
+            options = accuracy.configure_context(
+                context(), directory, focus, threads, profile=profile
+            )
+            (directory / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "status": "checks_passed",
+                        "profile": profile,
+                        "threads": threads,
+                        "source_sha256": "same",
+                        "solver_options": options,
+                    }
+                )
+            )
+    accuracy.compare([first, second])
+    result = json.loads(capsys.readouterr().out)
+    assert len(result["runs"]) == 8
+    assert result["runs"]["4929796/tol8_nf1_t8"]["threads"] == 8
+    assert result["runs"]["followup/tol8_nf1_t16"]["threads"] == 16
+    path = second / "tol8_nf1_t16/summary.json"
+    report = json.loads(path.read_text())
+    report["solver_options"]["TimeLimit"] = 100
+    path.write_text(json.dumps(report))
+    with pytest.raises(ValueError, match="Other solver settings differ"):
+        accuracy.compare([first, second])

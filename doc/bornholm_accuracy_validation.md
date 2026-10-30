@@ -202,3 +202,78 @@ sbatch --array=0 scripts/bornholm_solver_sweep_workq.sbatch
 Do not edit the physics or rebuild between trials. No objective-constant removal,
 coal-capacity adjustment, balancing slack, technology removal or model rescaling
 is introduced by this change.
+
+## Four additional trials: threads and homogeneous barrier
+
+Keep the existing array **4929796** running. Submit the new follow-up launcher
+once to add four independent solves of the **same composed three-hour baseline**:
+
+| New task | Profile | Threads | NumericFocus | BarHomogeneous | Crossover | Existing comparison |
+|---|---|---:|---:|---:|---:|---|
+| 0 | `nf1_t16` | 16 | 1 | -1 | 0 | NF1 control, eight threads |
+| 1 | `nf1_homogeneous_t16` | 16 | 1 | 1 | 0 | Homogeneous NF1, eight threads |
+| 2 | `nf1_homogeneous_crossover` | 8 | 1 | 1 | -1 | Homogeneous NF1, crossover off |
+| 3 | `nf0_homogeneous` | 8 | 0 | 1 | 0 | Homogeneous NF1, crossover off |
+
+Each changes **one solver parameter** from its existing comparison. All keep
+BarConvTol=1e-8, Method=2, the same scaling setting (-1), the inherited solver
+options, 20-hour solver limit and adaptive memory ceiling. This probes thread
+sensitivity, crossover cleanup and whether homogeneous barrier permits a faster
+NumericFocus=0 trajectory. Early progress is not evidence of final accuracy.
+
+Each task gets its own exclusive **workq** node with a 24-hour walltime. The new
+array reserves **16 CPUs per task** because resource requests are shared by an
+array; tasks 2 and 3 deliberately use **eight Gurobi threads** to match their
+reference. No other BLAS/OpenMP parallelism is enabled. Node hardware and available
+RAM may differ, so timings are not a perfectly isolated hardware benchmark.
+The 16-thread runs keep the memory ceiling; it is not automatically increased.
+
+The original four-task launcher and NF0/NF2 pair launcher are unchanged. Pulling
+this change does not cancel, restart or modify a running solve. The same input
+hash and physical-code checks, output-isolation rules and numerical screens apply
+to all new trials. Existing outputs are not overwritten and no rebuild is needed.
+
+Submit only the **new** array:
+
+```bash
+cd ~/projects/pypsa-eur-bornholm
+git pull --ff-only origin feature/bornholm-energy-island
+followup_job=$(sbatch --parsable scripts/bornholm_solver_followup_workq.sbatch)
+followup_job=${followup_job%%;*}
+echo "Four additional solver trials: $followup_job"
+watch -n 10 "squeue -j 4929796,$followup_job -o '%.18i %.10P %.12T %.12M %.25R'"
+```
+
+Result folders under `results/bornholm_accuracy/$followup_job/` are:
+
+* `tol8_nf1_t16`
+* `tol8_nf1_homogeneous_t16`
+* `tol8_nf1_homogeneous_crossover_t8`
+* `tol8_nf0_homogeneous_t8`
+
+Inspect the last five lines of all available solver logs:
+
+```bash
+tail -n 5 results/bornholm_accuracy/4929796/*/solver.log \
+  results/bornholm_accuracy/"$followup_job"/*/solver.log
+```
+
+Before those logs exist, inspect startup output:
+
+```bash
+tail -n 10 slurm-bornholm-solver-followup-"${followup_job}"_*.out
+```
+
+Compare the original four and the new four after they finish:
+
+```bash
+~/bin/pixi-sophia run python -m scripts.run_bornholm_accuracy \
+  --compare results/bornholm_accuracy/4929796 \
+            "results/bornholm_accuracy/$followup_job"
+```
+
+Multiple-array comparisons prefix run labels with the array directory name, show
+actual solver threads and node names, and permit the planned thread-count
+variation. All source hashes must agree and solver options outside the explicit
+experiment settings/adaptive memory ceiling must still match. The comparison
+remains read-only and does not imply that a rejected candidate is valid.

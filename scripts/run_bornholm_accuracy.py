@@ -48,6 +48,18 @@ PROFILES = {
         "BarHomogeneous": 1,
     },
 }
+# Keep the running four-task sweep fixed when adding new trial profiles.
+ORIGINAL_SWEEP = tuple(PROFILES)
+FOLLOWUP_PROFILES = {
+    "nf1_t16": PROFILES["nf1"] | {"label": "tol8_nf1_t16", "threads": 16},
+    "nf1_homogeneous_t16": PROFILES["nf1_homogeneous"]
+    | {"label": "tol8_nf1_homogeneous_t16", "threads": 16},
+    "nf1_homogeneous_crossover": PROFILES["nf1_homogeneous"]
+    | {"label": "tol8_nf1_homogeneous_crossover_t8", "crossover": -1},
+    "nf0_homogeneous": PROFILES["nf1_homogeneous"]
+    | {"label": "tol8_nf0_homogeneous_t8", "NumericFocus": 0},
+}
+PROFILES.update(FOLLOWUP_PROFILES)
 QUALITY = (
     "Status",
     "ObjVal",
@@ -100,11 +112,17 @@ def sha256(path):
 def configure_context(context, directory, numeric_focus, threads, *, profile=None):
     """Change solver options and output destinations, preserving source inputs."""
     study.require(numeric_focus in (0, 1, 2), "NumericFocus must be 0, 1 or 2")
-    study.require(threads == 8, "All comparison runs must use eight threads")
+    study.require(threads in (8, 16), "Comparison runs require eight or 16 threads")
     study.require(profile is None or profile in PROFILES, "Unknown solver profile")
-    study.require(
-        profile is None or numeric_focus == 1, "Sweep profiles require NumericFocus=1"
-    )
+    if profile is not None:
+        spec = PROFILES[profile]
+        study.require(
+            numeric_focus == spec.get("NumericFocus", 1),
+            "NumericFocus does not match profile",
+        )
+        study.require(
+            threads == spec.get("threads", 8), "Thread count does not match profile"
+        )
     # Snakemake 9 reconstructs Params on each access. Mutate its stored dict:
     # assigning context.params.solving would change a temporary container only.
     solving = context.params.solving
@@ -292,6 +310,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         "numeric_focus": numeric_focus,
         "profile": profile,
         "threads": threads,
+        "slurm_cpus_per_task": os.environ.get("SLURM_CPUS_PER_TASK"),
         "node": socket.gethostname(),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "slurm_array_job_id": os.environ.get("SLURM_ARRAY_JOB_ID"),
@@ -443,9 +462,19 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         checkpoint()
 
 
-def compare(directory):
-    paths = sorted(Path(directory).glob("*/summary.json"))
+def compare(directories):
+    if isinstance(directories, (str, Path)):
+        directories = [directories]
+    roots = list(dict.fromkeys(Path(directory).resolve() for directory in directories))
+    paths = sorted(path for root in roots for path in root.glob("*/summary.json"))
     study.require(paths, "No run summaries found under comparison directory")
+    labels = [
+        f"{path.parent.parent.name}/{path.parent.name}"
+        if len(roots) > 1
+        else path.parent.name
+        for path in paths
+    ]
+    study.require(len(labels) == len(set(labels)), "Duplicate run labels in comparison")
     reports = [json.loads(path.read_text()) for path in paths]
     hashes = [r.get("source_sha256") for r in reports]
     study.require(
@@ -464,6 +493,7 @@ def compare(directory):
                 "crossover",
                 "BarConvTol",
                 "BarHomogeneous",
+                "threads",
             )
         }
         for r in reports
@@ -479,6 +509,11 @@ def compare(directory):
             {
                 "status": report["status"],
                 "profile": report.get("profile"),
+                "threads": report.get(
+                    "threads", report.get("solver_options", {}).get("threads")
+                ),
+                "node": report.get("node"),
+                "slurm_cpus_per_task": report.get("slurm_cpus_per_task"),
                 "solver_options": report.get("solver_options", {}),
                 "error": report.get("error"),
                 "hours": round(report.get("elapsed_seconds", 0) / 3600, 3),
@@ -510,9 +545,7 @@ def compare(directory):
         json.dumps(
             {
                 "same_source_sha256": hashes[0],
-                "runs": {
-                    path.parent.name: column for path, column in zip(paths, columns)
-                },
+                "runs": {label: column for label, column in zip(labels, columns)},
                 "note": "Screening only; logged dual values are not certified bounds. Check full solver options and final quality; runtime depends on node hardware. A failed run's ObjVal is an unaccepted candidate.",
             },
             indent=2,
@@ -525,13 +558,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--numeric-focus", type=int, choices=(0, 1, 2))
+    action.add_argument("--profile", choices=tuple(PROFILES), help="Named solver trial")
     action.add_argument(
-        "--profile", choices=tuple(PROFILES), help="Named NumericFocus=1 solver trial"
+        "--compare",
+        type=Path,
+        nargs="+",
+        help="Read summaries in one or more array output directories",
     )
-    action.add_argument(
-        "--compare", type=Path, help="Read summaries in an array output directory"
+    parser.add_argument(
+        "--threads",
+        type=int,
+        choices=(8, 16),
+        help="Default: profile thread count, or 8 without a profile",
     )
-    parser.add_argument("--threads", type=int, default=8, choices=(8,))
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
@@ -540,8 +579,10 @@ def main():
     else:
         if args.output_dir is None:
             parser.error("--output-dir is required for a solve")
-        focus = 1 if args.profile else args.numeric_focus
-        solve(focus, args.threads, args.output_dir, profile=args.profile)
+        spec = PROFILES[args.profile] if args.profile else {}
+        focus = spec.get("NumericFocus", 1) if args.profile else args.numeric_focus
+        threads = args.threads if args.threads is not None else spec.get("threads", 8)
+        solve(focus, threads, args.output_dir, profile=args.profile)
 
 
 if __name__ == "__main__":
