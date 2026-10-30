@@ -102,12 +102,17 @@ separate four-task array. This uses the **same original three-hour baseline** as
 before, not four different Bornholm scenarios. The old two-task launcher remains
 available. No original solve/configuration, network or existing result is changed.
 
-| Task | Profile | NumericFocus | BarConvTol | ScaleFlag | Crossover | Result folder |
-|---|---|---:|---:|---:|---:|---|
-| 0 | `nf1` | 1 | 1e-8 | -1 (automatic) | 0 (off) | `tol8_nf1_t8` |
-| 1 | `nf1_scale2` | 1 | 1e-8 | 2 | 0 | `tol8_nf1_scale2_t8` |
-| 2 | `nf1_crossover` | 1 | 1e-8 | -1 | -1 (automatic) | `tol8_nf1_crossover_t8` |
-| 3 | `nf1_tol7` | 1 | 1e-7 | -1 | 0 | `tol7_nf1_t8` |
+| Task | Profile | ScaleFlag | Crossover | BarHomogeneous | Result folder |
+|---|---|---:|---:|---:|---|
+| 0 | `nf1` | -1 (automatic) | 0 (off) | -1 (automatic) | `tol8_nf1_t8` |
+| 1 | `nf1_scale2` | 2 | 0 | -1 | `tol8_nf1_scale2_t8` |
+| 2 | `nf1_crossover` | -1 | -1 (automatic) | -1 | `tol8_nf1_crossover_t8` |
+| 3 | `nf1_homogeneous` | -1 | 0 | 1 (on) | `tol8_nf1_homogeneous_t8` |
+
+All four use **NumericFocus=1, BarConvTol=1e-8 and eight threads**. Task 3 now
+uses homogeneous barrier instead of the previously proposed 1e-7 tolerance test.
+This tests convergence behaviour without relaxing the stopping tolerance. Existing
+results from the earlier trial remain untouched and can still be compared.
 
 Each alternative changes exactly one setting relative to task 0. All retain
 Method=2, eight threads, 20 hours of solver time, 24 hours of walltime, the inherited
@@ -117,13 +122,29 @@ they queue independently. There are no dependencies on the previous NF0/NF2 jobs
 Pulling this change does not cancel or restart those jobs.
 
 These are experiments, not an assurance of convergence or faster execution.
-Crossover and scaling can alter runtime/memory and must be evaluated using final
-unscaled quality metrics. The 1e-7 run retains the same acceptance screens; a looser
-barrier stopping tolerance is not by itself a resolution of the coal artifact.
-The conservative final-barrier separation screen is retained for all four trials.
-For the crossover trial, that log row precedes simplex cleanup; if it alone fails,
-inspect the final solver quality before interpreting the candidate. It is not a
-certified objective-error bound.
+Crossover, homogeneous barrier and scaling can alter runtime/memory and must be
+evaluated using final unscaled quality metrics. Homogeneous barrier does not imply
+that the physical model is infeasible or unbounded.
+
+All trials require native Gurobi status OPTIMAL (2), PyPSA's optimal termination,
+finite coal-cost diagnostics with at most EUR 1m/year of avoidable cost, and the
+original unscaled bound/constraint/dual violation and residual screens. Missing
+or non-finite required metrics fail screening.
+
+When crossover is **off**, the existing EUR 5m displayed-barrier-separation check
+remains an additional diagnostic screen. The last row need not describe the
+returned candidate, and the logged dual iterate is not a certified lower bound.
+When crossover is **enabled**, that row can precede simplex cleanup and is kept
+for information only. Acceptance instead uses the returned solution's native
+status and original-unit quality metrics, including finite `ComplVioSum` at most
+EUR 5m in this model's objective units. This complementarity screen is also a
+diagnostic, not a certified objective-error bound. Poor final residuals, a
+suboptimal return, or the coal artifact still cause rejection.
+
+Summaries record `screening_basis`; comparisons show final `ComplVio`,
+`ComplVioSum` and the earlier displayed separation separately. Neither passing
+these screens nor similar system costs alone establishes reliable welfare or
+price differences.
 
 Submit **four new solves**, without rebuilding:
 

@@ -24,24 +24,28 @@ PROFILES = {
         "BarConvTol": 1e-8,
         "ScaleFlag": -1,
         "crossover": 0,
+        "BarHomogeneous": -1,
     },
     "nf1_scale2": {
         "label": "tol8_nf1_scale2_t8",
         "BarConvTol": 1e-8,
         "ScaleFlag": 2,
         "crossover": 0,
+        "BarHomogeneous": -1,
     },
     "nf1_crossover": {
         "label": "tol8_nf1_crossover_t8",
         "BarConvTol": 1e-8,
         "ScaleFlag": -1,
         "crossover": -1,
+        "BarHomogeneous": -1,
     },
-    "nf1_tol7": {
-        "label": "tol7_nf1_t8",
-        "BarConvTol": 1e-7,
+    "nf1_homogeneous": {
+        "label": "tol8_nf1_homogeneous_t8",
+        "BarConvTol": 1e-8,
         "ScaleFlag": -1,
         "crossover": 0,
+        "BarHomogeneous": 1,
     },
 }
 QUALITY = (
@@ -225,12 +229,17 @@ def coal_check(n):
     }
 
 
-def accuracy_issues(quality, coal, barrier):
+def accuracy_issues(quality, coal, barrier, *, crossover=0):
     """Diagnostic screening, not an independent primal/dual optimality certificate."""
     issues = []
-    if coal["same_dispatch_avoidable_cost_eur"] > 1e6:
-        issues.append("More than EUR 1m/year of avoidable coal storage cost")
+    avoidable = coal["same_dispatch_avoidable_cost_eur"]
+    if avoidable is None or not math.isfinite(avoidable) or avoidable > 1e6:
+        issues.append(
+            "Avoidable coal storage cost missing, non-finite or above EUR 1m/year"
+        )
     values = quality["values"]
+    if values.get("Status") != 2:
+        issues.append("Native Gurobi status is not OPTIMAL (2)")
     for name, threshold in (
         ("BoundVio", 1e-3),
         ("ConstrVio", 1e-3),
@@ -239,14 +248,28 @@ def accuracy_issues(quality, coal, barrier):
         ("DualResidual", 1e-5),
     ):
         value = values.get(name)
-        if value is None or value > threshold:
+        if value is None or not math.isfinite(value) or value > threshold:
             issues.append(
                 f"{name} missing or exceeds screening threshold {threshold:g}"
             )
-    if barrier is None or barrier["displayed_separation_eur"] > 5e6:
-        issues.append(
-            "Final displayed primal/dual separation missing or exceeds EUR 5m"
-        )
+    if crossover == 0:
+        # The rounded log row is only an extra diagnostic screen. It need not
+        # describe the returned candidate and is never a certified bound.
+        separation = None if barrier is None else barrier["displayed_separation_eur"]
+        if separation is None or not math.isfinite(separation) or separation > 5e6:
+            issues.append(
+                "Final displayed primal/dual separation missing or exceeds EUR 5m"
+            )
+    else:
+        # Crossover can clean up a poor barrier iterate. Judge the returned LP
+        # solution, not the earlier log row; retain feasibility/coal screens.
+        # Complementarity sums are in objective units for this unscaled EUR LP.
+        # This is a diagnostic threshold, not a certified objective-error bound.
+        value = values.get("ComplVioSum")
+        if value is None or not math.isfinite(value) or value > 5e6:
+            issues.append(
+                "Final ComplVioSum missing, non-finite or exceeds EUR 5m after crossover"
+            )
     return issues
 
 
@@ -330,13 +353,19 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         report.update(
             solver_options=dict(options),
             node_memory_before_solve_GB=memory,
+            screening_basis=(
+                "returned_solution_quality_crossover_enabled"
+                if options["crossover"] != 0
+                else "returned_solution_quality_and_barrier_log_screen"
+            ),
             phase="native_solve",
         )
         checkpoint()
         print(
             f"Baseline accuracy comparison: profile={profile or 'legacy'}, "
             f"BarConvTol={options['BarConvTol']:g}, NumericFocus={numeric_focus}, "
-            f"ScaleFlag={options.get('ScaleFlag', -1)}, crossover={options['crossover']}, threads={threads}",
+            f"ScaleFlag={options.get('ScaleFlag', -1)}, crossover={options['crossover']}, "
+            f"BarHomogeneous={options.get('BarHomogeneous', -1)}, threads={threads}",
             flush=True,
         )
         print(f"Source SHA256: {source_hash}\nResults: {directory}", flush=True)
@@ -357,7 +386,10 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         report["barrier_final"] = barrier_result(directory / "solver.log")
         report["coal"] = coal_check(n)
         report["screening_issues"] = accuracy_issues(
-            report["solver_quality"], report["coal"], report["barrier_final"]
+            report["solver_quality"],
+            report["coal"],
+            report["barrier_final"],
+            crossover=options["crossover"],
         )
         checkpoint()
         study.require(
@@ -431,6 +463,7 @@ def compare(directory):
                 "ScaleFlag",
                 "crossover",
                 "BarConvTol",
+                "BarHomogeneous",
             )
         }
         for r in reports
@@ -467,6 +500,9 @@ def compare(directory):
                 else None,
                 "MaxVio": quality.get("MaxVio"),
                 "DualResidual": quality.get("DualResidual"),
+                "ComplVio": quality.get("ComplVio"),
+                "ComplVioSum": quality.get("ComplVioSum"),
+                "screening_basis": report.get("screening_basis"),
                 "screening_issues": report.get("screening_issues"),
             }
         )

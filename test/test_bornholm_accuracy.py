@@ -213,6 +213,17 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
     assert q["values"]["ObjVal"] == pytest.approx(n.objective)
     assert np.isfinite(q["values"]["MaxMemUsed"])
     assert accuracy.coal_check(n)["same_dispatch_avoidable_cost_eur"] < 1
+    if profile == "nf1_crossover":
+        # A poor earlier log row must not reject a clean final basic solution.
+        assert (
+            accuracy.accuracy_issues(
+                q,
+                accuracy.coal_check(n),
+                {"displayed_separation_eur": 1e9},
+                crossover=options["crossover"],
+            )
+            == []
+        )
 
 
 @pytest.mark.parametrize(
@@ -280,7 +291,9 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     def native(path, *, run_name, init_globals):
         assert init_globals["snakemake"] is ctx
         assert ctx.params.solving["solver_options"]["test"]["SoftMemLimit"] == 90
-        Path(ctx.log.solver).write_text("9 1.230e+02 1.230e+02 0 0 0 1s\n")
+        # Simulate a poor pre-cleanup barrier row for the crossover profile.
+        gap = 200e6 if profile == "nf1_crossover" else 0
+        Path(ctx.log.solver).write_text(f"9 {123 + gap:.8e} 1.23000000e+02 0 0 0 1s\n")
         if native_failure:
             exec(
                 compile(
@@ -314,7 +327,12 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     if native_failure:
         assert report["solver_quality"]["values"]["Status"] == 13
         assert report["native_termination_condition"] == "suboptimal"
-        assert report["barrier_final"]["displayed_separation_eur"] == 0
+        expected_gap = 200e6 if profile == "nf1_crossover" else 0
+        assert report["barrier_final"]["displayed_separation_eur"] == expected_gap
+    if profile == "nf1_crossover":
+        assert (
+            report["screening_basis"] == "returned_solution_quality_crossover_enabled"
+        )
     assert previous.read_text() == "previous completed solution"
     assert original.read_text() == "unchanged source"
     with pytest.raises(FileExistsError):
@@ -327,7 +345,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         ("nf1", None),
         ("nf1_scale2", "ScaleFlag"),
         ("nf1_crossover", "crossover"),
-        ("nf1_tol7", "BarConvTol"),
+        ("nf1_homogeneous", "BarHomogeneous"),
     ],
 )
 def test_sweep_changes_one_setting_and_preserves_physical_inputs(
@@ -346,6 +364,7 @@ def test_sweep_changes_one_setting_and_preserves_physical_inputs(
     assert trial_context.params.solving is trial_context.config["solving"]
     assert trial_context.params.solving["options"] == {"skip_iterations": True}
     assert trial["threads"] == 8 and trial["NumericFocus"] == 1
+    assert trial["BarConvTol"] == 1e-8
     assert trial["TimeLimit"] == 72000 and trial["SoftMemLimit"] == 100
 
 
@@ -456,10 +475,77 @@ def test_compare_sweep_reports_options_failures_and_common_input(tmp_path, capsy
     output = json.loads(capsys.readouterr().out)
     assert len(output["runs"]) == 4
     assert output["runs"]["tol8_nf1_t8"]["Gurobi_status"] == 13
-    assert output["runs"]["tol7_nf1_t8"]["solver_options"]["BarConvTol"] == 1e-7
-    path = tmp_path / "tol7_nf1_t8/summary.json"
+    homogeneous = output["runs"]["tol8_nf1_homogeneous_t8"]["solver_options"]
+    assert homogeneous["BarConvTol"] == 1e-8
+    assert homogeneous["BarHomogeneous"] == 1
+    path = tmp_path / "tol8_nf1_homogeneous_t8/summary.json"
     report = json.loads(path.read_text())
     report["source_sha256"] = "different"
     path.write_text(json.dumps(report))
     with pytest.raises(ValueError, match="inputs differ"):
         accuracy.compare(tmp_path)
+
+
+def clean_quality():
+    return {
+        "values": {
+            name: 0.0
+            for name in (
+                "BoundVio",
+                "ConstrVio",
+                "ConstrResidual",
+                "DualVio",
+                "DualResidual",
+                "ComplVioSum",
+            )
+        }
+        | {"Status": 2}
+    }
+
+
+def test_crossover_uses_returned_solution_not_last_barrier_row():
+    quality = clean_quality()
+    coal = {"same_dispatch_avoidable_cost_eur": 0}
+    barrier = {"displayed_separation_eur": 500e6}
+    assert accuracy.accuracy_issues(quality, coal, barrier, crossover=-1) == []
+    assert accuracy.accuracy_issues(quality, coal, None, crossover=-1) == []
+    assert any(
+        "5m" in issue for issue in accuracy.accuracy_issues(quality, coal, barrier)
+    )
+
+
+@pytest.mark.parametrize(
+    "metric,value",
+    [
+        ("Status", 13),
+        ("BoundVio", 0.01),
+        ("ConstrVio", 0.01),
+        ("ConstrResidual", 0.01),
+        ("DualVio", 1e-3),
+        ("DualResidual", 1e-3),
+        ("ComplVioSum", 5e6 + 1),
+        ("ComplVioSum", None),
+        ("ComplVioSum", float("nan")),
+        ("ComplVioSum", float("inf")),
+    ],
+)
+def test_crossover_still_rejects_poor_or_missing_final_quality(metric, value):
+    quality = clean_quality()
+    quality["values"][metric] = value
+    issues = accuracy.accuracy_issues(
+        quality,
+        {"same_dispatch_avoidable_cost_eur": 0},
+        {"displayed_separation_eur": 0},
+        crossover=-1,
+    )
+    assert issues
+
+
+@pytest.mark.parametrize("value", [2e6, None, float("nan"), float("inf")])
+def test_crossover_retains_coal_cost_screen(value):
+    assert accuracy.accuracy_issues(
+        clean_quality(),
+        {"same_dispatch_avoidable_cost_eur": value},
+        {"displayed_separation_eur": 0},
+        crossover=-1,
+    )

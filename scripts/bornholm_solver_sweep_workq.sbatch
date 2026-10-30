@@ -19,7 +19,7 @@ case "${SLURM_ARRAY_TASK_ID:-}" in
     0) profile=nf1; label=tol8_nf1_t8 ;;
     1) profile=nf1_scale2; label=tol8_nf1_scale2_t8 ;;
     2) profile=nf1_crossover; label=tol8_nf1_crossover_t8 ;;
-    3) profile=nf1_tol7; label=tol7_nf1_t8 ;;
+    3) profile=nf1_homogeneous; label=tol8_nf1_homogeneous_t8 ;;
     *) echo 'Submit as array tasks 0-3 with sbatch.' >&2; exit 2 ;;
 esac
 sweep="${SLURM_ARRAY_JOB_ID:?Submit with sbatch}"
