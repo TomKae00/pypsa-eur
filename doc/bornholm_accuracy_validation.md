@@ -93,3 +93,91 @@ Compare the two summaries after both jobs finish:
 The comparison checks matching input hashes and common solver settings, then
 prints costs, the coal artifact, runtime, memory, iterations and numerical quality
 side by side as JSON. Reusing an existing validation output directory is refused.
+
+
+## Four-profile NumericFocus=1 follow-up
+
+After the NF0 replay returned suboptimally and the NF2 run proved slow, submit a
+separate four-task array. This uses the **same original three-hour baseline** as
+before, not four different Bornholm scenarios. The old two-task launcher remains
+available. No original solve/configuration, network or existing result is changed.
+
+| Task | Profile | NumericFocus | BarConvTol | ScaleFlag | Crossover | Result folder |
+|---|---|---:|---:|---:|---:|---|
+| 0 | `nf1` | 1 | 1e-8 | -1 (automatic) | 0 (off) | `tol8_nf1_t8` |
+| 1 | `nf1_scale2` | 1 | 1e-8 | 2 | 0 | `tol8_nf1_scale2_t8` |
+| 2 | `nf1_crossover` | 1 | 1e-8 | -1 | -1 (automatic) | `tol8_nf1_crossover_t8` |
+| 3 | `nf1_tol7` | 1 | 1e-7 | -1 | 0 | `tol7_nf1_t8` |
+
+Each alternative changes exactly one setting relative to task 0. All retain
+Method=2, eight threads, 20 hours of solver time, 24 hours of walltime, the inherited
+memory ceiling capped at 75% of available RAM, and one exclusive workq node.
+The scheduler can run all four concurrently if resources are available; otherwise
+they queue independently. There are no dependencies on the previous NF0/NF2 jobs.
+Pulling this change does not cancel or restart those jobs.
+
+These are experiments, not an assurance of convergence or faster execution.
+Crossover and scaling can alter runtime/memory and must be evaluated using final
+unscaled quality metrics. The 1e-7 run retains the same acceptance screens; a looser
+barrier stopping tolerance is not by itself a resolution of the coal artifact.
+The conservative final-barrier separation screen is retained for all four trials.
+For the crossover trial, that log row precedes simplex cleanup; if it alone fails,
+inspect the final solver quality before interpreting the candidate. It is not a
+certified objective-error bound.
+
+Submit **four new solves**, without rebuilding:
+
+```bash
+cd ~/projects/pypsa-eur-bornholm
+git pull --ff-only origin feature/bornholm-energy-island
+sweep_job=$(sbatch --parsable scripts/bornholm_solver_sweep_workq.sbatch)
+sweep_job=${sweep_job%%;*}
+echo "Four solver trials: $sweep_job"
+watch -n 10 "squeue -j $sweep_job -o '%.18i %.10P %.12T %.12M %.25R'"
+```
+
+Follow task 0 (substitute another result-folder label for the others):
+
+```bash
+tail -n 30 -F "results/bornholm_accuracy/$sweep_job/tol8_nf1_t8/solver.log"
+```
+
+Startup, memory and final state:
+
+```bash
+tail -n 40 -F "slurm-bornholm-solver-sweep-${sweep_job}_0.out"
+sstat -j "${sweep_job}_0.batch,${sweep_job}_1.batch,${sweep_job}_2.batch,${sweep_job}_3.batch" \
+  --format=JobID,MaxRSS,AveCPU -P
+sacct -j "$sweep_job" --format=JobID,State,Elapsed,MaxRSS,ExitCode -P
+```
+
+After the runs finish:
+
+```bash
+~/bin/pixi-sophia run python -m scripts.run_bornholm_accuracy \
+  --compare "results/bornholm_accuracy/$sweep_job"
+```
+
+`--compare` now reads all immediate child `summary.json` files, so it works for
+both the old pair and the four-profile array. Its JSON contains a `runs` mapping
+keyed by result-folder label, all effective solver options, failure reasons,
+quality and timing. The source hashes must agree; solver options outside the
+experiment's settings and the adaptive memory ceiling must agree. Missing run
+folders are not invented or treated as completed trials; check Slurm for all
+submitted tasks before making a final comparison.
+
+If the native solve script raises on a non-optimal return before exporting a
+candidate, the wrapper now preserves accessible Gurobi status/quality and the last
+barrier row in the failed summary. A NetCDF is not guaranteed in that case. Such a
+run remains failed, even if Gurobi exposes a candidate objective. These diagnostics
+do not bypass the native rejection or change the physical formulation.
+
+For one trial only, e.g. the NF1 control:
+
+```bash
+sbatch --array=0 scripts/bornholm_solver_sweep_workq.sbatch
+```
+
+Do not edit the physics or rebuild between trials. No objective-constant removal,
+coal-capacity adjustment, balancing slack, technology removal or model rescaling
+is introduced by this change.

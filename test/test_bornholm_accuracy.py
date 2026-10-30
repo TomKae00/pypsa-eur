@@ -177,7 +177,8 @@ def test_workq_only(tmp_path):
     assert result.returncode == 2 and "workq" in result.stderr
 
 
-def test_live_pypsa_gurobi_quality_capture(tmp_path):
+@pytest.mark.parametrize("profile", [None, *accuracy.PROFILES])
+def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
     """Actual native solver object retained after exporting the candidate."""
     import pypsa
 
@@ -204,9 +205,8 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path):
         e_cyclic=True,
         capital_cost=0.1,
     )
-    status, condition = n.optimize(
-        solver_name="gurobi", method=2, crossover=0, BarConvTol=1e-8, threads=1
-    )
+    options = accuracy.configure_context(context(), tmp_path, 1, 8, profile=profile)
+    status, condition = n.optimize(solver_name="gurobi", **options)
     assert str(condition) == "optimal"
     n.export_to_netcdf(tmp_path / "candidate.nc")
     q = accuracy.solver_quality(n.model.solver_model)
@@ -215,9 +215,13 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path):
     assert accuracy.coal_check(n)["same_dispatch_avoidable_cost_eur"] < 1
 
 
-@pytest.mark.parametrize("excess,passes", [(0, True), (588e6, False)])
+@pytest.mark.parametrize(
+    "excess,passes,native_failure",
+    [(0, True, False), (588e6, False, False), (0, False, True)],
+)
+@pytest.mark.parametrize("profile", [None, *accuracy.PROFILES])
 def test_native_handoff_retains_failed_candidate_and_original_outputs(
-    tmp_path, monkeypatch, excess, passes
+    tmp_path, monkeypatch, excess, passes, native_failure, profile
 ):
     from scripts import bornholm_provenance
 
@@ -255,12 +259,18 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
 
     class Solver:
         def getAttr(self, key):
+            if key == "Status":
+                return 13 if native_failure else 2
             return 123 if key == "ObjVal" else 0
 
     n = SimpleNamespace(
         meta={"solve_result": {"status": "ok", "termination_condition": "optimal"}},
         objective=123,
-        model=SimpleNamespace(solver_model=Solver()),
+        model=SimpleNamespace(
+            solver_model=Solver(),
+            status="warning" if native_failure else "ok",
+            termination_condition="suboptimal" if native_failure else "optimal",
+        ),
     )
     monkeypatch.setattr(
         accuracy, "coal_check", lambda _: {"same_dispatch_avoidable_cost_eur": excess}
@@ -270,21 +280,186 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     def native(path, *, run_name, init_globals):
         assert init_globals["snakemake"] is ctx
         assert ctx.params.solving["solver_options"]["test"]["SoftMemLimit"] == 90
-        Path(ctx.output.network).write_text("new candidate")
         Path(ctx.log.solver).write_text("9 1.230e+02 1.230e+02 0 0 0 1s\n")
+        if native_failure:
+            exec(
+                compile(
+                    "raise RuntimeError(\"Solving status 'warning'. Discarding solution.\")",
+                    "scripts/solve_network.py",
+                    "exec",
+                ),
+                {"n": n},
+            )
+        Path(ctx.output.network).write_text("new candidate")
         return {"n": n}
 
     monkeypatch.setattr(accuracy.runpy, "run_path", native)
+    focus = 1 if profile else 0
     if passes:
-        accuracy.solve(0, 8, directory)
+        accuracy.solve(focus, 8, directory, profile=profile)
     else:
-        with pytest.raises(ValueError, match="needs review"):
-            accuracy.solve(0, 8, directory)
+        exception, match = (
+            (RuntimeError, "Discarding solution")
+            if native_failure
+            else (ValueError, "needs review")
+        )
+        with pytest.raises(exception, match=match):
+            accuracy.solve(focus, 8, directory, profile=profile)
     report = json.loads((directory / "summary.json").read_text())
     assert report["status"] == ("checks_passed" if passes else "failed")
-    assert (directory / "candidate_2035.nc").exists() != passes
+    assert (directory / "candidate_2035.nc").exists() == (
+        not passes and not native_failure
+    )
     assert (directory / "solved_2035.nc").exists() == passes
+    if native_failure:
+        assert report["solver_quality"]["values"]["Status"] == 13
+        assert report["native_termination_condition"] == "suboptimal"
+        assert report["barrier_final"]["displayed_separation_eur"] == 0
     assert previous.read_text() == "previous completed solution"
     assert original.read_text() == "unchanged source"
     with pytest.raises(FileExistsError):
-        accuracy.solve(0, 8, directory)
+        accuracy.solve(focus, 8, directory, profile=profile)
+
+
+@pytest.mark.parametrize(
+    "profile,changed",
+    [
+        ("nf1", None),
+        ("nf1_scale2", "ScaleFlag"),
+        ("nf1_crossover", "crossover"),
+        ("nf1_tol7", "BarConvTol"),
+    ],
+)
+def test_sweep_changes_one_setting_and_preserves_physical_inputs(
+    tmp_path, profile, changed
+):
+    base_context, trial_context = context(), context()
+    base = accuracy.configure_context(
+        base_context, tmp_path / "base", 1, 8, profile="nf1"
+    )
+    trial = accuracy.configure_context(
+        trial_context, tmp_path / profile, 1, 8, profile=profile
+    )
+    differences = {key for key in base if base[key] != trial[key]}
+    assert differences == ({changed} if changed else set())
+    assert trial_context.input.network == "original.nc"
+    assert trial_context.params.solving is trial_context.config["solving"]
+    assert trial_context.params.solving["options"] == {"skip_iterations": True}
+    assert trial["threads"] == 8 and trial["NumericFocus"] == 1
+    assert trial["TimeLimit"] == 72000 and trial["SoftMemLimit"] == 100
+
+
+def test_profile_focus_mismatch_rejected(tmp_path):
+    with pytest.raises(ValueError, match="require NumericFocus=1"):
+        accuracy.configure_context(context(), tmp_path, 2, 8, profile="nf1")
+
+
+@pytest.mark.parametrize("profile", accuracy.PROFILES)
+def test_sweep_options_survive_real_snakemake_params_access(tmp_path, profile):
+    source = context()
+    native = Snakemake(
+        InputFiles(fromdict={"network": "original.nc"}),
+        source.output,
+        source.params,
+        Wildcards(fromdict={"run": accuracy.RUN}),
+        4,
+        ResourceList(),
+        source.log,
+        source.config,
+        "solve_network",
+        None,
+    )
+    options = accuracy.configure_context(native, tmp_path, 1, 8, profile=profile)
+    assert native.params.solving["solver_options"]["test"] == options
+    for key, value in accuracy.PROFILES[profile].items():
+        if key != "label":
+            assert native.params.solving["solver_options"]["test"][key] == value
+
+
+@pytest.mark.parametrize("task,profile", list(enumerate(accuracy.PROFILES)))
+def test_sweep_array_handoff(tmp_path, task, profile):
+    wrapper = tmp_path / "pixi-sophia"
+    wrapper.write_text(
+        "#!/bin/bash\npython3 -c 'import sys,json; print(json.dumps(sys.argv[1:]))' \"$@\"\n"
+    )
+    wrapper.chmod(0o755)
+    script = Path("scripts/bornholm_solver_sweep_workq.sbatch").resolve()
+    env = os.environ | {
+        "SLURM_SUBMIT_DIR": str(tmp_path),
+        "SLURM_JOB_PARTITION": "workq",
+        "SLURM_CPUS_PER_TASK": "8",
+        "SLURM_ARRAY_TASK_ID": str(task),
+        "SLURM_ARRAY_JOB_ID": "456",
+        "PIXI_SOPHIA": str(wrapper),
+    }
+    result = subprocess.run(
+        ["bash", str(script)], env=env, text=True, capture_output=True
+    )
+    assert result.returncode == 0, result.stderr
+    args = json.loads(result.stdout)
+    assert args[:4] == ["run", "python", "-m", "scripts.run_bornholm_accuracy"]
+    assert args[args.index("--profile") + 1] == profile
+    assert (
+        args[args.index("--output-dir") + 1]
+        == "results/bornholm_accuracy/456/" + accuracy.PROFILES[profile]["label"]
+    )
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"SLURM_JOB_PARTITION": "fatq"},
+        {"SLURM_CPUS_PER_TASK": "4"},
+        {"SLURM_ARRAY_TASK_ID": "9"},
+    ],
+)
+def test_sweep_rejects_wrong_allocation(tmp_path, override):
+    script = Path("scripts/bornholm_solver_sweep_workq.sbatch").resolve()
+    env = (
+        os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "8",
+            "SLURM_ARRAY_TASK_ID": "0",
+        }
+        | override
+    )
+    result = subprocess.run(
+        ["bash", str(script)], env=env, text=True, capture_output=True
+    )
+    assert result.returncode == 2
+
+
+def test_compare_sweep_reports_options_failures_and_common_input(tmp_path, capsys):
+    for index, (profile, spec) in enumerate(accuracy.PROFILES.items()):
+        directory = tmp_path / spec["label"]
+        directory.mkdir()
+        options = accuracy.configure_context(
+            context(), directory, 1, 8, profile=profile
+        )
+        (directory / "summary.json").write_text(
+            json.dumps(
+                {
+                    "status": "failed" if index == 0 else "checks_passed",
+                    "profile": profile,
+                    "source_sha256": "same",
+                    "solver_options": options,
+                    "error": "native solver rejected" if index == 0 else None,
+                    "solver_quality": {
+                        "values": {"Status": 13 if index == 0 else 2, "ObjVal": 123}
+                    },
+                }
+            )
+        )
+    accuracy.compare(tmp_path)
+    output = json.loads(capsys.readouterr().out)
+    assert len(output["runs"]) == 4
+    assert output["runs"]["tol8_nf1_t8"]["Gurobi_status"] == 13
+    assert output["runs"]["tol7_nf1_t8"]["solver_options"]["BarConvTol"] == 1e-7
+    path = tmp_path / "tol7_nf1_t8/summary.json"
+    report = json.loads(path.read_text())
+    report["source_sha256"] = "different"
+    path.write_text(json.dumps(report))
+    with pytest.raises(ValueError, match="inputs differ"):
+        accuracy.compare(tmp_path)

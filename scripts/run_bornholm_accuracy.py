@@ -17,6 +17,33 @@ from pathlib import Path
 from scripts import run_bornholm_study as study
 
 RUN = "bornholm_zonal_baseline"
+# Each variant changes one solver setting relative to nf1. No physical changes.
+PROFILES = {
+    "nf1": {
+        "label": "tol8_nf1_t8",
+        "BarConvTol": 1e-8,
+        "ScaleFlag": -1,
+        "crossover": 0,
+    },
+    "nf1_scale2": {
+        "label": "tol8_nf1_scale2_t8",
+        "BarConvTol": 1e-8,
+        "ScaleFlag": 2,
+        "crossover": 0,
+    },
+    "nf1_crossover": {
+        "label": "tol8_nf1_crossover_t8",
+        "BarConvTol": 1e-8,
+        "ScaleFlag": -1,
+        "crossover": -1,
+    },
+    "nf1_tol7": {
+        "label": "tol7_nf1_t8",
+        "BarConvTol": 1e-7,
+        "ScaleFlag": -1,
+        "crossover": 0,
+    },
+}
 QUALITY = (
     "Status",
     "ObjVal",
@@ -66,10 +93,14 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def configure_context(context, directory, numeric_focus, threads):
+def configure_context(context, directory, numeric_focus, threads, *, profile=None):
     """Change solver options and output destinations, preserving source inputs."""
-    study.require(numeric_focus in (0, 2), "NumericFocus must be 0 or 2")
-    study.require(threads == 8, "Both comparison runs must use eight threads")
+    study.require(numeric_focus in (0, 1, 2), "NumericFocus must be 0, 1 or 2")
+    study.require(threads == 8, "All comparison runs must use eight threads")
+    study.require(profile is None or profile in PROFILES, "Unknown solver profile")
+    study.require(
+        profile is None or numeric_focus == 1, "Sweep profiles require NumericFocus=1"
+    )
     # Snakemake 9 reconstructs Params on each access. Mutate its stored dict:
     # assigning context.params.solving would change a temporary container only.
     solving = context.params.solving
@@ -81,6 +112,10 @@ def configure_context(context, directory, numeric_focus, threads):
         "Expected the existing barrier / crossover-off preset",
     )
     options.update(threads=threads, BarConvTol=1e-8, NumericFocus=numeric_focus)
+    if profile is not None:
+        options.update(
+            {key: value for key, value in PROFILES[profile].items() if key != "label"}
+        )
     context.config["solving"] = solving
     context.threads = threads
     context.output = type(context.output)(
@@ -215,7 +250,7 @@ def accuracy_issues(quality, coal, barrier):
     return issues
 
 
-def solve(numeric_focus, threads, directory):
+def solve(numeric_focus, threads, directory, *, profile=None):
     from scripts.bornholm_provenance import code_provenance
     from scripts.run_bornholm_diagnostic import memory_snapshot, soft_memory_limit
 
@@ -232,6 +267,7 @@ def solve(numeric_focus, threads, directory):
         "phase": "initialising",
         "scenario": RUN,
         "numeric_focus": numeric_focus,
+        "profile": profile,
         "threads": threads,
         "node": socket.gethostname(),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
@@ -286,7 +322,9 @@ def solve(numeric_focus, threads, directory):
         report["phase"] = "preflight"
         checkpoint()
         report["preflight"] = study.preflight(context)
-        options = configure_context(context, directory, numeric_focus, threads)
+        options = configure_context(
+            context, directory, numeric_focus, threads, profile=profile
+        )
         memory = memory_snapshot()
         options["SoftMemLimit"] = soft_memory_limit(memory, options["SoftMemLimit"])
         report.update(
@@ -296,7 +334,9 @@ def solve(numeric_focus, threads, directory):
         )
         checkpoint()
         print(
-            f"Baseline accuracy comparison: BarConvTol=1e-8, NumericFocus={numeric_focus}, threads={threads}",
+            f"Baseline accuracy comparison: profile={profile or 'legacy'}, "
+            f"BarConvTol={options['BarConvTol']:g}, NumericFocus={numeric_focus}, "
+            f"ScaleFlag={options.get('ScaleFlag', -1)}, crossover={options['crossover']}, threads={threads}",
             flush=True,
         )
         print(f"Source SHA256: {source_hash}\nResults: {directory}", flush=True)
@@ -332,6 +372,34 @@ def solve(numeric_focus, threads, directory):
         (directory / "candidate_2035.nc").replace(directory / "solved_2035.nc")
         report.update(status="checks_passed", phase="complete")
     except Exception as error:
+        # Native solve_network.py can raise before exporting a non-optimal result.
+        # Preserve native solver diagnostics without weakening its rejection or
+        # altering the pinned physical solve script.
+        native_path = Path("scripts/solve_network.py").resolve()
+        trace = error.__traceback__
+        while trace is not None:
+            if Path(trace.tb_frame.f_code.co_filename).resolve() == native_path:
+                network = trace.tb_frame.f_globals.get("n")
+                if network is not None:
+                    try:
+                        model = getattr(network, "model", None)
+                        report["solver_quality"] = solver_quality(
+                            getattr(model, "solver_model", None)
+                        )
+                        report["native_model_status"] = str(
+                            getattr(model, "status", "unavailable")
+                        )
+                        report["native_termination_condition"] = str(
+                            getattr(model, "termination_condition", "unavailable")
+                        )
+                    except Exception as diagnostic_error:
+                        report["failure_diagnostics_error"] = (
+                            f"{type(diagnostic_error).__name__}: {diagnostic_error}"
+                        )
+                    break
+            trace = trace.tb_next
+        if "barrier_final" not in report and (directory / "solver.log").is_file():
+            report["barrier_final"] = barrier_result(directory / "solver.log")
         report.update(
             status="failed",
             failed_phase=report["phase"],
@@ -344,25 +412,32 @@ def solve(numeric_focus, threads, directory):
 
 
 def compare(directory):
-    reports = [
-        json.loads((directory / f"tol8_nf{focus}_t8/summary.json").read_text())
-        for focus in (0, 2)
-    ]
+    paths = sorted(Path(directory).glob("*/summary.json"))
+    study.require(paths, "No run summaries found under comparison directory")
+    reports = [json.loads(path.read_text()) for path in paths]
     hashes = [r.get("source_sha256") for r in reports]
     study.require(
-        all(hashes) and hashes[0] == hashes[1],
+        all(hashes) and len(set(hashes)) == 1,
         "Comparison inputs differ or lack source hashes",
     )
     options = [
         {
             k: v
             for k, v in r.get("solver_options", {}).items()
-            if k not in ("NumericFocus", "SoftMemLimit")
+            if k
+            not in (
+                "NumericFocus",
+                "SoftMemLimit",
+                "ScaleFlag",
+                "crossover",
+                "BarConvTol",
+            )
         }
         for r in reports
     ]
     study.require(
-        options[0] == options[1], "Other solver settings differ between the two runs"
+        all(option == options[0] for option in options),
+        "Other solver settings differ between the runs",
     )
     columns = []
     for report in reports:
@@ -370,11 +445,18 @@ def compare(directory):
         columns.append(
             {
                 "status": report["status"],
+                "profile": report.get("profile"),
+                "solver_options": report.get("solver_options", {}),
+                "error": report.get("error"),
                 "hours": round(report.get("elapsed_seconds", 0) / 3600, 3),
                 "peak_RSS_GiB": report.get("peak_rss_GiB"),
                 "Gurobi_MaxMemUsed_GB": quality.get("MaxMemUsed"),
                 "barrier_iterations": quality.get("BarIterCount"),
-                "objective_EUR": report.get("objective"),
+                "objective_EUR": report.get("objective", quality.get("ObjVal")),
+                "Gurobi_status": quality.get("Status"),
+                "native_termination_condition": report.get(
+                    "native_termination_condition"
+                ),
                 "coal_avoidable_EUR_per_year": report.get("coal", {}).get(
                     "same_dispatch_avoidable_cost_eur"
                 ),
@@ -392,9 +474,10 @@ def compare(directory):
         json.dumps(
             {
                 "same_source_sha256": hashes[0],
-                "NumericFocus_0": columns[0],
-                "NumericFocus_2": columns[1],
-                "note": "Screening only; logged dual values are not certified bounds. Thread speedup versus prior four-thread run is confounded by tighter convergence.",
+                "runs": {
+                    path.parent.name: column for path, column in zip(paths, columns)
+                },
+                "note": "Screening only; logged dual values are not certified bounds. Check full solver options and final quality; runtime depends on node hardware. A failed run's ObjVal is an unaccepted candidate.",
             },
             indent=2,
             allow_nan=False,
@@ -405,7 +488,10 @@ def compare(directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
-    action.add_argument("--numeric-focus", type=int, choices=(0, 2))
+    action.add_argument("--numeric-focus", type=int, choices=(0, 1, 2))
+    action.add_argument(
+        "--profile", choices=tuple(PROFILES), help="Named NumericFocus=1 solver trial"
+    )
     action.add_argument(
         "--compare", type=Path, help="Read summaries in an array output directory"
     )
@@ -418,7 +504,8 @@ def main():
     else:
         if args.output_dir is None:
             parser.error("--output-dir is required for a solve")
-        solve(args.numeric_focus, args.threads, args.output_dir)
+        focus = 1 if args.profile else args.numeric_focus
+        solve(focus, args.threads, args.output_dir, profile=args.profile)
 
 
 if __name__ == "__main__":
