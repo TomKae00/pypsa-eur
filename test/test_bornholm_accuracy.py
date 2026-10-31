@@ -242,9 +242,26 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
 )
 @pytest.mark.parametrize("profile", [None, *accuracy.PROFILES])
 def test_native_handoff_retains_failed_candidate_and_original_outputs(
-    tmp_path, monkeypatch, excess, passes, native_failure, profile
+    tmp_path, monkeypatch, request, excess, passes, native_failure, profile
 ):
     from scripts import bornholm_provenance
+
+    if profile in accuracy.CROSSOVER_PROFILES:
+        import pypsa
+
+        # The new pair must preserve the objective constant even if a local
+        # environment has opted into PyPSA's future default.
+        previous_constant_option = (
+            pypsa.options.params.optimize.include_objective_constant
+        )
+        pypsa.options.params.optimize.include_objective_constant = False
+        request.addfinalizer(
+            lambda: setattr(
+                pypsa.options.params.optimize,
+                "include_objective_constant",
+                previous_constant_option,
+            )
+        )
 
     monkeypatch.chdir(tmp_path)
     original = tmp_path / "original.nc"
@@ -300,6 +317,8 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
 
     def native(path, *, run_name, init_globals):
         assert init_globals["snakemake"] is ctx
+        if profile in accuracy.CROSSOVER_PROFILES:
+            assert pypsa.options.params.optimize.include_objective_constant is True
         assert ctx.params.solving["solver_options"]["test"]["SoftMemLimit"] == 90
         # Simulate a poor pre-cleanup barrier row for the crossover profile.
         gap = (
@@ -331,6 +350,8 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         with pytest.raises(exception, match=match):
             accuracy.solve(focus, threads, directory, profile=profile)
     report = json.loads((directory / "summary.json").read_text())
+    if profile in accuracy.CROSSOVER_PROFILES:
+        assert report["include_objective_constant"] is True
     assert report["status"] == ("checks_passed" if passes else "failed")
     assert (directory / "candidate_2035.nc").exists() == (
         not passes and not native_failure
@@ -580,6 +601,8 @@ def test_crossover_retains_coal_cost_screen(value):
         ("nf1_homogeneous_t16", "nf1_homogeneous", "threads"),
         ("nf1_homogeneous_crossover", "nf1_homogeneous", "crossover"),
         ("nf0_homogeneous", "nf1_homogeneous", "NumericFocus"),
+        ("nf1_crossover2_t8", "nf1", "crossover"),
+        ("nf1_crossover2_t16", "nf1_t16", "crossover"),
     ],
 )
 def test_followup_changes_only_one_setting_from_existing_reference(
@@ -604,6 +627,87 @@ def test_followup_changes_only_one_setting_from_existing_reference(
 def test_profile_rejects_mismatched_thread_count(tmp_path):
     with pytest.raises(ValueError, match="Thread count does not match profile"):
         accuracy.configure_context(context(), tmp_path, 1, 8, profile="nf1_t16")
+
+
+def test_crossover_pair_differs_only_in_threads(tmp_path):
+    options = []
+    for profile in accuracy.CROSSOVER_PROFILES:
+        focus, threads = profile_settings(profile)
+        options.append(
+            accuracy.configure_context(
+                context(), tmp_path, focus, threads, profile=profile
+            )
+        )
+    assert options[0] | {"threads": 16} == options[1]
+    assert options[0]["crossover"] == 2
+    assert options[0]["NumericFocus"] == 1
+    assert options[0]["BarHomogeneous"] == -1
+    assert options[0]["ScaleFlag"] == -1
+    assert "CrossoverBasis" not in options[0]
+
+
+@pytest.mark.parametrize("task,profile", list(enumerate(accuracy.CROSSOVER_PROFILES)))
+def test_crossover_pair_array_handoff(tmp_path, task, profile):
+    wrapper = tmp_path / "pixi-sophia"
+    wrapper.write_text(
+        "#!/bin/bash\n"
+        "python3 -c 'import sys,json; print(json.dumps(sys.argv[1:]))' \"$@\"\n"
+    )
+    wrapper.chmod(0o755)
+    script = Path("scripts/bornholm_crossover_pair_workq.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "16",
+            "SLURM_ARRAY_TASK_ID": str(task),
+            "SLURM_ARRAY_JOB_ID": "987",
+            "PIXI_SOPHIA": str(wrapper),
+        },
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    args = json.loads(result.stdout)
+    assert args[:4] == ["run", "python", "-m", "scripts.run_bornholm_accuracy"]
+    assert args[args.index("--profile") + 1] == profile
+    assert int(args[args.index("--threads") + 1]) == profile_settings(profile)[1]
+    assert (
+        args[args.index("--output-dir") + 1]
+        == "results/bornholm_accuracy/987/" + accuracy.PROFILES[profile]["label"]
+    )
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"SLURM_JOB_PARTITION": "fatq"},
+        {"SLURM_CPUS_PER_TASK": "8"},
+        {"SLURM_ARRAY_TASK_ID": "2"},
+    ],
+)
+def test_crossover_pair_rejects_wrong_allocation(tmp_path, override):
+    script = Path("scripts/bornholm_crossover_pair_workq.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=(
+            os.environ
+            | {
+                "SLURM_SUBMIT_DIR": str(tmp_path),
+                "SLURM_JOB_PARTITION": "workq",
+                "SLURM_CPUS_PER_TASK": "16",
+                "SLURM_ARRAY_TASK_ID": "0",
+            }
+            | override
+        ),
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
 
 
 @pytest.mark.parametrize("task,profile", list(enumerate(accuracy.FOLLOWUP_PROFILES)))

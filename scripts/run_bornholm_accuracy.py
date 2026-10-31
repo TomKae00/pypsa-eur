@@ -60,6 +60,14 @@ FOLLOWUP_PROFILES = {
     | {"label": "tol8_nf0_homogeneous_t8", "NumericFocus": 0},
 }
 PROFILES.update(FOLLOWUP_PROFILES)
+# Matched dual-simplex crossover trials; keep both existing arrays unchanged.
+CROSSOVER_PROFILES = {
+    "nf1_crossover2_t8": PROFILES["nf1"]
+    | {"label": "tol8_nf1_crossover2_t8", "crossover": 2, "threads": 8},
+    "nf1_crossover2_t16": PROFILES["nf1"]
+    | {"label": "tol8_nf1_crossover2_t16", "crossover": 2, "threads": 16},
+}
+PROFILES.update(CROSSOVER_PROFILES)
 QUALITY = (
     "Status",
     "ObjVal",
@@ -67,18 +75,23 @@ QUALITY = (
     "Runtime",
     "Work",
     "BarIterCount",
+    "IterCount",
     "MemUsed",
     "MaxMemUsed",
     "MaxVio",
     "BoundVio",
+    "BoundVioIndex",
     "BoundSVio",
     "ConstrVio",
+    "ConstrVioIndex",
     "ConstrSVio",
     "ConstrResidual",
     "ConstrSResidual",
     "DualVio",
+    "DualVioIndex",
     "DualSVio",
     "DualResidual",
+    "DualResidualIndex",
     "DualSResidual",
     "ComplVio",
     "ComplVioSum",
@@ -327,6 +340,13 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         temporary.replace(directory / "summary.json")
 
     try:
+        if profile in CROSSOVER_PROFILES:
+            import pypsa
+
+            # Retain the audited accounting convention even if an environment
+            # or module-wide option overrides PyPSA's current default.
+            pypsa.options.params.optimize.include_objective_constant = True
+            report["include_objective_constant"] = True
         checkpoint()
         context = study.context_for(RUN)
         source = Path(context.input.network)
@@ -534,6 +554,7 @@ def compare(directories):
                 if report.get("barrier_final")
                 else None,
                 "MaxVio": quality.get("MaxVio"),
+                "DualVio": quality.get("DualVio"),
                 "DualResidual": quality.get("DualResidual"),
                 "ComplVio": quality.get("ComplVio"),
                 "ComplVioSum": quality.get("ComplVioSum"),
