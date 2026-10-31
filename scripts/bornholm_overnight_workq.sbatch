@@ -9,7 +9,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=slurm-bornholm-overnight-%j.out
 
-# One NF1 candidate, with the existing primal presolve and standard barrier.
+# One final NF1 candidate: automatic AggFill, PreDual=0 and standard barrier.
 # The runner omits the objective-constant variable and records a comparable cost.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
@@ -25,5 +25,5 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
 srun --ntasks=1 --cpus-per-task=32 --cpu-bind=cores \
     "$pixi_wrapper" run python -m scripts.run_bornholm_accuracy \
-    --profile nf1_overnight_t32 --threads 32 \
-    --output-dir "results/bornholm_accuracy/$trial/tol8_nf1_overnight_t32"
+    --profile nf1_final_t32 --threads 32 \
+    --output-dir "results/bornholm_accuracy/$trial/tol8_nf1_final_t32"

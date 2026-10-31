@@ -109,6 +109,8 @@ PROFILES.update(THREAD32_PROFILES)
 OVERNIGHT_PROFILES = {
     "nf1_overnight_t32": PROFILES["nf1_t32"]
     | {"label": "tol8_nf1_overnight_t32", "BarHomogeneous": 0},
+    "nf1_final_t32": PROFILES["nf1_aggfill_t32"]
+    | {"label": "tol8_nf1_final_t32", "BarHomogeneous": 0},
 }
 PROFILES.update(OVERNIGHT_PROFILES)
 FOURWAY_FACTORS = {
@@ -133,7 +135,7 @@ OBJECTIVE_CONSTANT_SETTINGS = (
         ),
         True,
     )
-    | {"nf1_overnight_t32": False}
+    | dict.fromkeys(OVERNIGHT_PROFILES, False)
     | {
         name: include_constant
         for name, (_, include_constant) in FOURWAY_FACTORS.items()

@@ -677,6 +677,7 @@ def test_crossover_retains_coal_cost_screen(value):
         ("nf1_aggfill_t32", "nf1_aggfill_t16", "threads"),
         ("nf1_tol9_t32", "nf1_t32", "BarConvTol"),
         ("nf1_overnight_t32", "nf1_t32", "BarHomogeneous"),
+        ("nf1_final_t32", "nf1_aggfill_t32", "BarHomogeneous"),
     ],
 )
 def test_followup_changes_only_one_setting_from_existing_reference(
@@ -1103,9 +1104,9 @@ def test_fourway_array_rejects_wrong_allocation(tmp_path, override):
         ("bornholm_auto_threads_workq.sbatch", "nf1_auto", "0", "tol8_nf1_tauto"),
         (
             "bornholm_overnight_workq.sbatch",
-            "nf1_overnight_t32",
+            "nf1_final_t32",
             "32",
-            "tol8_nf1_overnight_t32",
+            "tol8_nf1_final_t32",
         ),
     ],
 )
