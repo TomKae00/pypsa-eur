@@ -68,6 +68,21 @@ CROSSOVER_PROFILES = {
     | {"label": "tol8_nf1_crossover2_t16", "crossover": 2, "threads": 16},
 }
 PROFILES.update(CROSSOVER_PROFILES)
+# Independent presolve trials, plus a matched automatic-thread PreDual trial.
+PRESOLVE_PROFILES = {
+    "nf1_predual_t16": PROFILES["nf1_t16"]
+    | {"label": "tol8_nf1_predual_t16", "PreDual": -1, "AggFill": 0},
+    "nf1_aggfill_t16": PROFILES["nf1_t16"]
+    | {"label": "tol8_nf1_aggfill_t16", "PreDual": 0, "AggFill": -1},
+    "nf1_predual_auto": PROFILES["nf1_t16"]
+    | {
+        "label": "tol8_nf1_predual_tauto",
+        "PreDual": -1,
+        "AggFill": 0,
+        "threads": 0,
+    },
+}
+PROFILES.update(PRESOLVE_PROFILES)
 QUALITY = (
     "Status",
     "ObjVal",
@@ -125,7 +140,10 @@ def sha256(path):
 def configure_context(context, directory, numeric_focus, threads, *, profile=None):
     """Change solver options and output destinations, preserving source inputs."""
     study.require(numeric_focus in (0, 1, 2), "NumericFocus must be 0, 1 or 2")
-    study.require(threads in (8, 16), "Comparison runs require eight or 16 threads")
+    study.require(
+        threads in (0, 8, 16),
+        "Comparison runs require 0 (automatic), eight or 16 threads",
+    )
     study.require(profile is None or profile in PROFILES, "Unknown solver profile")
     if profile is not None:
         spec = PROFILES[profile]
@@ -136,6 +154,16 @@ def configure_context(context, directory, numeric_focus, threads, *, profile=Non
         study.require(
             threads == spec.get("threads", 8), "Thread count does not match profile"
         )
+    workflow_threads = threads
+    if threads == 0:
+        # Gurobi's automatic setting normally uses up to 32 CPUs. Reserve those
+        # CPUs explicitly; Snakemake still needs a positive resource count.
+        allocated = os.environ.get("SLURM_CPUS_PER_TASK", "")
+        study.require(
+            allocated.isdigit() and int(allocated) >= 32,
+            "Automatic Gurobi threads require SLURM_CPUS_PER_TASK >= 32",
+        )
+        workflow_threads = int(allocated)
     # Snakemake 9 reconstructs Params on each access. Mutate its stored dict:
     # assigning context.params.solving would change a temporary container only.
     solving = context.params.solving
@@ -152,7 +180,7 @@ def configure_context(context, directory, numeric_focus, threads, *, profile=Non
             {key: value for key, value in PROFILES[profile].items() if key != "label"}
         )
     context.config["solving"] = solving
-    context.threads = threads
+    context.threads = workflow_threads
     context.output = type(context.output)(
         fromdict={
             "network": str(directory / "candidate_2035.nc"),
@@ -222,6 +250,20 @@ def barrier_result(path):
             "Rounded log iterates; dual feasibility is not certified. Not an error bound."
         )
     return last
+
+
+def solver_thread_usage(path):
+    """Retain reported solver limits, distinct from the requested Threads=0."""
+    result = {}
+    with Path(path).open() as stream:
+        for line in stream:
+            match = re.match(r"Thread count: .*using up to (\d+) threads", line)
+            if match:
+                result["reported_max_threads"] = int(match[1])
+            match = re.match(r"\s*Threads\s*:\s*(\d+)\s*$", line)
+            if match:
+                result["barrier_threads"] = int(match[1])
+    return result
 
 
 def coal_check(n):
@@ -324,6 +366,10 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         "profile": profile,
         "threads": threads,
         "slurm_cpus_per_task": os.environ.get("SLURM_CPUS_PER_TASK"),
+        "visible_cpu_count": os.cpu_count(),
+        "cpu_affinity_count": (
+            len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None
+        ),
         "node": socket.gethostname(),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "slurm_array_job_id": os.environ.get("SLURM_ARRAY_JOB_ID"),
@@ -340,7 +386,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         temporary.replace(directory / "summary.json")
 
     try:
-        if profile in CROSSOVER_PROFILES:
+        if profile in CROSSOVER_PROFILES or profile in PRESOLVE_PROFILES:
             import pypsa
 
             # Retain the audited accounting convention even if an environment
@@ -391,6 +437,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         options["SoftMemLimit"] = soft_memory_limit(memory, options["SoftMemLimit"])
         report.update(
             solver_options=dict(options),
+            workflow_threads=context.threads,
             node_memory_before_solve_GB=memory,
             screening_basis=(
                 "returned_solution_quality_crossover_enabled"
@@ -404,7 +451,9 @@ def solve(numeric_focus, threads, directory, *, profile=None):
             f"Baseline accuracy comparison: profile={profile or 'legacy'}, "
             f"BarConvTol={options['BarConvTol']:g}, NumericFocus={numeric_focus}, "
             f"ScaleFlag={options.get('ScaleFlag', -1)}, crossover={options['crossover']}, "
-            f"BarHomogeneous={options.get('BarHomogeneous', -1)}, threads={threads}",
+            f"BarHomogeneous={options.get('BarHomogeneous', -1)}, "
+            f"PreDual={options.get('PreDual', -1)}, AggFill={options.get('AggFill', -1)}, "
+            f"threads={threads}, allocated_cpus={report['slurm_cpus_per_task']}",
             flush=True,
         )
         print(f"Source SHA256: {source_hash}\nResults: {directory}", flush=True)
@@ -479,6 +528,8 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         )
         raise
     finally:
+        if (directory / "solver.log").is_file():
+            report["solver_threads"] = solver_thread_usage(directory / "solver.log")
         checkpoint()
 
 
@@ -514,6 +565,8 @@ def compare(directories):
                 "BarConvTol",
                 "BarHomogeneous",
                 "threads",
+                "PreDual",
+                "AggFill",
             )
         }
         for r in reports
@@ -534,6 +587,8 @@ def compare(directories):
                 ),
                 "node": report.get("node"),
                 "slurm_cpus_per_task": report.get("slurm_cpus_per_task"),
+                "cpu_affinity_count": report.get("cpu_affinity_count"),
+                "solver_threads": report.get("solver_threads"),
                 "solver_options": report.get("solver_options", {}),
                 "error": report.get("error"),
                 "hours": round(report.get("elapsed_seconds", 0) / 3600, 3),
@@ -589,8 +644,8 @@ def main():
     parser.add_argument(
         "--threads",
         type=int,
-        choices=(8, 16),
-        help="Default: profile thread count, or 8 without a profile",
+        choices=(0, 8, 16),
+        help="Default: profile thread count, or 8; 0 is automatic and needs 32 allocated CPUs",
     )
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()

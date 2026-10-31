@@ -25,6 +25,11 @@ from snakemake.iocontainers import (
 from scripts import run_bornholm_accuracy as accuracy
 
 
+@pytest.fixture(autouse=True)
+def slurm_cpu_allocation(monkeypatch):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "32")
+
+
 def context():
     solving = {
         "solver": {"name": "gurobi", "options": "test"},
@@ -36,6 +41,8 @@ def context():
                 "BarConvTol": 1e-5,
                 "TimeLimit": 72000,
                 "SoftMemLimit": 100,
+                "PreDual": 0,
+                "AggFill": 0,
             }
         },
         "options": {"skip_iterations": True},
@@ -218,6 +225,7 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
     )
     status, condition = n.optimize(solver_name="gurobi", **options)
     assert str(condition) == "optimal"
+    assert n.model.solver_model.Params.Threads == threads
     n.export_to_netcdf(tmp_path / "candidate.nc")
     q = accuracy.solver_quality(n.model.solver_model)
     assert q["values"]["ObjVal"] == pytest.approx(n.objective)
@@ -246,10 +254,13 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
 ):
     from scripts import bornholm_provenance
 
-    if profile in accuracy.CROSSOVER_PROFILES:
+    retain_constant = (
+        profile in accuracy.CROSSOVER_PROFILES or profile in accuracy.PRESOLVE_PROFILES
+    )
+    if retain_constant:
         import pypsa
 
-        # The new pair must preserve the objective constant even if a local
+        # New trials must preserve the objective constant even if a local
         # environment has opted into PyPSA's future default.
         previous_constant_option = (
             pypsa.options.params.optimize.include_objective_constant
@@ -317,14 +328,19 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
 
     def native(path, *, run_name, init_globals):
         assert init_globals["snakemake"] is ctx
-        if profile in accuracy.CROSSOVER_PROFILES:
+        if retain_constant:
             assert pypsa.options.params.optimize.include_objective_constant is True
         assert ctx.params.solving["solver_options"]["test"]["SoftMemLimit"] == 90
         # Simulate a poor pre-cleanup barrier row for the crossover profile.
         gap = (
             200e6 if accuracy.PROFILES.get(profile, {}).get("crossover", 0) != 0 else 0
         )
-        Path(ctx.log.solver).write_text(f"9 {123 + gap:.8e} 1.23000000e+02 0 0 0 1s\n")
+        used_threads = threads or 32
+        Path(ctx.log.solver).write_text(
+            f"Thread count: 32 physical cores, 32 logical processors, using up to {used_threads} threads\n"
+            f"Threads : {used_threads}\n"
+            f"9 {123 + gap:.8e} 1.23000000e+02 0 0 0 1s\n"
+        )
         if native_failure:
             exec(
                 compile(
@@ -350,8 +366,15 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         with pytest.raises(exception, match=match):
             accuracy.solve(focus, threads, directory, profile=profile)
     report = json.loads((directory / "summary.json").read_text())
-    if profile in accuracy.CROSSOVER_PROFILES:
+    if retain_constant:
         assert report["include_objective_constant"] is True
+    assert report["threads"] == threads
+    assert report["workflow_threads"] == (threads or 32)
+    assert report["slurm_cpus_per_task"] == "32"
+    assert report["solver_threads"] == {
+        "reported_max_threads": threads or 32,
+        "barrier_threads": threads or 32,
+    }
     assert report["status"] == ("checks_passed" if passes else "failed")
     assert (directory / "candidate_2035.nc").exists() == (
         not passes and not native_failure
@@ -603,6 +626,9 @@ def test_crossover_retains_coal_cost_screen(value):
         ("nf0_homogeneous", "nf1_homogeneous", "NumericFocus"),
         ("nf1_crossover2_t8", "nf1", "crossover"),
         ("nf1_crossover2_t16", "nf1_t16", "crossover"),
+        ("nf1_predual_t16", "nf1_t16", "PreDual"),
+        ("nf1_aggfill_t16", "nf1_t16", "AggFill"),
+        ("nf1_predual_auto", "nf1_predual_t16", "threads"),
     ],
 )
 def test_followup_changes_only_one_setting_from_existing_reference(
@@ -621,7 +647,34 @@ def test_followup_changes_only_one_setting_from_existing_reference(
     assert options["TimeLimit"] == base["TimeLimit"] == 72000
     assert options["SoftMemLimit"] == base["SoftMemLimit"] == 100
     assert first.input.network == second.input.network == "original.nc"
-    assert second.threads == threads
+    assert second.threads == (threads or 32)
+
+
+@pytest.mark.parametrize("allocated", [None, "16", "not-a-number"])
+def test_automatic_threads_require_full_allocation(tmp_path, monkeypatch, allocated):
+    if allocated is None:
+        monkeypatch.delenv("SLURM_CPUS_PER_TASK")
+    else:
+        monkeypatch.setenv("SLURM_CPUS_PER_TASK", allocated)
+    with pytest.raises(ValueError, match="SLURM_CPUS_PER_TASK >= 32"):
+        accuracy.configure_context(
+            context(), tmp_path, 1, 0, profile="nf1_predual_auto"
+        )
+
+
+def test_thread_log_reports_limits_separately_from_automatic_request(tmp_path):
+    log = tmp_path / "solver.log"
+    log.write_text(
+        "Set parameter Threads to value 0\n"
+        "Thread count: 32 physical cores, 32 logical processors, using up to 32 threads\n"
+        "  Threads     : 28\n"
+    )
+    assert accuracy.solver_thread_usage(log) == {
+        "reported_max_threads": 32,
+        "barrier_threads": 28,
+    }
+    log.write_text("No barrier statistics before failure\n")
+    assert accuracy.solver_thread_usage(log) == {}
 
 
 def test_profile_rejects_mismatched_thread_count(tmp_path):
@@ -765,7 +818,9 @@ def test_followup_rejects_wrong_allocation(tmp_path, override):
     assert result.returncode == 2
 
 
-@pytest.mark.parametrize("profile", accuracy.FOLLOWUP_PROFILES)
+@pytest.mark.parametrize(
+    "profile", [*accuracy.FOLLOWUP_PROFILES, *accuracy.PRESOLVE_PROFILES]
+)
 def test_cli_derives_focus_and_threads_from_followup_profile(
     tmp_path, monkeypatch, profile
 ):
@@ -780,6 +835,79 @@ def test_cli_derives_focus_and_threads_from_followup_profile(
     )
     accuracy.main()
     assert calls == [((*profile_settings(profile), tmp_path), {"profile": profile})]
+
+
+@pytest.mark.parametrize("task,profile", list(enumerate(accuracy.PRESOLVE_PROFILES)))
+def test_presolve_array_handoff_and_container_allocation(tmp_path, task, profile):
+    wrapper = tmp_path / "pixi-sophia"
+    wrapper.write_text(
+        "#!/bin/bash\n"
+        'python3 -c \'import sys,json,os; print(json.dumps({"args": sys.argv[1:], '
+        '"allocation": os.environ["SINGULARITYENV_SLURM_CPUS_PER_TASK"], '
+        '"array": os.environ["SINGULARITYENV_SLURM_ARRAY_JOB_ID"]}))\' "$@"\n'
+    )
+    wrapper.chmod(0o755)
+    srun = tmp_path / "srun"
+    srun.write_text(
+        "#!/bin/bash\n"
+        '[[ "$1" == --ntasks=1 && "$2" == --cpus-per-task=32 && "$3" == --cpu-bind=cores ]] || exit 3\n'
+        'shift 3\nexec "$@"\n'
+    )
+    srun.chmod(0o755)
+    script = Path("scripts/bornholm_presolve_workq.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "32",
+            "SLURM_ARRAY_TASK_ID": str(task),
+            "SLURM_ARRAY_JOB_ID": "1234",
+            "PIXI_SOPHIA": str(wrapper),
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+        },
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    args = payload["args"]
+    assert args[:4] == ["run", "python", "-m", "scripts.run_bornholm_accuracy"]
+    assert args[args.index("--profile") + 1] == profile
+    assert int(args[args.index("--threads") + 1]) == profile_settings(profile)[1]
+    assert args[args.index("--output-dir") + 1] == (
+        "results/bornholm_accuracy/1234/" + accuracy.PROFILES[profile]["label"]
+    )
+    assert payload["allocation"] == "32" and payload["array"] == "1234"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"SLURM_JOB_PARTITION": "fatq"},
+        {"SLURM_CPUS_PER_TASK": "16"},
+        {"SLURM_ARRAY_TASK_ID": "3"},
+    ],
+)
+def test_presolve_rejects_wrong_allocation(tmp_path, override):
+    script = Path("scripts/bornholm_presolve_workq.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "32",
+            "SLURM_ARRAY_TASK_ID": "0",
+        }
+        | override,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
 
 
 def test_compare_across_arrays_keeps_labels_and_allows_thread_experiment(
