@@ -941,6 +941,7 @@ def test_followup_rejects_wrong_allocation(tmp_path, override):
         *accuracy.THREAD32_PROFILES,
         *accuracy.OVERNIGHT_PROFILES,
         *accuracy.FOURWAY_PROFILES,
+        "nf1_final_conston_t32",
     ],
 )
 def test_cli_derives_focus_and_threads_from_followup_profile(
@@ -967,6 +968,7 @@ def test_cli_derives_focus_and_threads_from_followup_profile(
             ("bornholm_presolve_workq.sbatch", accuracy.PRESOLVE_PROFILES),
             ("bornholm_threads32_workq.sbatch", accuracy.THREAD32_PROFILES),
             ("bornholm_fourway_workq.sbatch", accuracy.FOURWAY_PROFILES),
+            ("bornholm_objective_pair_workq.sbatch", accuracy.OBJECTIVE_PAIR_PROFILES),
         ]
         for task, profile in enumerate(profiles)
     ],
@@ -1069,6 +1071,59 @@ def test_fourway_profiles_change_only_the_requested_factors(tmp_path):
         assert options["threads"] == 32 and options["NumericFocus"] == 1
         assert options["BarConvTol"] == 1e-8
         assert accuracy.OBJECTIVE_CONSTANT_SETTINGS[profile] is include_constant
+
+
+def test_objective_pair_has_identical_solver_options_and_independent_outputs(tmp_path):
+    options = []
+    outputs = []
+    for profile in accuracy.OBJECTIVE_PAIR_PROFILES:
+        native = context()
+        directory = tmp_path / accuracy.PROFILES[profile]["label"]
+        options.append(
+            accuracy.configure_context(
+                native, directory, *profile_settings(profile), profile=profile
+            )
+        )
+        outputs.append(native.output.network)
+    assert options[0] == options[1]
+    assert outputs[0] != outputs[1]
+    assert options[0]["BarConvTol"] == 1e-8
+    assert options[0]["BarHomogeneous"] == 0
+    assert options[0]["AggFill"] == -1
+    assert options[0]["PreDual"] == 0 and options[0]["crossover"] == 0
+    assert options[0]["threads"] == 32 and options[0]["NumericFocus"] == 1
+    assert list(accuracy.OBJECTIVE_PAIR_CONSTANTS.values()) == [True, False]
+    assert all(
+        accuracy.OBJECTIVE_CONSTANT_SETTINGS[profile] is setting
+        for profile, setting in accuracy.OBJECTIVE_PAIR_CONSTANTS.items()
+    )
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"SLURM_JOB_PARTITION": "fatq"},
+        {"SLURM_CPUS_PER_TASK": "16"},
+        {"SLURM_ARRAY_TASK_ID": "2"},
+    ],
+)
+def test_objective_pair_rejects_wrong_allocation(tmp_path, override):
+    script = Path("scripts/bornholm_objective_pair_workq.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "32",
+            "SLURM_ARRAY_TASK_ID": "0",
+        }
+        | override,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
 
 
 @pytest.mark.parametrize(
