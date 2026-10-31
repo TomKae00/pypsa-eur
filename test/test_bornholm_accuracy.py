@@ -245,17 +245,24 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
 
 
 @pytest.mark.parametrize(
-    "excess,passes,native_failure",
-    [(0, True, False), (588e6, False, False), (0, False, True)],
+    "excess,passes,native_failure,no_solution",
+    [
+        (0, True, False, False),
+        (588e6, False, False, False),
+        (0, False, True, False),
+        (0, False, False, True),
+    ],
 )
 @pytest.mark.parametrize("profile", [None, *accuracy.PROFILES])
 def test_native_handoff_retains_failed_candidate_and_original_outputs(
-    tmp_path, monkeypatch, request, excess, passes, native_failure, profile
+    tmp_path, monkeypatch, request, excess, passes, native_failure, no_solution, profile
 ):
     from scripts import bornholm_provenance
 
     retain_constant = (
-        profile in accuracy.CROSSOVER_PROFILES or profile in accuracy.PRESOLVE_PROFILES
+        profile in accuracy.CROSSOVER_PROFILES
+        or profile in accuracy.PRESOLVE_PROFILES
+        or profile in accuracy.AUTO_THREAD_PROFILES
     )
     if retain_constant:
         import pypsa
@@ -309,16 +316,29 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     class Solver:
         def getAttr(self, key):
             if key == "Status":
-                return 13 if native_failure else 2
+                return 17 if no_solution else 13 if native_failure else 2
+            if no_solution and key == "ObjVal":
+                raise AttributeError("No solution available")
             return 123 if key == "ObjVal" else 0
 
     n = SimpleNamespace(
-        meta={"solve_result": {"status": "ok", "termination_condition": "optimal"}},
-        objective=123,
+        meta={
+            "solve_result": {
+                "status": "error" if no_solution else "ok",
+                "termination_condition": "internal_solver_error"
+                if no_solution
+                else "optimal",
+            }
+        },
+        objective=None if no_solution else 123,
         model=SimpleNamespace(
             solver_model=Solver(),
-            status="warning" if native_failure else "ok",
-            termination_condition="suboptimal" if native_failure else "optimal",
+            status="error" if no_solution else "warning" if native_failure else "ok",
+            termination_condition="internal_solver_error"
+            if no_solution
+            else "suboptimal"
+            if native_failure
+            else "optimal",
         ),
     )
     monkeypatch.setattr(
@@ -361,6 +381,8 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         exception, match = (
             (RuntimeError, "Discarding solution")
             if native_failure
+            else (ValueError, "No objective returned.*MEM_LIMIT")
+            if no_solution
             else (ValueError, "needs review")
         )
         with pytest.raises(exception, match=match):
@@ -380,6 +402,13 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         not passes and not native_failure
     )
     assert (directory / "solved_2035.nc").exists() == passes
+    if no_solution:
+        assert report["solver_quality"]["values"]["Status"] == 17
+        assert "ObjVal" in report["solver_quality"]["unavailable"]
+        assert report["solver_stop_reason"] == "MEM_LIMIT (SoftMemLimit reached)"
+        assert report["native_termination_condition"] == "internal_solver_error"
+        assert "objective" not in report and "coal" not in report
+        assert "NoneType" not in report["error"]
     if native_failure:
         assert report["solver_quality"]["values"]["Status"] == 13
         assert report["native_termination_condition"] == "suboptimal"
@@ -629,6 +658,7 @@ def test_crossover_retains_coal_cost_screen(value):
         ("nf1_predual_t16", "nf1_t16", "PreDual"),
         ("nf1_aggfill_t16", "nf1_t16", "AggFill"),
         ("nf1_predual_auto", "nf1_predual_t16", "threads"),
+        ("nf1_auto", "nf1_t16", "threads"),
     ],
 )
 def test_followup_changes_only_one_setting_from_existing_reference(
@@ -819,7 +849,12 @@ def test_followup_rejects_wrong_allocation(tmp_path, override):
 
 
 @pytest.mark.parametrize(
-    "profile", [*accuracy.FOLLOWUP_PROFILES, *accuracy.PRESOLVE_PROFILES]
+    "profile",
+    [
+        *accuracy.FOLLOWUP_PROFILES,
+        *accuracy.PRESOLVE_PROFILES,
+        *accuracy.AUTO_THREAD_PROFILES,
+    ],
 )
 def test_cli_derives_focus_and_threads_from_followup_profile(
     tmp_path, monkeypatch, profile
@@ -902,6 +937,77 @@ def test_presolve_rejects_wrong_allocation(tmp_path, override):
             "SLURM_JOB_PARTITION": "workq",
             "SLURM_CPUS_PER_TASK": "32",
             "SLURM_ARRAY_TASK_ID": "0",
+        }
+        | override,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
+
+
+def test_baseline_automatic_thread_submission(tmp_path):
+    wrapper = tmp_path / "pixi-sophia"
+    wrapper.write_text(
+        "#!/bin/bash\n"
+        'python3 -c \'import sys,json,os; print(json.dumps({"args": sys.argv[1:], '
+        '"allocation": os.environ["SINGULARITYENV_SLURM_CPUS_PER_TASK"], '
+        '"job": os.environ["SINGULARITYENV_SLURM_JOB_ID"]}))\' "$@"\n'
+    )
+    wrapper.chmod(0o755)
+    srun = tmp_path / "srun"
+    srun.write_text(
+        "#!/bin/bash\n"
+        '[[ "$1" == --ntasks=1 && "$2" == --cpus-per-task=32 && "$3" == --cpu-bind=cores ]] || exit 3\n'
+        'shift 3\nexec "$@"\n'
+    )
+    srun.chmod(0o755)
+    script = Path("scripts/bornholm_auto_threads_workq.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "32",
+            "SLURM_JOB_ID": "1235",
+            "PIXI_SOPHIA": str(wrapper),
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+        },
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["args"] == [
+        "run",
+        "python",
+        "-m",
+        "scripts.run_bornholm_accuracy",
+        "--profile",
+        "nf1_auto",
+        "--threads",
+        "0",
+        "--output-dir",
+        "results/bornholm_accuracy/1235/tol8_nf1_tauto",
+    ]
+    assert payload["allocation"] == "32" and payload["job"] == "1235"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [{"SLURM_JOB_PARTITION": "fatq"}, {"SLURM_CPUS_PER_TASK": "16"}],
+)
+def test_baseline_automatic_threads_reject_wrong_allocation(tmp_path, override):
+    script = Path("scripts/bornholm_auto_threads_workq.sbatch").resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "32",
         }
         | override,
         text=True,

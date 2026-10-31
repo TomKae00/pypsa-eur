@@ -83,6 +83,13 @@ PRESOLVE_PROFILES = {
     },
 }
 PROFILES.update(PRESOLVE_PROFILES)
+# Separate replacement trial: retain PreDual=0 after the automatic PreDual
+# experiment exhausted memory. Do not change profiles in submitted arrays.
+AUTO_THREAD_PROFILES = {
+    "nf1_auto": PROFILES["nf1_t16"]
+    | {"label": "tol8_nf1_tauto", "threads": 0, "PreDual": 0, "AggFill": 0},
+}
+PROFILES.update(AUTO_THREAD_PROFILES)
 QUALITY = (
     "Status",
     "ObjVal",
@@ -386,7 +393,11 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         temporary.replace(directory / "summary.json")
 
     try:
-        if profile in CROSSOVER_PROFILES or profile in PRESOLVE_PROFILES:
+        if (
+            profile in CROSSOVER_PROFILES
+            or profile in PRESOLVE_PROFILES
+            or profile in AUTO_THREAD_PROFILES
+        ):
             import pypsa
 
             # Retain the audited accounting convention even if an environment
@@ -465,13 +476,27 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         n = namespace["n"]
         report["phase"] = "quality_checks"
         report["solve_result"] = n.meta.get("solve_result", {})
-        objective = float(n.objective)
-        study.require(math.isfinite(objective), "Non-finite objective")
-        report["objective"] = objective
-        report["solver_quality"] = solver_quality(
-            getattr(n.model, "solver_model", None)
+        # A memory-limited solve can return without an objective. Capture its
+        # native status before inspecting solution-dependent quantities.
+        model = getattr(n, "model", None)
+        report["solver_quality"] = solver_quality(getattr(model, "solver_model", None))
+        report["native_model_status"] = str(getattr(model, "status", "unavailable"))
+        report["native_termination_condition"] = str(
+            getattr(model, "termination_condition", "unavailable")
         )
         report["barrier_final"] = barrier_result(directory / "solver.log")
+        native_status = report["solver_quality"]["values"].get("Status")
+        if native_status == 17:
+            report["solver_stop_reason"] = "MEM_LIMIT (SoftMemLimit reached)"
+        objective = n.objective
+        study.require(
+            objective is not None,
+            f"No objective returned: {report['solve_result']}; "
+            f"Gurobi status={native_status}; {report.get('solver_stop_reason', '')}",
+        )
+        objective = float(objective)
+        study.require(math.isfinite(objective), "Non-finite objective")
+        report["objective"] = objective
         report["coal"] = coal_check(n)
         report["screening_issues"] = accuracy_issues(
             report["solver_quality"],
@@ -600,6 +625,7 @@ def compare(directories):
                 "native_termination_condition": report.get(
                     "native_termination_condition"
                 ),
+                "solver_stop_reason": report.get("solver_stop_reason"),
                 "coal_avoidable_EUR_per_year": report.get("coal", {}).get(
                     "same_dispatch_avoidable_cost_eur"
                 ),
