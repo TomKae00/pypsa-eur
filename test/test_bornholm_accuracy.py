@@ -939,6 +939,7 @@ def test_followup_rejects_wrong_allocation(tmp_path, override):
         *accuracy.AUTO_THREAD_PROFILES,
         *accuracy.THREAD32_PROFILES,
         *accuracy.OVERNIGHT_PROFILES,
+        *accuracy.FOURWAY_PROFILES,
     ],
 )
 def test_cli_derives_focus_and_threads_from_followup_profile(
@@ -964,6 +965,7 @@ def test_cli_derives_focus_and_threads_from_followup_profile(
         for script, profiles in [
             ("bornholm_presolve_workq.sbatch", accuracy.PRESOLVE_PROFILES),
             ("bornholm_threads32_workq.sbatch", accuracy.THREAD32_PROFILES),
+            ("bornholm_fourway_workq.sbatch", accuracy.FOURWAY_PROFILES),
         ]
         for task, profile in enumerate(profiles)
     ],
@@ -1029,6 +1031,55 @@ def test_solver_array_handoff_and_container_allocation(
 )
 def test_solver_array_rejects_wrong_allocation(tmp_path, override, script_name):
     script = Path("scripts", script_name).resolve()
+    result = subprocess.run(
+        ["bash", str(script)],
+        check=False,
+        env=os.environ
+        | {
+            "SLURM_SUBMIT_DIR": str(tmp_path),
+            "SLURM_JOB_PARTITION": "workq",
+            "SLURM_CPUS_PER_TASK": "32",
+            "SLURM_ARRAY_TASK_ID": "0",
+        }
+        | override,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
+
+
+def test_fourway_profiles_change_only_the_requested_factors(tmp_path):
+    assert set(accuracy.FOURWAY_FACTORS.values()) == {
+        (-1, True),
+        (-1, False),
+        (1, True),
+        (1, False),
+    }
+    for profile, (homogeneous, include_constant) in accuracy.FOURWAY_FACTORS.items():
+        options = accuracy.configure_context(
+            context(), tmp_path, *profile_settings(profile), profile=profile
+        )
+        reference = accuracy.configure_context(
+            context(), tmp_path, 1, 32, profile="nf1_aggfill_t32"
+        )
+        assert options == reference | {"BarHomogeneous": homogeneous}
+        assert options["AggFill"] == -1
+        assert options["PreDual"] == 0 and options["crossover"] == 0
+        assert options["threads"] == 32 and options["NumericFocus"] == 1
+        assert options["BarConvTol"] == 1e-8
+        assert accuracy.OBJECTIVE_CONSTANT_SETTINGS[profile] is include_constant
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"SLURM_JOB_PARTITION": "fatq"},
+        {"SLURM_CPUS_PER_TASK": "16"},
+        {"SLURM_ARRAY_TASK_ID": "4"},
+    ],
+)
+def test_fourway_array_rejects_wrong_allocation(tmp_path, override):
+    script = Path("scripts/bornholm_fourway_workq.sbatch").resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,

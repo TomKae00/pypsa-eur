@@ -111,15 +111,34 @@ OVERNIGHT_PROFILES = {
     | {"label": "tol8_nf1_overnight_t32", "BarHomogeneous": 0},
 }
 PROFILES.update(OVERNIGHT_PROFILES)
-OBJECTIVE_CONSTANT_SETTINGS = dict.fromkeys(
-    (
-        *CROSSOVER_PROFILES,
-        *PRESOLVE_PROFILES,
-        *AUTO_THREAD_PROFILES,
-        *THREAD32_PROFILES,
-    ),
-    True,
-) | {"nf1_overnight_t32": False}
+FOURWAY_FACTORS = {
+    "nf1_aggfill_homoff_conston_t32": (-1, True),
+    "nf1_aggfill_homoff_constoff_t32": (-1, False),
+    "nf1_aggfill_homon_conston_t32": (1, True),
+    "nf1_aggfill_homon_constoff_t32": (1, False),
+}
+FOURWAY_PROFILES = {
+    name: PROFILES["nf1_aggfill_t32"]
+    | {"label": f"tol8_{name}", "BarHomogeneous": homogeneous}
+    for name, (homogeneous, _) in FOURWAY_FACTORS.items()
+}
+PROFILES.update(FOURWAY_PROFILES)
+OBJECTIVE_CONSTANT_SETTINGS = (
+    dict.fromkeys(
+        (
+            *CROSSOVER_PROFILES,
+            *PRESOLVE_PROFILES,
+            *AUTO_THREAD_PROFILES,
+            *THREAD32_PROFILES,
+        ),
+        True,
+    )
+    | {"nf1_overnight_t32": False}
+    | {
+        name: include_constant
+        for name, (_, include_constant) in FOURWAY_FACTORS.items()
+    }
+)
 QUALITY = (
     "Status",
     "ObjVal",
@@ -490,7 +509,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         report["phase"] = "preflight"
         checkpoint()
         report["preflight"] = study.preflight(context)
-        if profile in OVERNIGHT_PROFILES:
+        if report.get("include_objective_constant") is False:
             report["reference_network"] = str(context.output.network)
             report["reference_objective_constant"] = reference_cost_constant(
                 context.output.network
