@@ -223,7 +223,13 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
     options = accuracy.configure_context(
         context(), tmp_path, focus, threads, profile=profile
     )
-    status, condition = n.optimize(solver_name="gurobi", **options)
+    status, condition = n.optimize(
+        solver_name="gurobi",
+        include_objective_constant=accuracy.OBJECTIVE_CONSTANT_SETTINGS.get(
+            profile, True
+        ),
+        **options,
+    )
     assert str(condition) == "optimal"
     assert n.model.solver_model.Params.Threads == threads
     n.export_to_netcdf(tmp_path / "candidate.nc")
@@ -259,13 +265,8 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
 ):
     from scripts import bornholm_provenance
 
-    retain_constant = (
-        profile in accuracy.CROSSOVER_PROFILES
-        or profile in accuracy.PRESOLVE_PROFILES
-        or profile in accuracy.AUTO_THREAD_PROFILES
-        or profile in accuracy.THREAD32_PROFILES
-    )
-    if retain_constant:
+    constant_setting = accuracy.OBJECTIVE_CONSTANT_SETTINGS.get(profile)
+    if constant_setting is not None:
         import pypsa
 
         # New trials must preserve the objective constant even if a local
@@ -273,7 +274,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         previous_constant_option = (
             pypsa.options.params.optimize.include_objective_constant
         )
-        pypsa.options.params.optimize.include_objective_constant = False
+        pypsa.options.params.optimize.include_objective_constant = not constant_setting
         request.addfinalizer(
             lambda: setattr(
                 pypsa.options.params.optimize,
@@ -299,6 +300,8 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     (reference_dir / "summary.json").write_text(json.dumps(reference))
     ctx = context()
     ctx.input.network = str(original)
+    ctx.output = OutputFiles(fromdict={"network": str(previous)})
+    monkeypatch.setattr(accuracy, "reference_cost_constant", lambda path: 23.0)
     monkeypatch.setattr(accuracy.study, "context_for", lambda _: ctx)
     monkeypatch.setattr(accuracy.study, "preflight", lambda _: {"snapshots": 2920})
     monkeypatch.setattr(accuracy, "PINNED_FILES", ())
@@ -332,6 +335,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
             }
         },
         objective=None if no_solution else 123,
+        objective_constant=0.0 if constant_setting is False else 23.0,
         model=SimpleNamespace(
             solver_model=Solver(),
             status="error" if no_solution else "warning" if native_failure else "ok",
@@ -349,8 +353,11 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
 
     def native(path, *, run_name, init_globals):
         assert init_globals["snakemake"] is ctx
-        if retain_constant:
-            assert pypsa.options.params.optimize.include_objective_constant is True
+        if constant_setting is not None:
+            assert (
+                pypsa.options.params.optimize.include_objective_constant
+                is constant_setting
+            )
         assert ctx.params.solving["solver_options"]["test"]["SoftMemLimit"] == 90
         # Simulate a poor pre-cleanup barrier row for the crossover profile.
         gap = (
@@ -389,8 +396,14 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         with pytest.raises(exception, match=match):
             accuracy.solve(focus, threads, directory, profile=profile)
     report = json.loads((directory / "summary.json").read_text())
-    if retain_constant:
-        assert report["include_objective_constant"] is True
+    if constant_setting is not None:
+        assert report["include_objective_constant"] is constant_setting
+    if not native_failure and not no_solution:
+        assert report["objective_native"] == 123
+        assert report["objective"] == (100 if constant_setting is False else 123)
+        assert report["objective_offset_applied"] == (
+            -23 if constant_setting is False else 0
+        )
     assert report["threads"] == threads
     assert report["workflow_threads"] == (threads or 32)
     assert report["slurm_cpus_per_task"] == "32"
@@ -663,6 +676,7 @@ def test_crossover_retains_coal_cost_screen(value):
         ("nf1_t32", "nf1_t16", "threads"),
         ("nf1_aggfill_t32", "nf1_aggfill_t16", "threads"),
         ("nf1_tol9_t32", "nf1_t32", "BarConvTol"),
+        ("nf1_overnight_t32", "nf1_t32", "BarHomogeneous"),
     ],
 )
 def test_followup_changes_only_one_setting_from_existing_reference(
@@ -712,6 +726,68 @@ def test_thread_log_reports_limits_separately_from_automatic_request(tmp_path):
     }
     log.write_text("No barrier statistics before failure\n")
     assert accuracy.solver_thread_usage(log) == {}
+
+
+def test_omitting_objective_constant_preserves_dispatch_prices_and_comparable_cost(
+    tmp_path,
+):
+    import pypsa
+
+    results = {}
+    for include in (True, False):
+        n = pypsa.Network()
+        n.add("Bus", "b")
+        n.add(
+            "Generator",
+            "g",
+            bus="b",
+            p_nom=100,
+            p_nom_min=100,
+            p_nom_extendable=True,
+            capital_cost=10,
+            marginal_cost=10,
+        )
+        n.add("Load", "d", bus="b", p_set=120)
+        status, condition = n.optimize(
+            solver_name="gurobi",
+            include_objective_constant=include,
+            threads=1,
+            method=2,
+            crossover=0,
+            OutputFlag=0,
+        )
+        assert str(condition) == "optimal"
+        results[include] = {
+            "objective": n.objective,
+            "constant": n.objective_constant,
+            "variables": n.model.solver_model.NumVars,
+            "capacity": n.generators.p_nom_opt["g"],
+            "dispatch": n.generators_t.p["g"].tolist(),
+            "prices": n.buses_t.marginal_price["b"].tolist(),
+        }
+        if include:
+            reference = tmp_path / "reference.nc"
+            n.export_to_netcdf(reference)
+            saved_constant = accuracy.reference_cost_constant(reference)
+    assert saved_constant == 1000
+    assert results[False]["constant"] == 0
+    assert results[False]["objective"] - saved_constant == pytest.approx(
+        results[True]["objective"]
+    )
+    assert results[True]["variables"] == results[False]["variables"] + 1
+    for key in ("capacity", "dispatch", "prices"):
+        assert results[False][key] == pytest.approx(results[True][key])
+
+
+@pytest.mark.parametrize("value", [None, 0.0, -1.0, float("nan"), float("inf")])
+def test_reference_cost_constant_rejects_missing_or_invalid_offset(tmp_path, value):
+    import xarray as xr
+
+    path = tmp_path / "reference.nc"
+    attrs = {} if value is None else {"network_objective_constant": value}
+    xr.Dataset(attrs=attrs).to_netcdf(path)
+    with pytest.raises(ValueError, match="positive finite objective constant"):
+        accuracy.reference_cost_constant(path)
 
 
 def test_profile_rejects_mismatched_thread_count(tmp_path):
@@ -862,6 +938,7 @@ def test_followup_rejects_wrong_allocation(tmp_path, override):
         *accuracy.PRESOLVE_PROFILES,
         *accuracy.AUTO_THREAD_PROFILES,
         *accuracy.THREAD32_PROFILES,
+        *accuracy.OVERNIGHT_PROFILES,
     ],
 )
 def test_cli_derives_focus_and_threads_from_followup_profile(
@@ -969,7 +1046,19 @@ def test_solver_array_rejects_wrong_allocation(tmp_path, override, script_name):
     assert result.returncode == 2
 
 
-def test_baseline_automatic_thread_submission(tmp_path):
+@pytest.mark.parametrize(
+    "script_name,profile,threads,label",
+    [
+        ("bornholm_auto_threads_workq.sbatch", "nf1_auto", "0", "tol8_nf1_tauto"),
+        (
+            "bornholm_overnight_workq.sbatch",
+            "nf1_overnight_t32",
+            "32",
+            "tol8_nf1_overnight_t32",
+        ),
+    ],
+)
+def test_single_candidate_submission(tmp_path, script_name, profile, threads, label):
     wrapper = tmp_path / "pixi-sophia"
     wrapper.write_text(
         "#!/bin/bash\n"
@@ -985,7 +1074,7 @@ def test_baseline_automatic_thread_submission(tmp_path):
         'shift 3\nexec "$@"\n'
     )
     srun.chmod(0o755)
-    script = Path("scripts/bornholm_auto_threads_workq.sbatch").resolve()
+    script = Path("scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -1009,11 +1098,11 @@ def test_baseline_automatic_thread_submission(tmp_path):
         "-m",
         "scripts.run_bornholm_accuracy",
         "--profile",
-        "nf1_auto",
+        profile,
         "--threads",
-        "0",
+        threads,
         "--output-dir",
-        "results/bornholm_accuracy/1235/tol8_nf1_tauto",
+        "results/bornholm_accuracy/1235/" + label,
     ]
     assert payload["allocation"] == "32" and payload["job"] == "1235"
 
@@ -1022,8 +1111,12 @@ def test_baseline_automatic_thread_submission(tmp_path):
     "override",
     [{"SLURM_JOB_PARTITION": "fatq"}, {"SLURM_CPUS_PER_TASK": "16"}],
 )
-def test_baseline_automatic_threads_reject_wrong_allocation(tmp_path, override):
-    script = Path("scripts/bornholm_auto_threads_workq.sbatch").resolve()
+@pytest.mark.parametrize(
+    "script_name",
+    ["bornholm_auto_threads_workq.sbatch", "bornholm_overnight_workq.sbatch"],
+)
+def test_single_candidate_rejects_wrong_allocation(tmp_path, override, script_name):
+    script = Path("scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,

@@ -106,6 +106,20 @@ THREAD32_PROFILES = {
     },
 }
 PROFILES.update(THREAD32_PROFILES)
+OVERNIGHT_PROFILES = {
+    "nf1_overnight_t32": PROFILES["nf1_t32"]
+    | {"label": "tol8_nf1_overnight_t32", "BarHomogeneous": 0},
+}
+PROFILES.update(OVERNIGHT_PROFILES)
+OBJECTIVE_CONSTANT_SETTINGS = dict.fromkeys(
+    (
+        *CROSSOVER_PROFILES,
+        *PRESOLVE_PROFILES,
+        *AUTO_THREAD_PROFILES,
+        *THREAD32_PROFILES,
+    ),
+    True,
+) | {"nf1_overnight_t32": False}
 QUALITY = (
     "Status",
     "ObjVal",
@@ -290,6 +304,29 @@ def solver_thread_usage(path):
     return result
 
 
+def reference_cost_constant(path):
+    """Read the saved baseline's cost offset without loading its time series."""
+    from netCDF4 import Dataset
+
+    with Dataset(path) as data:
+        value = next(
+            (
+                data.getncattr(name)
+                for name in (
+                    "network__objective_constant",
+                    "network_objective_constant",
+                )
+                if name in data.ncattrs()
+            ),
+            None,
+        )
+    study.require(
+        value is not None and math.isfinite(float(value)) and float(value) > 0,
+        "Saved baseline lacks a positive finite objective constant for cost comparison",
+    )
+    return float(value)
+
+
 def coal_check(n):
     name = "EU coal Store"
     study.require(name in n.stores.index, "Expected the audited coal Store")
@@ -410,18 +447,12 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         temporary.replace(directory / "summary.json")
 
     try:
-        if (
-            profile in CROSSOVER_PROFILES
-            or profile in PRESOLVE_PROFILES
-            or profile in AUTO_THREAD_PROFILES
-            or profile in THREAD32_PROFILES
-        ):
+        if profile in OBJECTIVE_CONSTANT_SETTINGS:
             import pypsa
 
-            # Retain the audited accounting convention even if an environment
-            # or module-wide option overrides PyPSA's current default.
-            pypsa.options.params.optimize.include_objective_constant = True
-            report["include_objective_constant"] = True
+            include_constant = OBJECTIVE_CONSTANT_SETTINGS[profile]
+            pypsa.options.params.optimize.include_objective_constant = include_constant
+            report["include_objective_constant"] = include_constant
         checkpoint()
         context = study.context_for(RUN)
         source = Path(context.input.network)
@@ -459,6 +490,11 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         report["phase"] = "preflight"
         checkpoint()
         report["preflight"] = study.preflight(context)
+        if profile in OVERNIGHT_PROFILES:
+            report["reference_network"] = str(context.output.network)
+            report["reference_objective_constant"] = reference_cost_constant(
+                context.output.network
+            )
         options = configure_context(
             context, directory, numeric_focus, threads, profile=profile
         )
@@ -482,7 +518,8 @@ def solve(numeric_focus, threads, directory, *, profile=None):
             f"ScaleFlag={options.get('ScaleFlag', -1)}, crossover={options['crossover']}, "
             f"BarHomogeneous={options.get('BarHomogeneous', -1)}, "
             f"PreDual={options.get('PreDual', -1)}, AggFill={options.get('AggFill', -1)}, "
-            f"threads={threads}, allocated_cpus={report['slurm_cpus_per_task']}",
+            f"threads={threads}, allocated_cpus={report['slurm_cpus_per_task']}, "
+            f"include_objective_constant={report.get('include_objective_constant', 'default')}",
             flush=True,
         )
         print(f"Source SHA256: {source_hash}\nResults: {directory}", flush=True)
@@ -514,7 +551,20 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         )
         objective = float(objective)
         study.require(math.isfinite(objective), "Non-finite objective")
-        report["objective"] = objective
+        report["objective_native"] = objective
+        report["objective_offset_applied"] = 0.0
+        if report.get("include_objective_constant") is False:
+            study.require(
+                n.objective_constant == 0,
+                "Expected PyPSA to omit the objective constant",
+            )
+            report["objective_offset_applied"] = -report["reference_objective_constant"]
+        report["objective"] = objective + report["objective_offset_applied"]
+        report["objective_accounting_note"] = (
+            "objective uses the audited baseline cost convention; objective_native "
+            "and the exported network retain PyPSA's native convention. "
+            "An omitted existing-capacity constant is deducted once for comparison."
+        )
         report["coal"] = coal_check(n)
         report["screening_issues"] = accuracy_issues(
             report["solver_quality"],
@@ -639,6 +689,11 @@ def compare(directories):
                 "Gurobi_MaxMemUsed_GB": quality.get("MaxMemUsed"),
                 "barrier_iterations": quality.get("BarIterCount"),
                 "objective_EUR": report.get("objective", quality.get("ObjVal")),
+                "objective_native_EUR": report.get(
+                    "objective_native", quality.get("ObjVal")
+                ),
+                "objective_offset_applied_EUR": report.get("objective_offset_applied"),
+                "include_objective_constant": report.get("include_objective_constant"),
                 "Gurobi_status": quality.get("Status"),
                 "native_termination_condition": report.get(
                     "native_termination_condition"
