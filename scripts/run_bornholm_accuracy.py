@@ -90,6 +90,22 @@ AUTO_THREAD_PROFILES = {
     | {"label": "tol8_nf1_tauto", "threads": 0, "PreDual": 0, "AggFill": 0},
 }
 PROFILES.update(AUTO_THREAD_PROFILES)
+# Explicit 32-thread comparisons; keep all previously submitted profiles fixed.
+THREAD32_PROFILES = {
+    "nf1_t32": PROFILES["nf1_t16"]
+    | {"label": "tol8_nf1_t32", "threads": 32, "PreDual": 0, "AggFill": 0},
+    "nf1_aggfill_t32": PROFILES["nf1_aggfill_t16"]
+    | {"label": "tol8_nf1_aggfill_t32", "threads": 32},
+    "nf1_tol9_t32": PROFILES["nf1_t16"]
+    | {
+        "label": "tol9_nf1_t32",
+        "threads": 32,
+        "PreDual": 0,
+        "AggFill": 0,
+        "BarConvTol": 1e-9,
+    },
+}
+PROFILES.update(THREAD32_PROFILES)
 QUALITY = (
     "Status",
     "ObjVal",
@@ -148,8 +164,8 @@ def configure_context(context, directory, numeric_focus, threads, *, profile=Non
     """Change solver options and output destinations, preserving source inputs."""
     study.require(numeric_focus in (0, 1, 2), "NumericFocus must be 0, 1 or 2")
     study.require(
-        threads in (0, 8, 16),
-        "Comparison runs require 0 (automatic), eight or 16 threads",
+        threads in (0, 8, 16, 32),
+        "Comparison runs require 0 (automatic), eight or 16 threads, or 32 threads",
     )
     study.require(profile is None or profile in PROFILES, "Unknown solver profile")
     if profile is not None:
@@ -162,15 +178,16 @@ def configure_context(context, directory, numeric_focus, threads, *, profile=Non
             threads == spec.get("threads", 8), "Thread count does not match profile"
         )
     workflow_threads = threads
-    if threads == 0:
+    if threads in (0, 32):
         # Gurobi's automatic setting normally uses up to 32 CPUs. Reserve those
         # CPUs explicitly; Snakemake still needs a positive resource count.
         allocated = os.environ.get("SLURM_CPUS_PER_TASK", "")
         study.require(
             allocated.isdigit() and int(allocated) >= 32,
-            "Automatic Gurobi threads require SLURM_CPUS_PER_TASK >= 32",
+            "Automatic or 32 Gurobi threads require SLURM_CPUS_PER_TASK >= 32",
         )
-        workflow_threads = int(allocated)
+        if threads == 0:
+            workflow_threads = int(allocated)
     # Snakemake 9 reconstructs Params on each access. Mutate its stored dict:
     # assigning context.params.solving would change a temporary container only.
     solving = context.params.solving
@@ -397,6 +414,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
             profile in CROSSOVER_PROFILES
             or profile in PRESOLVE_PROFILES
             or profile in AUTO_THREAD_PROFILES
+            or profile in THREAD32_PROFILES
         ):
             import pypsa
 
@@ -670,8 +688,8 @@ def main():
     parser.add_argument(
         "--threads",
         type=int,
-        choices=(0, 8, 16),
-        help="Default: profile thread count, or 8; 0 is automatic and needs 32 allocated CPUs",
+        choices=(0, 8, 16, 32),
+        help="Default: profile thread count, or 8; 0 and 32 need at least 32 allocated CPUs",
     )
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()

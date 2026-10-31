@@ -263,6 +263,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
         profile in accuracy.CROSSOVER_PROFILES
         or profile in accuracy.PRESOLVE_PROFILES
         or profile in accuracy.AUTO_THREAD_PROFILES
+        or profile in accuracy.THREAD32_PROFILES
     )
     if retain_constant:
         import pypsa
@@ -659,6 +660,9 @@ def test_crossover_retains_coal_cost_screen(value):
         ("nf1_aggfill_t16", "nf1_t16", "AggFill"),
         ("nf1_predual_auto", "nf1_predual_t16", "threads"),
         ("nf1_auto", "nf1_t16", "threads"),
+        ("nf1_t32", "nf1_t16", "threads"),
+        ("nf1_aggfill_t32", "nf1_aggfill_t16", "threads"),
+        ("nf1_tol9_t32", "nf1_t32", "BarConvTol"),
     ],
 )
 def test_followup_changes_only_one_setting_from_existing_reference(
@@ -681,14 +685,17 @@ def test_followup_changes_only_one_setting_from_existing_reference(
 
 
 @pytest.mark.parametrize("allocated", [None, "16", "not-a-number"])
-def test_automatic_threads_require_full_allocation(tmp_path, monkeypatch, allocated):
+@pytest.mark.parametrize("profile", ["nf1_predual_auto", "nf1_t32"])
+def test_full_thread_count_requires_allocation(
+    tmp_path, monkeypatch, allocated, profile
+):
     if allocated is None:
         monkeypatch.delenv("SLURM_CPUS_PER_TASK")
     else:
         monkeypatch.setenv("SLURM_CPUS_PER_TASK", allocated)
     with pytest.raises(ValueError, match="SLURM_CPUS_PER_TASK >= 32"):
         accuracy.configure_context(
-            context(), tmp_path, 1, 0, profile="nf1_predual_auto"
+            context(), tmp_path, *profile_settings(profile), profile=profile
         )
 
 
@@ -854,6 +861,7 @@ def test_followup_rejects_wrong_allocation(tmp_path, override):
         *accuracy.FOLLOWUP_PROFILES,
         *accuracy.PRESOLVE_PROFILES,
         *accuracy.AUTO_THREAD_PROFILES,
+        *accuracy.THREAD32_PROFILES,
     ],
 )
 def test_cli_derives_focus_and_threads_from_followup_profile(
@@ -872,8 +880,20 @@ def test_cli_derives_focus_and_threads_from_followup_profile(
     assert calls == [((*profile_settings(profile), tmp_path), {"profile": profile})]
 
 
-@pytest.mark.parametrize("task,profile", list(enumerate(accuracy.PRESOLVE_PROFILES)))
-def test_presolve_array_handoff_and_container_allocation(tmp_path, task, profile):
+@pytest.mark.parametrize(
+    "script_name,task,profile",
+    [
+        (script, task, profile)
+        for script, profiles in [
+            ("bornholm_presolve_workq.sbatch", accuracy.PRESOLVE_PROFILES),
+            ("bornholm_threads32_workq.sbatch", accuracy.THREAD32_PROFILES),
+        ]
+        for task, profile in enumerate(profiles)
+    ],
+)
+def test_solver_array_handoff_and_container_allocation(
+    tmp_path, script_name, task, profile
+):
     wrapper = tmp_path / "pixi-sophia"
     wrapper.write_text(
         "#!/bin/bash\n"
@@ -889,7 +909,7 @@ def test_presolve_array_handoff_and_container_allocation(tmp_path, task, profile
         'shift 3\nexec "$@"\n'
     )
     srun.chmod(0o755)
-    script = Path("scripts/bornholm_presolve_workq.sbatch").resolve()
+    script = Path("scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -926,8 +946,12 @@ def test_presolve_array_handoff_and_container_allocation(tmp_path, task, profile
         {"SLURM_ARRAY_TASK_ID": "3"},
     ],
 )
-def test_presolve_rejects_wrong_allocation(tmp_path, override):
-    script = Path("scripts/bornholm_presolve_workq.sbatch").resolve()
+@pytest.mark.parametrize(
+    "script_name",
+    ["bornholm_presolve_workq.sbatch", "bornholm_threads32_workq.sbatch"],
+)
+def test_solver_array_rejects_wrong_allocation(tmp_path, override, script_name):
+    script = Path("scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
