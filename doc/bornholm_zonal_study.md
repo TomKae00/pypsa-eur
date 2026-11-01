@@ -1,5 +1,8 @@
 # Sector-coupled Bornholm comparison
 
+For the full-year hourly fixed DK2–Germany Hybrid on fatq, use the separate
+[hourly Hybrid submission instructions](bornholm_hourly_hybrid.md).
+
 ## Current submission: all eight scenarios at three-hour resolution
 
 Use `config/config.bornholm-3h.yaml` after the main study configuration. It sets
@@ -751,3 +754,4 @@ simulated solver memory failure with preserved progress, and selection of the
 correct annual variant without rebuilding. Lint, format, shell syntax and
 whitespace checks passed. No full annual model was built in development and no
 Sophia job was submitted here.
+

@@ -1,0 +1,39 @@
+# Layer AFTER config.bornholm.yaml AND config.bornholm-3h.yaml.
+# Retain the selected study's resource classes, sectors, grid and project data.
+run:
+  prefix: bornholm_1h_s1_w2_o3
+  name: [bornholm_zonal_hybrid]
+  shared_resources:
+    # Only one case: isolate processed inputs, especially snapshot_weightings.csv,
+    # instead of rebuilding the 3h campaign's shared temporal cache in place.
+    policy: false
+clustering:
+  temporal:
+    averaging: false
+    segmentation: false
+    representative: false
+solving:
+  solver:
+    name: gurobi
+    options: gurobi-hourly-hybrid
+  solver_options:
+    gurobi-hourly-hybrid:
+      # Selected nf1_aggfill_t16 profile; no automatic method/thread switching.
+      threads: 16
+      method: 2
+      crossover: 0
+      BarConvTol: 1.0e-8
+      NumericFocus: 1
+      ScaleFlag: -1
+      BarHomogeneous: -1
+      AggFill: -1
+      PreDual: 0
+      Seed: 123
+      GURO_PAR_BARDENSETHRESH: 200
+      IISMethod: 1
+      TimeLimit: 252000
+      # Decimal GB. The runner lowers this AFTER constructing the Linopy model.
+      SoftMemLimit: 190
+  # Metadata for native rules; the launcher requests all physical node RAM.
+  mem_mb: 240000
+  runtime: 72h

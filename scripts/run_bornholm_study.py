@@ -36,17 +36,20 @@ def study_runs():
     return list(definitions)
 
 
-def context_for(run):
+def context_for(run, *, configfiles=None):
     from scripts._helpers import mock_snakemake, set_scenario_config
 
     context = mock_snakemake(
-        "solve_network", configfiles=CONFIGS, run=run, horizon="2035"
+        "solve_network",
+        configfiles=CONFIGS if configfiles is None else configfiles,
+        run=run,
+        horizon="2035",
     )
     set_scenario_config(context)
     return context
 
 
-def preflight(context):
+def preflight(context, *, configfiles=None, prefix=PREFIX, step_hours=3):
     import pandas as pd
     import pypsa
 
@@ -61,12 +64,12 @@ def preflight(context):
             == classes,
             f"Stale {technology} resource classes; rebuild {source_path}",
         )
-    require(n.meta.get("run", {}).get("prefix") == PREFIX, "Wrong study namespace")
+    require(n.meta.get("run", {}).get("prefix") == prefix, "Wrong study namespace")
     # Gas inputs are shared under the native base policy; use the actual rule
     # dependency rather than assuming a scenario-local CSV.
     compose = mock_snakemake(
         "compose_network",
-        configfiles=CONFIGS,
+        configfiles=CONFIGS if configfiles is None else configfiles,
         run=context.wildcards.run,
         horizon="2035",
     )
@@ -77,7 +80,7 @@ def preflight(context):
     ]
     require(len(candidates) == 1, "Expected one shared gas-input dependency")
     inputs = candidates[0]
-    report = check_source(n, pd.read_csv(inputs, index_col=0), step_hours=3)
+    report = check_source(n, pd.read_csv(inputs, index_col=0), step_hours=step_hours)
     report.update(
         snapshots=len(n.snapshots),
         annual_weight_hours=float(n.snapshot_weightings.objective.sum()),
