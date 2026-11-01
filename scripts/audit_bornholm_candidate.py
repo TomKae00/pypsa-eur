@@ -4,7 +4,9 @@
 
 No optimization model is built and no solver is called. Tested with PyPSA 1.2.4.
 Run: python -m scripts.audit_bornholm_candidate CANDIDATE_DIRECTORY --output audit_output
-The directory must contain candidate_2035.nc, summary.json and effective_config.yaml.
+Supports accuracy candidates and original study networks/solved_2035.nc
+with summary.json. Configuration comes from effective_config.yaml when present,
+otherwise from the configuration embedded in the saved network.
 """
 
 from __future__ import annotations
@@ -805,10 +807,25 @@ def price_table(n):
 def run(root, output):
     output.mkdir(parents=True, exist_ok=False)
     metadata = json.loads((root / "summary.json").read_text())
-    config = yaml.safe_load((root / "effective_config.yaml").read_text())
-    path = root / "candidate_2035.nc"
+    candidates = [
+        root / "candidate_2035.nc",
+        root / "solved_2035.nc",
+        root / "networks" / "solved_2035.nc",
+    ]
+    path = next((path for path in candidates if path.is_file()), None)
+    if path is None:
+        raise FileNotFoundError(f"No saved solved network found under {root}")
     print("Loading candidate ...", flush=True)
     n = pypsa.Network(path)
+    config_path = root / "effective_config.yaml"
+    if config_path.is_file():
+        config = yaml.safe_load(config_path.read_text())
+        config_source = str(config_path)
+    else:
+        config = n.meta
+        config_source = "saved_network_meta"
+    if not isinstance(config, dict) or not {"solving", "renewable"} <= config.keys():
+        raise ValueError("Saved network has no usable audit configuration")
     if n.objective is None or not np.isfinite(n.objective):
         raise ValueError("Saved candidate has no finite objective")
     if n._multi_invest or n.has_scenarios or isinstance(n.snapshots, pd.MultiIndex):
@@ -839,10 +856,14 @@ def run(root, output):
         "audit_type": "read_only_saved_candidate",
         "optimization_called": False,
         "pypsa_version": pypsa.__version__,
+        "input_network": str(path),
         "input_sha256": sha256(path),
         "audit_code_sha256": sha256(Path(__file__)),
         "run_summary_sha256": sha256(root / "summary.json"),
-        "effective_config_sha256": sha256(root / "effective_config.yaml"),
+        "effective_config_source": config_source,
+        "effective_config_sha256": sha256(config_path)
+        if config_path.is_file()
+        else None,
         "source_sha256_recorded_by_run": metadata.get("source_sha256"),
         "scenario": metadata.get("scenario"),
         "snapshots": len(n.snapshots),
@@ -858,6 +879,10 @@ def run(root, output):
         "original_screening_issues": metadata.get("screening_issues"),
         "barrier_final": metadata.get("barrier_final"),
         "original_run_status": metadata.get("status"),
+        "original_solver_options": metadata.get("solver_options"),
+        "original_termination_condition": metadata.get("solve_result", {}).get(
+            "termination_condition", metadata.get("termination_condition")
+        ),
         "no_full_dual_certificate": True,
         "scope_notes": a.scope
         + [

@@ -152,8 +152,9 @@ def test_ac_cycle_reports_native_scaled_equation_units():
     assert a.metrics[0]["max_violation"] == pytest.approx(0)
 
 
+@pytest.mark.parametrize("layout", ["candidate", "accepted", "original"])
 def test_full_saved_audit_preserves_candidate_and_finds_deliberate_imbalance(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, layout
 ):
     n = pypsa.Network()
     n.set_snapshots(pd.date_range("2035-01-01", periods=2, freq="3h"))
@@ -210,7 +211,6 @@ def test_full_saved_audit_preserves_candidate_and_finds_deliberate_imbalance(
     n._objective, n._objective_constant = 172.0, 0.0
     root = tmp_path / "candidate"
     root.mkdir()
-    n.export_to_netcdf(root / "candidate_2035.nc")
     metadata = {"status": "failed", "scenario": "test", "screening_issues": ["keep"]}
     (root / "summary.json").write_text(json.dumps(metadata))
     config = {
@@ -220,8 +220,21 @@ def test_full_saved_audit_preserves_candidate_and_finds_deliberate_imbalance(
             "solar-hsat": {"capacity_per_sqkm": 1},
         },
     }
-    (root / "effective_config.yaml").write_text(yaml.safe_dump(config))
-    before = {p.name: audit.sha256(p) for p in root.iterdir()}
+    if layout == "original":
+        network = root / "networks" / "solved_2035.nc"
+        n.meta = config
+    else:
+        network = root / (
+            "candidate_2035.nc" if layout == "candidate" else "solved_2035.nc"
+        )
+        (root / "effective_config.yaml").write_text(yaml.safe_dump(config))
+    network.parent.mkdir(parents=True, exist_ok=True)
+    n.export_to_netcdf(network)
+    before = {
+        str(p.relative_to(root)): audit.sha256(p)
+        for p in root.rglob("*")
+        if p.is_file()
+    }
 
     def forbidden(*args, **kwargs):
         raise AssertionError("The saved audit must not build or solve an LP")
@@ -233,6 +246,10 @@ def test_full_saved_audit_preserves_candidate_and_finds_deliberate_imbalance(
     output = tmp_path / "audit"
     report = audit.run(root, output)
     assert report["optimization_called"] is False
+    assert report["input_network"] == str(network)
+    assert (report["effective_config_source"] == "saved_network_meta") == (
+        layout == "original"
+    )
     assert report["original_run_status"] == "failed"
     assert report["original_screening_issues"] == ["keep"]
     assert report["objective"]["reconstruction_error_eur"] == pytest.approx(0)
@@ -242,13 +259,20 @@ def test_full_saved_audit_preserves_candidate_and_finds_deliberate_imbalance(
     assert balance.max_violation == pytest.approx(0.25)
     prices = pd.read_csv(output / "electricity_prices.csv.gz", index_col=0)
     assert prices["a"].tolist() == [4.0, 6.0]
-    assert before == {p.name: audit.sha256(p) for p in root.iterdir()}
+    assert before == {
+        str(p.relative_to(root)): audit.sha256(p)
+        for p in root.rglob("*")
+        if p.is_file()
+    }
     with pytest.raises(FileExistsError):
         audit.run(root, output)
 
 
 @pytest.mark.parametrize("task", range(8))
-def test_saved_audit_array_routes_every_scenario_without_a_solve(tmp_path, task):
+@pytest.mark.parametrize("campaign", ["4930796", "original"])
+def test_saved_audit_array_routes_every_scenario_without_a_solve(
+    tmp_path, task, campaign
+):
     cases = list(yaml.safe_load(Path("config/scenarios_bornholm.yaml").read_text()))
     wrapper = tmp_path / "pixi-sophia"
     wrapper.write_text(
@@ -262,7 +286,7 @@ def test_saved_audit_array_routes_every_scenario_without_a_solve(tmp_path, task)
     srun.chmod(0o755)
     script = Path("scripts/bornholm_saved_audit_workq.sbatch").resolve()
     result = subprocess.run(
-        ["bash", str(script), "4930796"],
+        ["bash", str(script), campaign],
         env=os.environ
         | {
             "SLURM_SUBMIT_DIR": str(tmp_path),
@@ -285,7 +309,12 @@ def test_saved_audit_array_routes_every_scenario_without_a_solve(tmp_path, task)
         "-m",
         "scripts.audit_bornholm_candidate",
     ]
-    assert args[5] == "results/bornholm_accuracy/4930796/" + cases[task]
+    input_root = (
+        "results/bornholm_3h_s1_w2_o3"
+        if campaign == "original"
+        else "results/bornholm_accuracy/4930796"
+    )
+    assert args[5] == input_root + "/" + cases[task]
     assert args[args.index("--output") + 1] == (
-        "results/bornholm_saved_audit/4930796/555/" + cases[task]
+        f"results/bornholm_saved_audit/{campaign}/555/" + cases[task]
     )
