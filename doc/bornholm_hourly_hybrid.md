@@ -41,6 +41,49 @@ stale resource classes, wrong project capacities/endpoints or expandable
 mainland lines. Annual budgets and costs are not prorated. The native model
 preparation and supplementary constraints remain in use.
 
+## Memory retry after job 4937219
+
+The first hourly attempt completed input building in 18m56s. Gurobi then stopped
+with `Status=17` (`MEM_LIMIT`), before any barrier iteration. Its soft cap was
+175.903 GB. Gurobi recorded 205.768 GB peak allocated memory; the process's
+`ru_maxrss` was 164.778 GiB and Slurm recorded 153.21G. These metrics use different
+accounting and sampling; they must not be added together. The node reported
+261.547 GB total physical RAM and 234.537 GB available after model construction.
+The lower final `MemUsed=37.706 GB` is not the peak allocation.
+
+An explicit retry allows a larger budget while preserving the original default:
+
+```bash
+cd /home/s253303/projects/pypsa-eur-bornholm
+git pull --ff-only origin feature/bornholm-energy-island
+sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch 16 retry 4937219
+```
+
+This mode skips Snakemake and reuses the existing hourly composed network. The
+runner verifies its SHA256, the pinned native physical code/configuration/custom
+constraints and all solver options except memory/time budgets against the
+previous job's summary. A changed input, changed thread count or changed physical
+formulation aborts the retry. Outputs go into the new job's results directory.
+
+After model construction, `retry` sets `SoftMemLimit` to the smallest of:
+
+- **210 decimal GB**;
+- **90% of the then-available physical RAM**;
+- **available RAM minus a 20 GB reserve**.
+
+At the first job's measured availability this selects 210 GB, 34.1 GB above the
+previous configured limit and 4.2 GB above the observed Gurobi peak. It may get
+past the previous stop, but the subsequent factorisation/iterations may require
+more. The reserve is a budgeting rule, not a guaranteed physical free-memory
+floor: Gurobi can overshoot its soft cap between checks and its accounting
+differs from process RSS. More memory or a separately tested method may still
+be needed. Keep 16 threads so this experiment changes the memory budget only.
+
+The optional third launcher argument is the numeric reference job ID. For a
+later retry, use the relevant prior job's ID instead. The original
+`sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch` command still uses the standard
+190 GB / 75% policy.
+
 ## Solver and memory settings
 
 The starting preset preserves the selected campaign's settings:
@@ -129,3 +172,4 @@ Official references:
 - [Sophia partitions and node memory](https://dtu-sophia.github.io/docs/scheduler/)
 - [Gurobi continuous-model parameter guidance](https://docs.gurobi.com/projects/optimizer/en/current/concepts/parameters/guidelines.html)
 - [Gurobi parameters, including SoftMemLimit](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html)
+

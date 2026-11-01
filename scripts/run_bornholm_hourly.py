@@ -21,6 +21,10 @@ RUN = "bornholm_zonal_hybrid"
 PREFIX = "bornholm_1h_s1_w2_o3"
 CONFIGS = [*study.CONFIGS, "config/config.bornholm-hourly-hybrid.yaml"]
 TARGET = f"resources/{PREFIX}/{RUN}/networks/composed_2035.nc"
+MEMORY_PROFILES = {
+    "standard": {"limit_gb": None, "fraction": 0.75, "reserve_gb": 0.0},
+    "retry": {"limit_gb": 210.0, "fraction": 0.90, "reserve_gb": 20.0},
+}
 
 
 def check_hybrid(n):
@@ -85,20 +89,79 @@ def configure(context, directory, threads, time_limit):
     return options
 
 
-def memory_cap(snapshot, requested):
-    """Gurobi uses decimal GB; leave 25% of remaining RAM outside its accounting."""
+def memory_cap(snapshot, requested, *, fraction=0.75, reserve_gb=0.0):
+    """Budget decimal GB from RAM available after Linopy model construction."""
     available = float(snapshot["MemAvailable"])
     study.require(
-        math.isfinite(requested) and requested > 0 and available > 0,
+        math.isfinite(requested)
+        and requested > 0
+        and math.isfinite(available)
+        and available > 0,
         "Positive finite memory budget required",
     )
-    return min(requested, 0.75 * available)
+    study.require(
+        math.isfinite(fraction)
+        and 0 < fraction <= 0.90
+        and math.isfinite(reserve_gb)
+        and reserve_gb >= 0,
+        "Use at most 90% of available memory and a non-negative finite reserve",
+    )
+    cap = min(requested, fraction * available, available - reserve_gb)
+    study.require(cap > 0, "Insufficient available RAM for the memory reserve")
+    return cap
 
 
-def solve(directory, threads=16, time_limit=252000):
+def check_reference(path, source_hash, options):
+    """A memory retry must preserve the input, formulation and other solver options."""
+    reference = json.loads(Path(path).read_text())
+    study.require(reference.get("scenario") == RUN, "Reference must be fixed Hybrid")
+    study.require(
+        reference.get("source_sha256") == source_hash,
+        "Hourly input changed since the reference job; do not rebuild for this retry",
+    )
+    excluded = {"TimeLimit", "SoftMemLimit"}
+    previous = {
+        k: v
+        for k, v in reference.get("solver_options", {}).items()
+        if k not in excluded
+    }
+    current = {k: v for k, v in options.items() if k not in excluded}
+    study.require(
+        previous == current,
+        "Only memory and time budgets may differ from the reference",
+    )
+    hashes = reference.get("code_files_sha256", {})
+    for name in dict.fromkeys([*accuracy.PINNED_FILES, *CONFIGS]):
+        expected = (
+            reference.get("custom_constraints_sha256")
+            if name == "data/custom_extra_functionality.py"
+            else hashes.get(name)
+        )
+        study.require(
+            expected is not None and accuracy.sha256(name) == expected,
+            f"Reference physical formulation changed or lacks provenance: {name}",
+        )
+    return {
+        "reference_summary": str(Path(path).resolve()),
+        "reference_source_sha256": source_hash,
+    }
+
+
+def solve(
+    directory,
+    threads=16,
+    time_limit=252000,
+    *,
+    memory_profile="standard",
+    reference_summary=None,
+):
+    study.require(memory_profile in MEMORY_PROFILES, "Unknown memory profile")
+    study.require(
+        memory_profile != "retry" or reference_summary is not None,
+        "Memory retry requires --reference-summary from the previous job",
+    )
     import numpy as np
     import pypsa
-
     from scripts._benchmark import memory_logger
     from scripts._helpers import configure_logging
     from scripts.run_bornholm_diagnostic import memory_snapshot
@@ -123,6 +186,7 @@ def solve(directory, threads=16, time_limit=252000):
         "scenario": RUN,
         "node": socket.gethostname(),
         "threads": threads,
+        "memory_profile": memory_profile,
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "slurm_cpus_per_task": os.environ.get("SLURM_CPUS_PER_TASK"),
         "include_objective_constant": True,
@@ -154,6 +218,10 @@ def solve(directory, threads=16, time_limit=252000):
         # Preserve the cost convention used by the selected eight-case campaign.
         pypsa.options.params.optimize.include_objective_constant = True
         report.update(source=str(source), source_sha256=accuracy.sha256(source))
+        if reference_summary is not None:
+            report.update(
+                check_reference(reference_summary, report["source_sha256"], options)
+            )
         checkpoint("preflight")
         report["preflight"] = study.preflight(
             context, configfiles=CONFIGS, prefix=PREFIX, step_hours=1
@@ -212,7 +280,18 @@ def solve(directory, threads=16, time_limit=252000):
             # Model construction itself can be large. Measure AFTER it, rather
             # than offering Gurobi memory already occupied by Python/Linopy.
             memory = memory_snapshot()
-            cap = memory_cap(memory, options["SoftMemLimit"])
+            policy = MEMORY_PROFILES[memory_profile]
+            requested = (
+                policy["limit_gb"]
+                if policy["limit_gb"] is not None
+                else options["SoftMemLimit"]
+            )
+            cap = memory_cap(
+                memory,
+                requested,
+                fraction=policy["fraction"],
+                reserve_gb=policy["reserve_gb"],
+            )
             solve_kwargs["solver_options"]["SoftMemLimit"] = cap
             options["SoftMemLimit"] = cap
             remaining = time_limit - (time.monotonic() - started)
@@ -224,6 +303,11 @@ def solve(directory, threads=16, time_limit=252000):
             report.update(
                 solver_options=dict(solve_kwargs["solver_options"]),
                 node_memory_before_solver_GB=memory,
+                memory_policy={
+                    **policy,
+                    "requested_gb": requested,
+                    "effective_limit_gb": cap,
+                },
                 variables=int(n.model.nvars),
                 constraints=int(n.model.ncons),
             )
@@ -232,7 +316,8 @@ def solve(directory, threads=16, time_limit=252000):
             )
             checkpoint("native_solve")
             print(
-                f"Hourly fixed Hybrid: threads={threads}, Gurobi cap={cap:.2f} GB; results={directory}",
+                f"Hourly fixed Hybrid: threads={threads}, memory profile={memory_profile}, "
+                f"Gurobi cap={cap:.2f} GB; results={directory}",
                 flush=True,
             )
             status, condition = n.optimize.solve_model(**solve_kwargs)
@@ -298,14 +383,26 @@ def main():
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--threads", type=int, choices=(16, 32), default=16)
     parser.add_argument("--time-limit", type=int, default=252000)
+    parser.add_argument(
+        "--memory-profile", choices=tuple(MEMORY_PROFILES), default="standard"
+    )
+    parser.add_argument("--reference-summary", type=Path)
     args = parser.parse_args()
     if args.build_target:
         print(TARGET)
     else:
         if args.output_dir is None:
             parser.error("--output-dir is required")
+        if args.memory_profile == "retry" and args.reference_summary is None:
+            parser.error("--memory-profile retry requires --reference-summary")
         logging.basicConfig(level=logging.INFO)
-        solve(args.output_dir, args.threads, args.time_limit)
+        solve(
+            args.output_dir,
+            args.threads,
+            args.time_limit,
+            memory_profile=args.memory_profile,
+            reference_summary=args.reference_summary,
+        )
 
 
 if __name__ == "__main__":

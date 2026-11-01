@@ -15,7 +15,10 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 [[ -n "${SLURM_JOB_ID:-}" && "${SLURM_JOB_PARTITION:-}" == fatq ]] || { echo 'Submit this job to fatq with sbatch.' >&2; exit 2; }
 [[ "${SLURM_CPUS_PER_TASK:-0}" == 32 ]] || { echo 'Reserve 32 CPUs; solver threads are selected separately.' >&2; exit 2; }
 threads="${1:-16}"
-case "$threads" in 16|32) ;; *) echo 'Usage: sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch [16|32]' >&2; exit 2 ;; esac
+case "$threads" in 16|32) ;; *) echo 'Use 16 or 32 solver threads.' >&2; exit 2 ;; esac
+memory_profile="${2:-standard}"
+case "$memory_profile" in standard|retry) ;; *) echo 'Use standard or retry as the memory profile.' >&2; exit 2 ;; esac
+(( $# <= 3 )) || { echo 'Usage: sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch [16|32] [standard|retry] [reference-job-id]' >&2; exit 2; }
 pixi_wrapper="${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}"
 test -x "$pixi_wrapper"
 export SINGULARITYENV_GRB_LICENSE_FILE="${GRB_LICENSE_FILE:-$HOME/gurobi.lic}"
@@ -30,18 +33,27 @@ target="resources/$prefix/$scenario/networks/composed_2035.nc"
 directory="results/$prefix/$SLURM_JOB_ID/$scenario"
 [[ ! -e "$directory" ]] || { echo "Output exists: $directory" >&2; exit 2; }
 mkdir -p "$(dirname "$directory")"
-echo "Node $(hostname); allocated CPUs=$SLURM_CPUS_PER_TASK; solver threads=$threads"
+echo "Node $(hostname); allocated CPUs=$SLURM_CPUS_PER_TASK; solver threads=$threads; memory profile=$memory_profile"
 head -3 /proc/meminfo
 
-# No nested Slurm jobs: use the existing container wrapper inside this allocation.
-# Resource classes come from the 3h layer; the last layer removes temporal
-# averaging and isolates processed inputs for the fixed Hybrid's fresh namespace.
-build_memory_mb=$(awk '/^MemAvailable:/ {printf "%d", $2 * 0.75 * 1024 / 1000000}' /proc/meminfo)
-srun --ntasks=1 --cpus-per-task=32 --cpu-bind=cores \
-    "$pixi_wrapper" run snakemake --executor local --cores 16 \
-    --resources "mem_mb=$build_memory_mb" --rerun-incomplete --latency-wait 120 \
-    --configfile config/config.bornholm.yaml config/config.bornholm-3h.yaml \
-    config/config.bornholm-hourly-hybrid.yaml -- "$target"
+reference_args=()
+if [[ "$memory_profile" == retry ]]; then
+    reference_job="${3:-}"
+    [[ "$reference_job" =~ ^[0-9]+$ ]] || { echo 'Retry requires the previous numeric job ID as argument 3.' >&2; exit 2; }
+    reference="results/$prefix/$reference_job/$scenario/summary.json"
+    [[ -f "$target" && -f "$reference" ]] || { echo "Missing existing hourly input or reference summary: $reference" >&2; exit 2; }
+    reference_args=(--reference-summary "$reference")
+    echo "Reusing existing hourly input from job $reference_job; no Snakemake rebuild."
+else
+    [[ -z "${3:-}" ]] || { echo 'A reference job ID is only used with the retry profile.' >&2; exit 2; }
+    # No nested Slurm jobs. The last config layer isolates hourly processed inputs.
+    build_memory_mb=$(awk '/^MemAvailable:/ {printf "%d", $2 * 0.75 * 1024 / 1000000}' /proc/meminfo)
+    srun --ntasks=1 --cpus-per-task=32 --cpu-bind=cores \
+        "$pixi_wrapper" run snakemake --executor local --cores 16 \
+        --resources "mem_mb=$build_memory_mb" --rerun-incomplete --latency-wait 120 \
+        --configfile config/config.bornholm.yaml config/config.bornholm-3h.yaml \
+        config/config.bornholm-hourly-hybrid.yaml -- "$target"
+fi
 
 # Deduct preprocessing from the 70-hour budget, leaving two hours for shutdown
 # and export under the default 72-hour walltime. Respect shorter allocations
@@ -54,4 +66,6 @@ fi
 (( time_limit > 60 )) || { echo 'No solve time remains after preprocessing.' >&2; exit 2; }
 srun --ntasks=1 --cpus-per-task=32 --cpu-bind=cores \
     "$pixi_wrapper" run python -m scripts.run_bornholm_hourly \
-    --threads "$threads" --time-limit "$time_limit" --output-dir "$directory"
+    --threads "$threads" --time-limit "$time_limit" --memory-profile "$memory_profile" \
+    "${reference_args[@]}" --output-dir "$directory"
+
