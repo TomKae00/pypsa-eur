@@ -17,8 +17,8 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 threads="${1:-16}"
 case "$threads" in 16|32) ;; *) echo 'Use 16 or 32 solver threads.' >&2; exit 2 ;; esac
 memory_profile="${2:-standard}"
-case "$memory_profile" in standard|retry) ;; *) echo 'Use standard or retry as the memory profile.' >&2; exit 2 ;; esac
-(( $# <= 3 )) || { echo 'Usage: sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch [16|32] [standard|retry] [reference-job-id]' >&2; exit 2; }
+case "$memory_profile" in standard|retry|aggfill0) ;; *) echo 'Use standard, retry or aggfill0 as the memory profile.' >&2; exit 2 ;; esac
+(( $# <= 3 )) || { echo 'Usage: sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch [16|32] [standard|retry|aggfill0] [reference-job-id]' >&2; exit 2; }
 pixi_wrapper="${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}"
 test -x "$pixi_wrapper"
 export SINGULARITYENV_GRB_LICENSE_FILE="${GRB_LICENSE_FILE:-$HOME/gurobi.lic}"
@@ -37,7 +37,7 @@ echo "Node $(hostname); allocated CPUs=$SLURM_CPUS_PER_TASK; solver threads=$thr
 head -3 /proc/meminfo
 
 reference_args=()
-if [[ "$memory_profile" == retry ]]; then
+if [[ "$memory_profile" != standard ]]; then
     reference_job="${3:-}"
     [[ "$reference_job" =~ ^[0-9]+$ ]] || { echo 'Retry requires the previous numeric job ID as argument 3.' >&2; exit 2; }
     reference="results/$prefix/$reference_job/$scenario/summary.json"
@@ -45,7 +45,7 @@ if [[ "$memory_profile" == retry ]]; then
     reference_args=(--reference-summary "$reference")
     echo "Reusing existing hourly input from job $reference_job; no Snakemake rebuild."
 else
-    [[ -z "${3:-}" ]] || { echo 'A reference job ID is only used with the retry profile.' >&2; exit 2; }
+    [[ -z "${3:-}" ]] || { echo 'A reference job ID is only used with retry or aggfill0.' >&2; exit 2; }
     # No nested Slurm jobs. The last config layer isolates hourly processed inputs.
     build_memory_mb=$(awk '/^MemAvailable:/ {printf "%d", $2 * 0.75 * 1024 / 1000000}' /proc/meminfo)
     srun --ntasks=1 --cpus-per-task=32 --cpu-bind=cores \

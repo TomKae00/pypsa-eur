@@ -24,6 +24,7 @@ TARGET = f"resources/{PREFIX}/{RUN}/networks/composed_2035.nc"
 MEMORY_PROFILES = {
     "standard": {"limit_gb": None, "fraction": 0.75, "reserve_gb": 0.0},
     "retry": {"limit_gb": 210.0, "fraction": 0.90, "reserve_gb": 20.0},
+    "aggfill0": {"limit_gb": 210.0, "fraction": 0.90, "reserve_gb": 20.0},
 }
 
 
@@ -111,8 +112,8 @@ def memory_cap(snapshot, requested, *, fraction=0.75, reserve_gb=0.0):
     return cap
 
 
-def check_reference(path, source_hash, options):
-    """A memory retry must preserve the input, formulation and other solver options."""
+def check_reference(path, source_hash, options, *, aggfill_zero=False):
+    """Preserve input/formulation; allow only the explicitly selected solver trial."""
     reference = json.loads(Path(path).read_text())
     study.require(reference.get("scenario") == RUN, "Reference must be fixed Hybrid")
     study.require(
@@ -125,10 +126,14 @@ def check_reference(path, source_hash, options):
         for k, v in reference.get("solver_options", {}).items()
         if k not in excluded
     }
+    if aggfill_zero:
+        study.require(options.get("AggFill") == 0, "AggFill trial requires AggFill=0")
+        previous["AggFill"] = 0
     current = {k: v for k, v in options.items() if k not in excluded}
     study.require(
         previous == current,
-        "Only memory and time budgets may differ from the reference",
+        "Only memory and time budgets may differ from the reference"
+        + ("; this trial also permits AggFill=0" if aggfill_zero else ""),
     )
     hashes = reference.get("code_files_sha256", {})
     for name in dict.fromkeys([*accuracy.PINNED_FILES, *CONFIGS]):
@@ -157,7 +162,7 @@ def solve(
 ):
     study.require(memory_profile in MEMORY_PROFILES, "Unknown memory profile")
     study.require(
-        memory_profile != "retry" or reference_summary is not None,
+        memory_profile == "standard" or reference_summary is not None,
         "Memory retry requires --reference-summary from the previous job",
     )
     import numpy as np
@@ -214,13 +219,18 @@ def solve(
             source.resolve() == Path(TARGET).resolve(), "Wrong hourly source path"
         )
         options = configure(context, directory, threads, time_limit)
+        if memory_profile == "aggfill0":
+            options["AggFill"] = 0
         configure_logging(context)
         # Preserve the cost convention used by the selected eight-case campaign.
         pypsa.options.params.optimize.include_objective_constant = True
         report.update(source=str(source), source_sha256=accuracy.sha256(source))
         if reference_summary is not None:
             report.update(
-                check_reference(reference_summary, report["source_sha256"], options)
+                check_reference(
+                    reference_summary, report["source_sha256"], options,
+                    aggfill_zero=memory_profile == "aggfill0",
+                )
             )
         checkpoint("preflight")
         report["preflight"] = study.preflight(
@@ -393,8 +403,8 @@ def main():
     else:
         if args.output_dir is None:
             parser.error("--output-dir is required")
-        if args.memory_profile == "retry" and args.reference_summary is None:
-            parser.error("--memory-profile retry requires --reference-summary")
+        if args.memory_profile != "standard" and args.reference_summary is None:
+            parser.error(f"--memory-profile {args.memory_profile} requires --reference-summary")
         logging.basicConfig(level=logging.INFO)
         solve(
             args.output_dir,

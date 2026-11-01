@@ -173,3 +173,21 @@ Official references:
 - [Gurobi continuous-model parameter guidance](https://docs.gurobi.com/projects/optimizer/en/current/concepts/parameters/guidelines.html)
 - [Gurobi parameters, including SoftMemLimit](https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html)
 
+
+## Additional AggFill=0 trial
+
+To compare presolve aggregation against the automatic setting while retaining
+16-thread barrier and the guarded 210 GB memory policy:
+
+```bash
+git pull --ff-only origin feature/bornholm-energy-island
+sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch 16 aggfill0 4937219
+```
+
+This trial reuses the same existing hourly input and verifies its provenance.
+It permits only `AggFill=0` in addition to the memory/time budget differences;
+all other solver settings and the physical formulation remain pinned to the
+reference. It writes to a separate results directory under its new job ID and
+can run alongside the unchanged `retry` trial. Lower fill may reduce memory,
+but the presolved model can retain more rows/columns, so savings are not assured.
+This addition was pushed without running tests, as requested.
