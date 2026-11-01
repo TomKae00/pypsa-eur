@@ -259,9 +259,25 @@ def test_live_pypsa_gurobi_quality_capture(tmp_path, profile):
         (0, False, False, True),
     ],
 )
-@pytest.mark.parametrize("profile", [None, *accuracy.PROFILES])
+@pytest.mark.parametrize(
+    "profile,run",
+    [(profile, accuracy.RUN) for profile in (None, *accuracy.PROFILES)]
+    + [
+        ("nf1_aggfill_t16", run)
+        for run in accuracy.study.study_runs()
+        if run != accuracy.RUN
+    ],
+)
 def test_native_handoff_retains_failed_candidate_and_original_outputs(
-    tmp_path, monkeypatch, request, excess, passes, native_failure, no_solution, profile
+    tmp_path,
+    monkeypatch,
+    request,
+    excess,
+    passes,
+    native_failure,
+    no_solution,
+    profile,
+    run,
 ):
     from scripts import bornholm_provenance
 
@@ -286,13 +302,14 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     monkeypatch.chdir(tmp_path)
     original = tmp_path / "original.nc"
     original.write_text("unchanged source")
-    reference_dir = tmp_path / "results" / accuracy.study.PREFIX / accuracy.RUN
+    reference_dir = tmp_path / "results" / accuracy.study.PREFIX / run
     reference_dir.mkdir(parents=True)
     previous = reference_dir / "networks/solved_2035.nc"
     previous.parent.mkdir()
     previous.write_text("previous completed solution")
     reference = {
         "status": "complete",
+        "scenario": run,
         "source_sha256": accuracy.sha256(original),
         "code_files_sha256": {},
         "objective": 515e9,
@@ -302,7 +319,13 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     ctx.input.network = str(original)
     ctx.output = OutputFiles(fromdict={"network": str(previous)})
     monkeypatch.setattr(accuracy, "reference_cost_constant", lambda path: 23.0)
-    monkeypatch.setattr(accuracy.study, "context_for", lambda _: ctx)
+    context_calls = []
+
+    def scenario_context(name):
+        context_calls.append(name)
+        return ctx
+
+    monkeypatch.setattr(accuracy.study, "context_for", scenario_context)
     monkeypatch.setattr(accuracy.study, "preflight", lambda _: {"snapshots": 2920})
     monkeypatch.setattr(accuracy, "PINNED_FILES", ())
     monkeypatch.setattr(bornholm_provenance, "code_provenance", lambda: {})
@@ -349,7 +372,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     monkeypatch.setattr(
         accuracy, "coal_check", lambda _: {"same_dispatch_avoidable_cost_eur": excess}
     )
-    directory = tmp_path / "results/bornholm_accuracy/pair/tol8_nf0_t8"
+    directory = tmp_path / "results/bornholm_accuracy/pair" / run
 
     def native(path, *, run_name, init_globals):
         assert init_globals["snakemake"] is ctx
@@ -384,7 +407,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     monkeypatch.setattr(accuracy.runpy, "run_path", native)
     focus, threads = profile_settings(profile, default_focus=0)
     if passes:
-        accuracy.solve(focus, threads, directory, profile=profile)
+        accuracy.solve(focus, threads, directory, profile=profile, run=run)
     else:
         exception, match = (
             (RuntimeError, "Discarding solution")
@@ -394,8 +417,12 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
             else (ValueError, "needs review")
         )
         with pytest.raises(exception, match=match):
-            accuracy.solve(focus, threads, directory, profile=profile)
+            accuracy.solve(focus, threads, directory, profile=profile, run=run)
     report = json.loads((directory / "summary.json").read_text())
+    assert context_calls == [run]
+    assert report["scenario"] == run
+    assert report["source"] == str(original)
+    assert Path(report["reference_summary"]).resolve() == reference_dir / "summary.json"
     if constant_setting is not None:
         assert report["include_objective_constant"] is constant_setting
     if not native_failure and not no_solution:
@@ -437,7 +464,7 @@ def test_native_handoff_retains_failed_candidate_and_original_outputs(
     assert previous.read_text() == "previous completed solution"
     assert original.read_text() == "unchanged source"
     with pytest.raises(FileExistsError):
-        accuracy.solve(focus, threads, directory, profile=profile)
+        accuracy.solve(focus, threads, directory, profile=profile, run=run)
 
 
 @pytest.mark.parametrize(
@@ -960,10 +987,75 @@ def test_cli_derives_focus_and_threads_from_followup_profile(
     assert calls == [((*profile_settings(profile), tmp_path), {"profile": profile})]
 
 
+@pytest.mark.parametrize("scenario", accuracy.study.study_runs())
+def test_cli_replays_each_selected_scenario(tmp_path, monkeypatch, scenario):
+    calls = []
+    monkeypatch.setattr(
+        accuracy, "solve", lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_bornholm_accuracy",
+            "--profile",
+            "nf1_aggfill_t16",
+            "--scenario",
+            scenario,
+            "--soft-mem-limit-gb",
+            "100",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+    accuracy.main()
+    assert calls == [
+        (
+            (1, 16, tmp_path),
+            {
+                "profile": "nf1_aggfill_t16",
+                "run": scenario,
+                "soft_mem_limit_gb": 100.0,
+            },
+        )
+    ]
+
+
 @pytest.mark.parametrize(
-    "script_name,task,profile",
+    "extra_args",
     [
-        (script, task, profile)
+        ["--scenario", "not_a_study_case"],
+        ["--soft-mem-limit-gb", "0"],
+        ["--soft-mem-limit-gb", "-1"],
+        ["--soft-mem-limit-gb", "nan"],
+        ["--soft-mem-limit-gb", "inf"],
+    ],
+)
+def test_cli_rejects_invalid_scenario_or_memory(tmp_path, monkeypatch, extra_args):
+    calls = []
+    monkeypatch.setattr(accuracy, "solve", lambda *a, **kw: calls.append(a))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_bornholm_accuracy",
+            "--profile",
+            "nf1_aggfill_t16",
+            "--output-dir",
+            str(tmp_path),
+            *extra_args,
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        accuracy.main()
+    assert error.value.code == 2
+    assert not calls
+
+
+@pytest.mark.parametrize(
+    "script_name,task,profile,scenario",
+    [
+        (script, task, profile, None)
         for script, profiles in [
             ("bornholm_presolve_workq.sbatch", accuracy.PRESOLVE_PROFILES),
             ("bornholm_threads32_workq.sbatch", accuracy.THREAD32_PROFILES),
@@ -971,10 +1063,14 @@ def test_cli_derives_focus_and_threads_from_followup_profile(
             ("bornholm_objective_pair_workq.sbatch", accuracy.OBJECTIVE_PAIR_PROFILES),
         ]
         for task, profile in enumerate(profiles)
+    ]
+    + [
+        ("bornholm_selected_workq.sbatch", task, "nf1_aggfill_t16", scenario)
+        for task, scenario in enumerate(accuracy.study.study_runs())
     ],
 )
 def test_solver_array_handoff_and_container_allocation(
-    tmp_path, script_name, task, profile
+    tmp_path, script_name, task, profile, scenario
 ):
     wrapper = tmp_path / "pixi-sophia"
     wrapper.write_text(
@@ -1014,8 +1110,12 @@ def test_solver_array_handoff_and_container_allocation(
     assert args[:4] == ["run", "python", "-m", "scripts.run_bornholm_accuracy"]
     assert args[args.index("--profile") + 1] == profile
     assert int(args[args.index("--threads") + 1]) == profile_settings(profile)[1]
+    if scenario is not None:
+        assert args[args.index("--scenario") + 1] == scenario
+        assert args[args.index("--soft-mem-limit-gb") + 1] == "100"
     assert args[args.index("--output-dir") + 1] == (
-        "results/bornholm_accuracy/1234/" + accuracy.PROFILES[profile]["label"]
+        "results/bornholm_accuracy/1234/"
+        + (scenario if scenario is not None else accuracy.PROFILES[profile]["label"])
     )
     assert payload["allocation"] == "32" and payload["array"] == "1234"
 

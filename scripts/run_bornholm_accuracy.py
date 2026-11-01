@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Independent annual baseline replays for barrier accuracy; no rebuilding."""
+"""Independent annual scenario replays for barrier accuracy; no rebuilding."""
 
 import argparse
 import hashlib
@@ -438,7 +438,9 @@ def accuracy_issues(quality, coal, barrier, *, crossover=0):
     return issues
 
 
-def solve(numeric_focus, threads, directory, *, profile=None):
+def solve(
+    numeric_focus, threads, directory, *, profile=None, run=RUN, soft_mem_limit_gb=None
+):
     from scripts.bornholm_provenance import code_provenance
     from scripts.run_bornholm_diagnostic import memory_snapshot, soft_memory_limit
 
@@ -453,7 +455,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
     report = {
         "status": "running",
         "phase": "initialising",
-        "scenario": RUN,
+        "scenario": run,
         "numeric_focus": numeric_focus,
         "profile": profile,
         "threads": threads,
@@ -485,18 +487,22 @@ def solve(numeric_focus, threads, directory, *, profile=None):
             pypsa.options.params.optimize.include_objective_constant = include_constant
             report["include_objective_constant"] = include_constant
         checkpoint()
-        context = study.context_for(RUN)
+        context = study.context_for(run)
         source = Path(context.input.network)
-        reference_path = Path("results") / study.PREFIX / RUN / "summary.json"
+        reference_path = Path("results") / study.PREFIX / run / "summary.json"
         reference = json.loads(reference_path.read_text())
         study.require(
             reference.get("status") == "complete",
-            "Missing completed reference baseline",
+            f"Missing completed reference scenario: {run}",
+        )
+        study.require(
+            reference.get("scenario", run) == run,
+            "Reference summary belongs to a different scenario",
         )
         source_hash = sha256(source)
         study.require(
             source_hash == reference["source_sha256"],
-            "Composed input changed since the completed baseline; do not rebuild for this comparison",
+            "Composed input changed since the completed reference; do not rebuild for this comparison",
         )
         hashes = reference["code_files_sha256"]
         for path in PINNED_FILES:
@@ -530,7 +536,10 @@ def solve(numeric_focus, threads, directory, *, profile=None):
             context, directory, numeric_focus, threads, profile=profile
         )
         memory = memory_snapshot()
-        options["SoftMemLimit"] = soft_memory_limit(memory, options["SoftMemLimit"])
+        requested_memory = (
+            options["SoftMemLimit"] if soft_mem_limit_gb is None else soft_mem_limit_gb
+        )
+        options["SoftMemLimit"] = soft_memory_limit(memory, requested_memory)
         report.update(
             solver_options=dict(options),
             workflow_threads=context.threads,
@@ -544,7 +553,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
         )
         checkpoint()
         print(
-            f"Baseline accuracy comparison: profile={profile or 'legacy'}, "
+            f"Annual accuracy replay: scenario={run}, profile={profile or 'legacy'}, "
             f"BarConvTol={options['BarConvTol']:g}, NumericFocus={numeric_focus}, "
             f"ScaleFlag={options.get('ScaleFlag', -1)}, crossover={options['crossover']}, "
             f"BarHomogeneous={options.get('BarHomogeneous', -1)}, "
@@ -592,7 +601,7 @@ def solve(numeric_focus, threads, directory, *, profile=None):
             report["objective_offset_applied"] = -report["reference_objective_constant"]
         report["objective"] = objective + report["objective_offset_applied"]
         report["objective_accounting_note"] = (
-            "objective uses the audited baseline cost convention; objective_native "
+            "objective uses the reference scenario's cost convention; objective_native "
             "and the exported network retain PyPSA's native convention. "
             "An omitted existing-capacity constant is deducted once for comparison."
         )
@@ -778,6 +787,15 @@ def main():
         help="Default: profile thread count, or 8; 0 and 32 need at least 32 allocated CPUs",
     )
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--scenario",
+        help="Replay a scenario from config/scenarios_bornholm.yaml; default: baseline",
+    )
+    parser.add_argument(
+        "--soft-mem-limit-gb",
+        type=float,
+        help="Requested Gurobi cap in decimal GB, still capped at 75%% of available RAM",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
     if args.compare:
@@ -788,7 +806,18 @@ def main():
         spec = PROFILES[args.profile] if args.profile else {}
         focus = spec.get("NumericFocus", 1) if args.profile else args.numeric_focus
         threads = args.threads if args.threads is not None else spec.get("threads", 8)
-        solve(focus, threads, args.output_dir, profile=args.profile)
+        scenario_args = {}
+        if args.scenario is not None:
+            if args.scenario not in study.study_runs():
+                parser.error(
+                    "--scenario must name one of the eight Bornholm study cases"
+                )
+            scenario_args["run"] = args.scenario
+        if args.soft_mem_limit_gb is not None:
+            if not math.isfinite(args.soft_mem_limit_gb) or args.soft_mem_limit_gb <= 0:
+                parser.error("--soft-mem-limit-gb must be positive and finite")
+            scenario_args["soft_mem_limit_gb"] = args.soft_mem_limit_gb
+        solve(focus, threads, args.output_dir, profile=args.profile, **scenario_args)
 
 
 if __name__ == "__main__":
