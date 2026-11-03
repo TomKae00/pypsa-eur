@@ -112,16 +112,29 @@ study selects the 2035 rows independently of its 2013 weather year.
 | Direction (reverse is opposite) | 2023 forward / reverse MW | 2035 forward / reverse MW | Treatment |
 |---|---:|---:|---|
 | SE1 → SE2 | 3300 / 3300 | 3300 / 3300 | Retain published maximum |
-| SE2 → SE3 | 7300 / 7300 | 9600 / 7300 | Partial NordSyd delivery proxy |
+| SE2 → SE3 | 7300 / 7300 | 10350 / 10350 | SvK LMA2026 bidirectional 2035 stage |
 | SE3 → SE4 | 6200 / 2800 | 6200 / 2800 | Common cap across parallel AC and DC |
 | DK2 → SE4 | 1700 / 1300 | 1700 / 1300 | Retain directional maximum |
 
-[SvK's NordSyd programme](https://www.svk.se/nordsyd) gives about 10,500 MW after
-completion in the late 2030s, from 7,300 MW. **9,600 MW in 2035 is an intermediate
-scenario assumption**, not a quoted firm NTC; 10,500 MW is not brought forward
-wholesale. The reverse direction retains 7,300 MW because the published forward
-improvement does not establish a reverse operational limit. The other unchanged
-2035 maxima are conservative assumptions, not claims of verified 2035 adequacy.
+[SvK LMA2026, table 10, printed page 54](https://www.svk.se/49da32/siteassets/om-oss/rapporter/langsiktig-marknadsanalys-2026/langsiktig-marknadsanalys-2026.pdf)
+assumes SE2↔SE3 stages of 8,100 MW in 2028, 9,600 MW in 2034, 10,350 MW in 2035
+and 10,700 MW in 2040. The table uses a bidirectional arrow. This model therefore
+uses **10,350 MW in both directions for 2035**, adopting the completed-2035-stage
+scenario rather than claiming guaranteed hourly market availability. The earlier
+9,600/7,300 MW asymmetric entry was unsupported and has been replaced.
+[LMA2024, table 9](https://www.svk.se/49006b/siteassets/om-oss/rapporter/2024/lma_2024.pdf)
+also used a bidirectional arrow for 9,600 MW from 2034, before the extra 2035 stage
+was added in LMA2026. The generic NordSyd webpage is less specific than these
+scenario tables. The other unchanged 2035 maxima are static assumptions, not
+claims of verified 2035 adequacy.
+
+The remaining directional pairs are also reproduced in the
+[Nordic TSOs' maximum-NTC map, valid from January 2024](https://www.nordpoolgroup.com/globalassets/download-center/tso/max-ntc.pdf).
+In particular, DK2→SE4 is 1,700 MW and SE4→DK2 is 1,300 MW; SE3→SE4 is 6,200 MW
+and SE4→SE3 is 2,800 MW. This confirms the orientation, not invariant availability
+throughout the year. [The wider transmission review](bornholm_transmission_review.md)
+records additional Norway–Sweden, internal Norwegian, Danish and Finnish issues
+from the earlier audit. Those are not all corrected by the four active rows.
 
 These limits supplement native AC physics and installed TYNDP projects. They
 are not substituted for line MVA ratings, do not receive another 0.7 multiplier,
