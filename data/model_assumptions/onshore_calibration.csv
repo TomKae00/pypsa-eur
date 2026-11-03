@@ -1,0 +1,15 @@
+country,carrier,factor,decision,basis,source
+DK,onwind,0.60,reduce,Pragmatic adjustment of high available CF; background reference approximately 25 percent,https://www.seai.ie/sites/default/files/publications/IEA_Wind_Annual_Report_2015.pdf
+NL,onwind,0.85,reduce,Moderate reduction; background reference approximately 30 percent,https://dashboards.cbs.nl/longreads/2026/hernieuwbare-energie-in-nederland-2025/H4_windenergie.html
+GB,onwind,0.65,reduce,Reduce high available CF; background reference approximately 25 percent,https://www.gov.uk/government/publications/renewables-obligation-level-calculations-2026-to-2027/calculating-the-level-of-the-renewables-obligation-for-2026-to-2027
+IE,onwind,0.80,reduce,Moderate reduction; background reference approximately 27 percent,https://www.seai.ie/sites/default/files/publications/IEA_Wind_Annual_Report_2015.pdf
+AT,onwind,1.35,increase,Rounded approximation for low Central European resource; reference approximately 22 percent,https://www.seai.ie/sites/default/files/publications/IEA_Wind_Annual_Report_2015.pdf
+CZ,onwind,1.25,increase,Explicit Central European scenario approximation; not an independently estimated national bias,doc/bornholm_calibrated_base.md
+CH,onwind,4.00,provisional_proxy,Large uplift of anomalously weak resource; approximately 20 percent after clipping; spatial bias remains unresolved,https://www.seai.ie/sites/default/files/publications/IEA_Wind_Annual_Report_2015.pdf
+DE,onwind,1.00,retain,Existing reference approximately 23 percent; no comparable high CF signal,doc/bornholm_calibrated_base.md
+PL,onwind,1.00,retain,Existing reference approximately 25 percent,doc/bornholm_calibrated_base.md
+SE,onwind,1.00,retain,Existing reference approximately 21 percent,doc/bornholm_calibrated_base.md
+NO,onwind,1.00,retain,Existing reference approximately 23 percent,doc/bornholm_calibrated_base.md
+FI,onwind,1.00,retain,Existing reference approximately 22 percent,doc/bornholm_calibrated_base.md
+BE,onwind,1.00,retain,Existing reference approximately 29 percent,doc/bornholm_calibrated_base.md
+FR,onwind,1.00,retain,Existing reference approximately 24 percent,doc/bornholm_calibrated_base.md

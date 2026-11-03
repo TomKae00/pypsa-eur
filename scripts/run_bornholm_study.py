@@ -49,7 +49,7 @@ def context_for(run, *, configfiles=None):
     return context
 
 
-def preflight(context, *, configfiles=None, prefix=PREFIX, step_hours=3):
+def preflight(context, *, configfiles=None, prefix=PREFIX, step_hours=3, classes=None):
     import pandas as pd
     import pypsa
 
@@ -58,10 +58,10 @@ def preflight(context, *, configfiles=None, prefix=PREFIX, step_hours=3):
 
     source_path = Path(context.input.network)
     n = pypsa.Network(source_path)
-    for technology, classes in CLASSES.items():
+    for technology, count in (CLASSES if classes is None else classes).items():
         require(
             n.meta.get("renewable", {}).get(technology, {}).get("resource_classes")
-            == classes,
+            == count,
             f"Stale {technology} resource classes; rebuild {source_path}",
         )
     require(n.meta.get("run", {}).get("prefix") == prefix, "Wrong study namespace")

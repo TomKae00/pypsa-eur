@@ -49,7 +49,7 @@ rule build_clustered_population_layouts:
 rule build_solar_rooftop_potentials:
     input:
         pop_layout=resources("pop_layout_total.nc"),
-        class_regions=resources("regions_by_class_solar.geojson"),
+        class_regions=renewable_profile_path("regions_by_class_solar.geojson"),
         cutout=lambda w: input_cutout(w),
     output:
         potentials=resources("solar_rooftop_potentials.csv"),
@@ -1451,7 +1451,7 @@ rule time_aggregation:
         network=resources("networks/clustered.nc"),
         electricity_demand=resources("electricity_demand.nc"),
         profiles=lambda w: [
-            resources(f"profile_{tech}.nc")
+            renewable_profile_path(f"profile_{tech}.nc")
             for tech in config_provider("electricity", "renewable_carriers")(w)
             if tech != "hydro"
         ],
@@ -1494,7 +1494,7 @@ rule time_aggregation:
 
 def input_profile_offwind(w):
     return {
-        f"profile_{tech}": resources("profile_" + tech + ".nc")
+        f"profile_{tech}": renewable_profile_path("profile_" + tech + ".nc")
         for tech in ["offwind-ac", "offwind-dc", "offwind-float"]
         if (tech in config_provider("electricity", "renewable_carriers")(w))
     }

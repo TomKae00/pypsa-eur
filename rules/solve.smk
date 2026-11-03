@@ -6,6 +6,7 @@
 rule solve_network:
     input:
         network=resources("networks/composed_{horizon}.nc"),
+        assumption_code="scripts/bornholm_model_assumptions.py",
     output:
         network=RESULTS + "networks/solved_{horizon}.nc",
         model=(
@@ -34,6 +35,9 @@ rule solve_network:
             "sector", "co2_sequestration_potential"
         ),
         custom_extra_functionality=input_custom_extra_functionality,
+        bornholm_model_assumptions=config_provider(
+            "bornholm_model_assumptions", default={"enabled": False}
+        ),
     script:
         scripts("solve_network.py")
 

@@ -1,0 +1,35 @@
+# Layer AFTER config.bornholm.yaml and config.bornholm-3h.yaml.
+# Model assumptions and sources: doc/bornholm_calibrated_base.md.
+run:
+  prefix: bornholm_3h_s1_w3_o3_calibrated
+renewable:
+  onwind:
+    resource_classes: 3
+bornholm_model_assumptions:
+  enabled: true
+  onshore_calibration: data/model_assumptions/onshore_calibration.csv
+  transfer_limits: data/model_assumptions/zonal_transfer_limits.csv
+  excluded_countries: [AL, BA, BG, GR, HR, ME, MK, RO, RS, SI, XK]
+  coal_store_MWh: 1000
+  # Additional investment raises the operational ceiling in proportion to the
+  # installed directional envelope; fixed cases keep the CSV ceilings.
+  expansion_policy: proportional
+solving:
+  mem_mb: 100000
+  runtime: 24h
+  solver:
+    name: gurobi
+    options: gurobi-calibrated-base
+  solver_options:
+    gurobi-calibrated-base:
+      threads: 16
+      method: 2
+      crossover: 0
+      NumericFocus: 1
+      BarConvTol: 1.0e-8
+      Seed: 123
+      AggFill: -1
+      PreDual: 0
+      BarHomogeneous: -1
+      TimeLimit: 82800
+      SoftMemLimit: 96

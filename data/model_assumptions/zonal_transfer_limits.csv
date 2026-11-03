@@ -1,0 +1,9 @@
+planning_year,zone0,zone1,forward_MW,reverse_MW,basis,source
+2023,SE1,SE2,3300,3300,Published 2021 nominal maxima used as a static hindcast approximation,https://www.svk.se/siteassets/press-och-nyheter/temasidor-bilder-och-block/bilder/svk_karta_elomraden_overforingskapacitet.pdf
+2023,SE2,SE3,7300,7300,Published 2021 nominal maxima used as a static hindcast approximation,https://www.svk.se/siteassets/press-och-nyheter/temasidor-bilder-och-block/bilder/svk_karta_elomraden_overforingskapacitet.pdf
+2023,SE3,SE4,6200,2800,Published directional maxima; total direct AC and DC crossing,https://www.svk.se/siteassets/press-och-nyheter/temasidor-bilder-och-block/bilder/svk_karta_elomraden_overforingskapacitet.pdf
+2023,DK2,SE4,1700,1300,Published directional maxima used as a static hindcast approximation,https://www.svk.se/siteassets/press-och-nyheter/temasidor-bilder-och-block/bilder/svk_karta_elomraden_overforingskapacitet.pdf
+2035,SE1,SE2,3300,3300,Retain reference maxima as a conservative 2035 assumption,https://www.svk.se/siteassets/press-och-nyheter/temasidor-bilder-och-block/bilder/svk_karta_elomraden_overforingskapacitet.pdf
+2035,SE2,SE3,9600,7300,Explicit partial NordSyd delivery proxy; full approximately 10500 MW due late 2030s; not a quoted 2035 NTC,https://www.svk.se/nordsyd
+2035,SE3,SE4,6200,2800,Retain directional maxima as a 2035 assumption; total direct AC and DC crossing,https://www.svk.se/siteassets/press-och-nyheter/temasidor-bilder-och-block/bilder/svk_karta_elomraden_overforingskapacitet.pdf
+2035,DK2,SE4,1700,1300,Retain directional maxima as a conservative 2035 assumption,https://www.svk.se/siteassets/press-och-nyheter/temasidor-bilder-och-block/bilder/svk_karta_elomraden_overforingskapacitet.pdf

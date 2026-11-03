@@ -25,6 +25,7 @@ gurobi.log
 /logs
 /notebooks
 /data/*
+!/data/model_assumptions/
 /cutouts
 /tmp
 doc/_build

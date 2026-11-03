@@ -45,6 +45,11 @@ from scripts._helpers import (
     get,
     set_scenario_config,
 )
+from scripts.bornholm_model_assumptions import (
+    AUDIT_KEY,
+    add_zonal_transfer_constraints,
+    validate_assumptions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1285,6 +1290,11 @@ def extra_functionality(
 
     add_battery_constraints(n)
     add_lossy_bidirectional_link_constraints(n)
+    add_zonal_transfer_constraints(
+        n,
+        snapshots,
+        config.get("bornholm_model_assumptions", {}),
+    )
     add_pipe_retrofit_constraint(n)
     if n._multi_invest:
         add_carbon_constraint(n, snapshots)
@@ -1509,6 +1519,7 @@ if __name__ == "__main__":
     # Load network
     n = pypsa.Network(snakemake.input.network)
     planning_horizons = snakemake.wildcards.horizon
+    validate_assumptions(n, snakemake.config.get("bornholm_model_assumptions", {}))
 
     # Prepare network (settings before solving)
     prepare_network(
@@ -1624,7 +1635,10 @@ if __name__ == "__main__":
     if status == SolverStatus.warning:
         raise RuntimeError("Solving status 'warning'. Discarding solution.")
 
+    assumption_audit = n.meta.get(AUDIT_KEY)
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    if assumption_audit is not None:
+        n.meta[AUDIT_KEY] = assumption_audit
     n.meta["solve_result"] = {
         "status": getattr(status, "value", status),
         "termination_condition": getattr(condition, "value", condition),

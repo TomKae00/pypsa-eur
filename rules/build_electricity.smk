@@ -441,8 +441,8 @@ rule build_renewable_profiles:
             w, config_provider("renewable", w.technology, "cutout")(w)
         ),
     output:
-        profile=resources("profile_{technology}.nc"),
-        class_regions=resources("regions_by_class_{technology}.geojson"),
+        profile=renewable_profile_path("profile_{technology}.nc"),
+        class_regions=renewable_profile_path("regions_by_class_{technology}.geojson"),
     log:
         logs("build_renewable_profile_{technology}.log"),
     benchmark:
@@ -717,7 +717,7 @@ rule add_transmission_projects_and_dlr:
 
 def input_class_regions(w):
     return {
-        f"class_regions_{tech}": resources(f"regions_by_class_{tech}.geojson")
+        f"class_regions_{tech}": renewable_profile_path(f"regions_by_class_{tech}.geojson")
         for tech in set(config_provider("electricity", "renewable_carriers")(w))
         - {"hydro"}
     }
@@ -947,8 +947,9 @@ rule cluster_electricity_demand:
 
 def input_profile_tech(w):
     return {
-        f"profile_{tech}": resources(
-            "profile_" + tech + ".nc" if tech != "hydro" else f"profile_{tech}.nc"
+        f"profile_{tech}": (
+            renewable_profile_path(f"profile_{tech}.nc")
+            if tech != "hydro" else resources("profile_hydro.nc")
         )
         for tech in config_provider("electricity", "renewable_carriers")(w)
     }

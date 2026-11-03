@@ -67,6 +67,39 @@ def check_networks(networks, config, *, solved=False):
         "Electricity buses do not cover the configured study countries",
     )
     for case, n in networks.items():
+        if config.get("bornholm_model_assumptions", {}).get("enabled", False):
+            from scripts.bornholm_model_assumptions import (
+                AUDIT_KEY,
+                check_solved_assumptions,
+                validate_assumptions,
+            )
+
+            settings = config["bornholm_model_assumptions"]
+            audit = validate_assumptions(n, settings)
+            require(
+                audit["fingerprint"] == baseline.meta[AUDIT_KEY]["fingerprint"],
+                f"{case}: common base assumption fingerprint differs",
+            )
+            onshore = baseline.generators.index[
+                baseline.generators.carrier.eq("onwind")
+            ]
+            pd.testing.assert_frame_equal(
+                n.generators_t.p_max_pu[onshore],
+                baseline.generators_t.p_max_pu[onshore],
+                obj=f"{case}: shared calibrated onshore profiles",
+            )
+            pd.testing.assert_frame_equal(
+                n.generators.loc[onshore, ["p_nom_min", "p_nom_max"]],
+                baseline.generators.loc[onshore, ["p_nom_min", "p_nom_max"]],
+                obj=f"{case}: shared onshore resource potentials",
+            )
+            if solved:
+                require(
+                    n.meta.get("calibrated_base_quality", {}).get("screening_passed")
+                    is True,
+                    f"{case}: calibrated solve has not passed numerical screening",
+                )
+                check_solved_assumptions(n, settings)
         require(
             n.snapshots.equals(timing.index),
             f"{case}: expected the full configured year",

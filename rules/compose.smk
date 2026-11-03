@@ -66,6 +66,13 @@ def get_compose_inputs(w):
         if energy_islands.get("profile_mode", "proxy") == "project":
             inputs["energy_island_profile"] = resources("energy_islands/wind.nc")
 
+    assumptions = cfg.get("bornholm_model_assumptions", {})
+    if assumptions.get("enabled", False):
+        inputs.update(
+            onshore_calibration=assumptions["onshore_calibration"],
+            zonal_transfer_limits=assumptions["transfer_limits"],
+        )
+
     # Sector-specific inputs (only when sector coupling is enabled)
     if sector_enabled:
         sector_inputs = dict(
@@ -186,6 +193,7 @@ def get_compose_inputs(w):
         "scripts/add_existing_baseyear.py",
         "scripts/add_brownfield.py",
         "scripts/add_energy_islands.py",
+        "scripts/bornholm_model_assumptions.py",
         "scripts/prepare_network.py",
         "scripts/prepare_perfect_foresight.py",
         "scripts/prepare_sector_network.py",
@@ -255,6 +263,9 @@ rule compose_network:
         co2_budget=config_provider("co2_budget"),
         adjustments=config_provider("adjustments"),
         energy_islands=config_provider("energy_islands", default={"enabled": False}),
+        bornholm_model_assumptions=config_provider(
+            "bornholm_model_assumptions", default={"enabled": False}
+        ),
     message:
         "Composing network for horizon {wildcards.horizon}"
     script:

@@ -56,6 +56,18 @@ _benchmark_provider = path_provider(
     "benchmarks/", RDIR, shared_resources, exclude_from_shared
 )
 resources = path_provider("resources/", RDIR, shared_resources, exclude_from_shared)
+
+
+def renewable_profile_path(filename):
+    # Keep changed class partitions separate from previous shared profiles while
+    # building them only once for all cases in this opt-in campaign.
+    if config.get("bornholm_model_assumptions", {}).get("enabled", False):
+        prefix = config["run"].get("prefix", "")
+        if not prefix:
+            raise ValueError("Calibrated renewable profiles require a run prefix")
+        return f"resources/{prefix}/shared/{filename}"
+    return resources(filename)
+
 scripts = script_path_provider(PROJ_DIR)
 
 

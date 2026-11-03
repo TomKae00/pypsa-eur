@@ -25,6 +25,11 @@ from scripts.add_electricity import (
 )
 from scripts.add_energy_islands import main as add_energy_islands
 from scripts.add_existing_baseyear import main as add_existing_capacities
+from scripts.bornholm_model_assumptions import (
+    AUDIT_KEY,
+    apply_resource_and_coal_assumptions,
+    install_transfer_assumptions,
+)
 from scripts.prepare_network import (
     apply_co2_budget_constraints,
     apply_temporal_aggregation,
@@ -101,6 +106,8 @@ if __name__ == "__main__":
         stage="generation",
     )
 
+    assumption_settings = config.get("bornholm_model_assumptions", {})
+    apply_resource_and_coal_assumptions(n, assumption_settings)
     apply_temporal_aggregation(n, inputs, params)
 
     renewable_carriers = sorted(
@@ -155,10 +162,20 @@ if __name__ == "__main__":
     maybe_adjust_costs_and_potentials(n, adjustments["electricity"], current_horizon)
     maybe_adjust_costs_and_potentials(n, adjustments["sector"], current_horizon)
 
+    install_transfer_assumptions(
+        n,
+        assumption_settings,
+        current_horizon,
+        ac_losses=params.transmission_losses,
+    )
+
     sanitize_custom_columns(n)
     sanitize_carriers(n, config)
     sanitize_locations(n)
+    assumption_audit = n.meta.get(AUDIT_KEY)
     n.meta = dict(config, **dict(wildcards=dict(snakemake.wildcards)))
+    if assumption_audit is not None:
+        n.meta[AUDIT_KEY] = assumption_audit
     if n.investment_periods.empty:
         n.consistency_check()
     else:

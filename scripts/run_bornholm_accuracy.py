@@ -358,12 +358,18 @@ def reference_cost_constant(path):
     return float(value)
 
 
-def coal_check(n):
+def coal_check(n, *, fixed_MWh=None):
     name = "EU coal Store"
     study.require(name in n.stores.index, "Expected the audited coal Store")
     store = n.stores.loc[name]
     study.require(
-        store.e_nom_extendable and store.e_cyclic and store.standing_loss == 0,
+        (
+            store.e_nom_extendable
+            if fixed_MWh is None
+            else not store.e_nom_extendable and math.isclose(store.e_nom, fixed_MWh)
+        )
+        and store.e_cyclic
+        and store.standing_loss == 0,
         "Coal storage formulation differs from the audited baseline",
     )
     study.require(
