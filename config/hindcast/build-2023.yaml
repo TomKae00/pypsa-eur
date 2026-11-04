@@ -54,6 +54,8 @@ conventional:
 costs:
   # Technology-data is available in five-year steps; native VOM/efficiencies are retained.
   year: 2020
+  # Europe-wide biomass fuel assumption: EUR2023 35/MWh_fuel.
+  custom_cost_fn: data/hindcast/custom_costs_biomass35_2023.csv
   emission_prices:
     enable: true
     dynamic: true
