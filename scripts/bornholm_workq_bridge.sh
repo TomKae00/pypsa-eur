@@ -7,7 +7,10 @@ wrapper="$2"
 shopt -s nullglob
 while [[ ! -e "$spool/stop" ]]; do
     for request in "$spool"/*.request; do
-        mapfile -d '' -t fields < "$request"
+        fields=()
+        while IFS= read -r -d "" field; do
+            fields+=("$field")
+        done < "$request"
         token="${request%.request}"
         operation="${fields[0]:-}"
         code=0
