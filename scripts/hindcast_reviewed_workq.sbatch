@@ -4,10 +4,13 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=100G
+#SBATCH --exclusive
+#SBATCH --mem=0
 #SBATCH --time=48:00:00
 #SBATCH --output=slurm-hindcast-reviewed-2023-%j.out
 
+# Sophia advertises placeholder memory to Slurm. Reserve the whole node
+# instead of requesting a positive memory amount from that placeholder.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 stage="${1:-all}"

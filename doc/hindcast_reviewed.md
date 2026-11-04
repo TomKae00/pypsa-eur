@@ -51,7 +51,10 @@ sbatch scripts/hindcast_reviewed_workq.sbatch dry-run
 sbatch scripts/hindcast_reviewed_workq.sbatch all
 ```
 
-The controller uses one 16-CPU workq node and a 100 GB allocation. It builds
+The controller reserves one exclusive workq node, requests 16 solver CPUs and
+uses all node memory (`--exclusive --mem=0`). Sophia advertises placeholder
+memory to Slurm, so a positive request such as `--mem=100G` is unsuitable.
+The internal Snakemake build-concurrency budget remains 90,000 MB. It builds
 `resources/hindcast-reviewed-2023/networks/composed_2023.nc`, then solves to
 `results/hindcast-reviewed-2023/network.nc`. Required fuel/CO2 files from the
 existing procedure and ERA5 credentials must already be available. The Danish
