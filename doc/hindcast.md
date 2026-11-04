@@ -1,3 +1,7 @@
+> Current 2023 workflow: [reviewed hindcast](hindcast_reviewed.md), with a separate
+> result namespace, dated operating transmission assumptions and DK1/DK2-specific
+> onshore calibration. Older commands below describe earlier cases and references.
+
 <!-- SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur> -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 

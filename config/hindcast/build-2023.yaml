@@ -2,7 +2,7 @@
 # Build ONLY composed_2023.nc with native historical fuel/CO2 inputs, then use
 # scripts/hindcast.py solve without --marginal-costs (see doc/hindcast.md).
 run:
-  name: hindcast-corrected-2023
+  name: hindcast-reviewed-2023
   scenarios:
     enable: false
   shared_resources:
@@ -114,3 +114,20 @@ solving:
   solver:
     name: gurobi
     options: gurobi-default
+
+transmission_assumptions:
+  enabled: true
+  limits: data/model_assumptions/reviewed_transfer_limits.csv
+  asset_rules: data/model_assumptions/transmission_asset_rules.csv
+  joint_limits: data/model_assumptions/joint_transfer_limits.csv
+  expansion_policy: fixed
+  interpretation: Published NTC approximation; Core fallback is not a validated flow-based domain
+hindcast_danish_wind:
+  enabled: true
+  observations: data/hindcast/observed/danish_wind_{year}.csv.gz
+  carriers: [onwind]
+  minimum_fit_price_EUR_MWh: 5.0
+  minimum_fit_hours: 1000
+  factor_bounds: [0.3, 1.5]
+historical_asset_corrections:
+  enabled: true

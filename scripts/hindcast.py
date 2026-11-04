@@ -130,7 +130,8 @@ def zone_aliases(path, year):
 
 
 def fetch_prices(years, directory, commit, aliases_path):
-    """Prepare annual observed prices from Marta's pinned, already-hourly CSVs.
+    """
+    Prepare annual observed prices from Marta's pinned, already-hourly CSVs.
 
     No ENTSO-E token, interpolation, clipping or replacement-zone prices.
     Source gaps and whole missing zones remain NaN and are reported by year.
@@ -212,7 +213,9 @@ def fetch_prices(years, directory, commit, aliases_path):
                 "source_resolution": "published hourly means; raw subhourly completeness cannot be recovered",
             },
         )
-        print(f"Wrote {output}; coverage and missing zones: {output.with_suffix('.json')}")
+        print(
+            f"Wrote {output}; coverage and missing zones: {output.with_suffix('.json')}"
+        )
 
 
 def read_hourly(path):
@@ -314,7 +317,9 @@ def check_market_connections(n, mapping):
             )
         for attr in ["efficiency", "marginal_cost", "p_min_pu", "p_max_pu"]:
             if name in n.links_t[attr].columns:
-                raise ValueError(f"{name}: time-varying {attr} is not a native copperplate")
+                raise ValueError(
+                    f"{name}: time-varying {attr} is not a native copperplate"
+                )
         neighbours[a].add(b)
         neighbours[b].add(a)
     for zone, buses in mapping.items():
@@ -334,7 +339,8 @@ def check_market_connections(n, mapping):
 
 
 def zonal_configuration(n, cfg):
-    """Map the entire electricity network using explicit historical zone codes.
+    """
+    Map the entire electricity network using explicit historical zone codes.
 
     A bus cannot be split into multiple bidding zones by postprocessing.
     """
@@ -350,12 +356,18 @@ def zonal_configuration(n, cfg):
             f"missing={sorted(set(buses) - set(table.bus))}, "
             f"unknown={sorted(set(table.bus) - set(buses))}"
         )
-    missing = set(cfg.get("expected_countries", [])) - set(n.buses.loc[buses, "country"])
+    missing = set(cfg.get("expected_countries", [])) - set(
+        n.buses.loc[buses, "country"]
+    )
     if missing:
-        raise ValueError(f"European study network is missing countries: {sorted(missing)}")
+        raise ValueError(
+            f"European study network is missing countries: {sorted(missing)}"
+        )
     missing = set(cfg.get("required_zones", [])) - set(table.bidding_zone)
     if missing:
-        raise ValueError(f"Required separate bidding zones are missing: {sorted(missing)}")
+        raise ValueError(
+            f"Required separate bidding zones are missing: {sorted(missing)}"
+        )
     model_only = cfg.get("model_only_regions", {})
     if not isinstance(model_only, dict) or any(
         not isinstance(reason, str) or not reason.strip()
@@ -396,7 +408,9 @@ def prepare_zonal(network, config, flow_sources=None, year=None):
     n = pypsa.Network(network)
     cfg = benchmark_config(config, year)
     if not (utc_index(n.snapshots).year == cfg["year"]).all():
-        raise ValueError("The mapping year must match every snapshot in the annual network")
+        raise ValueError(
+            "The mapping year must match every snapshot in the annual network"
+        )
     path = Path(cfg["bus_zones"])
     if not path.exists():
         buses = n.buses.loc[n.buses.carrier.isin(["AC", "DC", ""]), ["country"]].copy()
@@ -449,7 +463,9 @@ def prepare_zonal(network, config, flow_sources=None, year=None):
     )
 
 
-def model_prices(n, mapping, *, mode="load_weighted", atol=0.01, rtol=1e-6, checks=None):
+def model_prices(
+    n, mapping, *, mode="load_weighted", atol=0.01, rtol=1e-6, checks=None
+):
     """Read a common zonal price, or explicitly aggregate the legacy reference case."""
     if mode not in ["common", "load_weighted"]:
         raise ValueError("price_mode must be common or load_weighted")
@@ -508,7 +524,9 @@ def reference_prices(prices, loads, regions):
         zones = spec["price_zones"]
         if not zones:
             if not spec.get("unscored_reason"):
-                raise ValueError(f"{name}: empty price_zones needs an explicit unscored_reason")
+                raise ValueError(
+                    f"{name}: empty price_zones needs an explicit unscored_reason"
+                )
             result[name] = pd.Series(np.nan, index=prices.index)
             continue
         p = prices[zones]  # fail on undeclared missing columns
@@ -679,13 +697,20 @@ def benchmark(network, cfg, output):
     def compare(kind, key, sim, ref, unit, unscored_reason=None):
         for freq in ["hourly", "daily", "weekly"]:
             if unscored_reason:
-                rows.append({
-                    "kind": kind, "series": key, "resolution": freq, "unit": unit,
-                    "year": year,
-                    "status": f"NOT SCORED: {unscored_reason}",
-                    "n_expected_hours": len(sim), "n_matched_hours": 0,
-                    "coverage": 0.0, "n_scored": 0,
-                })
+                rows.append(
+                    {
+                        "kind": kind,
+                        "series": key,
+                        "resolution": freq,
+                        "unit": unit,
+                        "year": year,
+                        "status": f"NOT SCORED: {unscored_reason}",
+                        "n_expected_hours": len(sim),
+                        "n_matched_hours": 0,
+                        "coverage": 0.0,
+                        "n_scored": 0,
+                    }
+                )
                 continue
             try:
                 metrics, pair = paired_metrics(
@@ -695,13 +720,20 @@ def benchmark(network, cfg, output):
                 if str(exc) != "No valid matched observations at requested resolution":
                     raise
                 matched = sim.notna() & ref.reindex(sim.index).notna()
-                rows.append({
-                    "kind": kind, "series": key, "resolution": freq, "unit": unit,
-                    "year": year,
-                    "status": "NOT SCORED: insufficient paired observations",
-                    "n_expected_hours": len(sim), "n_matched_hours": int(matched.sum()),
-                    "coverage": float(matched.mean()), "n_scored": 0,
-                })
+                rows.append(
+                    {
+                        "kind": kind,
+                        "series": key,
+                        "resolution": freq,
+                        "unit": unit,
+                        "year": year,
+                        "status": "NOT SCORED: insufficient paired observations",
+                        "n_expected_hours": len(sim),
+                        "n_matched_hours": int(matched.sum()),
+                        "coverage": float(matched.mean()),
+                        "n_scored": 0,
+                    }
+                )
                 continue
             if kind == "flow" and freq == "hourly":
                 metrics.update(
@@ -740,20 +772,32 @@ def benchmark(network, cfg, output):
                 plot_pair(pair, output / f"{stem}.png", unit)
 
     def unscored_reason(zones):
-        return "; ".join(
-            f"{zone}: {cfg['regions'][zone]['unscored_reason']}"
-            for zone in zones if cfg["regions"][zone].get("unscored_reason")
-        ) or None
+        return (
+            "; ".join(
+                f"{zone}: {cfg['regions'][zone]['unscored_reason']}"
+                for zone in zones
+                if cfg["regions"][zone].get("unscored_reason")
+            )
+            or None
+        )
 
     for key in model:
         compare(
-            "price", key, model[key], obs[key], "EUR/MWh",
+            "price",
+            key,
+            model[key],
+            obs[key],
+            "EUR/MWh",
             unscored_reason([key]),
         )
     for a, b in cfg.get("spreads", []):
         compare(
-            "spread", f"{a}-{b}", model[a] - model[b], obs[a] - obs[b],
-            "EUR/MWh", unscored_reason([a, b]),
+            "spread",
+            f"{a}-{b}",
+            model[a] - model[b],
+            obs[a] - obs[b],
+            "EUR/MWh",
+            unscored_reason([a, b]),
         )
     model.to_csv(output / "model_prices_raw.csv", index_label="utc_timestamp")
     shedding = load_shedding(n).reindex(model.index)
@@ -771,7 +815,8 @@ def benchmark(network, cfg, output):
                 reason = unscored_reason(key.split("->"))
                 reference = (
                     pd.Series(np.nan, index=flows.index)
-                    if reason else observed_flows[key]
+                    if reason
+                    else observed_flows[key]
                 )
                 compare("flow", key, flows[key], reference, "MW", reason)
             report["flow_validation"] = cfg["flow_kind"]
@@ -797,7 +842,9 @@ def benchmark_years(config, years=None, output=None):
         raise ValueError("Select at least one annual benchmark case")
     cases = [benchmark_config(config, year) for year in years]
     if len({cfg["output"] for cfg in cases}) != len(cases):
-        raise ValueError("Use {year} in annual output paths to avoid overwriting results")
+        raise ValueError(
+            "Use {year} in annual output paths to avoid overwriting results"
+        )
     missing = []
     for cfg in cases:
         for key in ["network", "bus_zones", "zone_aliases", "prices", "loads", "flows"]:
@@ -805,7 +852,9 @@ def benchmark_years(config, years=None, output=None):
             if path and not Path(path).is_file():
                 missing.append(f"{cfg['year']}: {key}={path}")
     if missing:
-        raise ValueError("Annual benchmark inputs are not ready:\n" + "\n".join(missing))
+        raise ValueError(
+            "Annual benchmark inputs are not ready:\n" + "\n".join(missing)
+        )
     scores = []
     for cfg in cases:
         benchmark(cfg["network"], cfg, cfg["output"])
@@ -814,7 +863,9 @@ def benchmark_years(config, years=None, output=None):
         scores.append(frame)
     output = Path(output or base.get("summary_output", "results/hindcast-europe-zonal"))
     output.mkdir(parents=True, exist_ok=True)
-    pd.concat(scores, ignore_index=True).to_csv(output / "scores_all_years.csv", index=False)
+    pd.concat(scores, ignore_index=True).to_csv(
+        output / "scores_all_years.csv", index=False
+    )
     write_json(
         output / "years.json",
         {
@@ -885,7 +936,16 @@ def solve(
         # interior solution that may fail the optimality tolerances.
         else {"Threads": threads, "Method": 2, "Crossover": -1, "NumericFocus": 2}
     )
+    from scripts import transmission_assumptions
+    from scripts.hindcast_wind import validate as validate_wind
+
+    settings = n.meta.get("transmission_assumptions", {})
+    transmission_assumptions.validate(n, settings)
+    validate_wind(n, n.meta.get("hindcast_danish_wind", {}), int(n.snapshots[0].year))
     status, condition = n.optimize(
+        extra_functionality=lambda net, sns: transmission_assumptions.add_constraints(
+            net, sns, settings
+        ),
         solver_name=solver,
         solver_options=options,
         transmission_losses=transmission_losses,
@@ -910,9 +970,13 @@ def solve(
             "termination_condition": str(condition),
             "transmission_losses": transmission_losses,
             "marginal_costs_sha256": digest(marginal_costs) if marginal_costs else None,
-            "scope": "Fixed-capacity full-horizon re-solve; external callbacks not reconstructed",
+            "scope": "Fixed historical fleet with reviewed operating constraints; remaining market-domain limitations are documented",
         },
     )
+    transmission_assumptions.check_solution(n, settings)
+    from scripts.dispatch_checks import check as check_dispatch
+
+    n.meta["hindcast_physical_quality"] = check_dispatch(n)
     n.export_to_netcdf(output)
     check = audit(n)
     check["objective"] = float(n.objective)
@@ -931,7 +995,9 @@ def main():
     fetch.add_argument("--year", type=int, choices=range(2020, 2025), default=2023)
     fetch.add_argument("--directory", default="data/hindcast/reference")
     prices = sub.add_parser("fetch-prices")
-    prices.add_argument("--years", type=int, nargs="+", default=[2022, 2023, 2024, 2025])
+    prices.add_argument(
+        "--years", type=int, nargs="+", default=[2022, 2023, 2024, 2025]
+    )
     prices.add_argument("--directory", default="data/hindcast")
     prices.add_argument("--commit", default=PRICE_COMMIT)
     prices.add_argument("--zone-aliases", default="config/hindcast/zone-aliases.yaml")

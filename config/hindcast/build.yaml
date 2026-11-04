@@ -1,6 +1,6 @@
 # Shared historical build settings; combine with one build-YEAR.yaml file.
 # Each year is an independent overnight dispatch case, never a multi-period investment.
-# Standard PyPSA-Eur input assignment is retained; no observed-capacity calibration.
+# Base input assignment is native; the reviewed 2023 overlay adds explicit Danish wind calibration.
 # Composition uses native historical costs; hindcast.py solve preserves them.
 run:
   name: hindcast-build-2023

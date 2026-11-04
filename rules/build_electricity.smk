@@ -996,3 +996,15 @@ rule build_tyndp_network:
         "Building TYNDP network"
     script:
         scripts("build_tyndp_network.py")
+
+
+rule retrieve_danish_wind:
+    output:
+        csv="data/hindcast/observed/danish_wind_{year}.csv.gz",
+        provenance="data/hindcast/observed/danish_wind_{year}.csv.json",
+    wildcard_constraints:
+        year="2022|2023|2024|2025",
+    resources:
+        mem_mb=1000,
+    script:
+        "../scripts/retrieve_danish_wind.py"

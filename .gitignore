@@ -105,3 +105,6 @@ doc/img/intro-workflow.svg
 !/notebooks/
 /notebooks/*
 !/notebooks/inspect_hindcast.ipynb
+
+/data/hindcast/observed/
+!/data/model_assumptions/

@@ -197,6 +197,16 @@ def get_compose_inputs(w):
         "scripts/_helpers.py",
     ]
 
+    from scripts.transmission_assumptions import paths as operating_paths
+    inputs.update({"operating_" + key: value for key, value in
+                   operating_paths(cfg.get("transmission_assumptions", {}), horizon).items()})
+    inputs["operating_code"] = "scripts/transmission_assumptions.py"
+    from scripts.hindcast_wind import observations_path
+    wind_settings = cfg.get("hindcast_danish_wind", {})
+    if wind_settings.get("enabled", False):
+        inputs["danish_wind_observations"] = observations_path(wind_settings, horizon)
+    inputs["historical_correction_code"] = ["scripts/hindcast_wind.py", "scripts/historical_assets.py"]
+
     return inputs
 
 
