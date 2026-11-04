@@ -418,6 +418,9 @@ renewable:
 conventional:
   unit_commitment: false
   dynamic_fuel_price: false
+  # Optional prepared hourly EUR/MWh thermal CSV; supports {horizon} in the path.
+  # Bypasses the monthly builder and its smoothing when set.
+  fuel_price_file: null
   fuel_price_rolling_window: 6
   nuclear:
     p_max_pu: data/nuclear_p_max_pu.csv
@@ -1146,6 +1149,9 @@ costs:
     enable: false
     co2: 0.0
     dynamic: false
+    # Optional prepared hourly CSV with a co2 column in EUR/tCO2; supports {horizon}.
+    # Bypasses the historical CO2 builder and its smoothing when set.
+    price_file: null
     rolling_window: 90
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#clustering

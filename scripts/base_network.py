@@ -867,7 +867,22 @@ def process_onshore_regions(
         crs=crs,
     )
 
-    return onshore_regions_adm
+    # A bus assigned by nearest region can lie outside that region's outline.
+    # Its clipped Voronoi cell may then have no area. Retain the electrical bus,
+    # but do not export a missing/zero-area cell as a land allocation region.
+    has_area = (
+        onshore_regions_adm.geometry.notna()
+        & ~onshore_regions_adm.geometry.is_empty
+        & (shapely.area(onshore_regions_adm.geometry) > 0)
+    )
+    if (~has_area).any():
+        logger.warning(
+            "No positive-area onshore cell in %s for buses %s; retaining the "
+            "network buses without a land allocation cell.",
+            adm,
+            onshore_regions_adm.loc[~has_area, "name"].tolist(),
+        )
+    return onshore_regions_adm.loc[has_area]
 
 
 def process_offshore_regions(
@@ -1470,9 +1485,10 @@ def build_admin_shapes(
     clustering: str,
     admin_levels: dict[str, int],
     countries: list[str],
+    bidding_zones: str | None = None,
 ) -> gpd.GeoDataFrame:
     """
-    Builds administrative shapes for bus regions based on NUTS3 regions and custom clustering configuration.
+    Build bus regions from administrative areas or actual bidding-zone polygons.
 
     Parameters
     ----------
@@ -1480,6 +1496,9 @@ def build_admin_shapes(
     clustering (str) : Clustering method to use ('administrative' or other).
     admin_levels (dict[str, int]) : Dictionary mapping country codes to administrative levels.
     countries (list[str]) : List of country codes to include.
+    bidding_zones (str, optional) : Native bidding-zone shapes. Required for
+        countries clustered at level "bz"; NUTS3 majority-overlap labels are
+        insufficient when a bidding-zone boundary cuts an administrative region.
 
     Returns
     -------
@@ -1538,8 +1557,46 @@ def build_admin_shapes(
         logger.info("Building bus regions per country level.")
         nuts3_regions["admin"] = nuts3_regions["country"]
 
-    # Group by busmap
-    admin_shapes = nuts3_regions[["admin", "geometry", "country"]]
+    admin_shapes = nuts3_regions[["admin", "geometry", "country"]].copy()
+    if clustering == "administrative":
+        bz_countries = set(
+            nuts3_regions.loc[nuts3_regions["column"].eq("bidding_zone"), "country"]
+        )
+        if bz_countries:
+            if not bidding_zones:
+                raise ValueError(
+                    "Bidding-zone clustering requires the native bidding_zones "
+                    "shapefile; whole NUTS3 regions do not preserve zone boundaries"
+                )
+            zones = gpd.read_file(bidding_zones).to_crs(nuts3_regions.crs)
+            zones = zones.loc[
+                zones["country"].isin(bz_countries),
+                ["zone_name", "country", "geometry"],
+            ].rename(columns={"zone_name": "admin"})
+            missing = bz_countries.difference(zones["country"])
+            if missing:
+                raise ValueError(
+                    f"No native bidding-zone polygons for: {sorted(missing)}"
+                )
+            if zones["admin"].isna().any() or zones["admin"].duplicated().any():
+                raise ValueError("Native bidding-zone IDs must be present and unique")
+            # Use the same polygons for base-bus assignment, onshore regions and
+            # downstream plant assignment. Retain countries/national cluster IDs;
+            # shared market prices are connected later by native copperplate links.
+            admin_shapes = pd.concat(
+                [
+                    admin_shapes.loc[~admin_shapes["country"].isin(bz_countries)],
+                    zones,
+                ],
+                ignore_index=True,
+            )
+            logger.info(
+                "Using native bidding-zone polygons instead of dissolved NUTS3 "
+                "majority-overlap regions for: %s",
+                ", ".join(sorted(bz_countries)),
+            )
+
+    # Other administrative levels retain their existing NUTS aggregation.
     admin_shapes = admin_shapes.dissolve("admin")
 
     # Identify regions that do not contain buses and merge them with smallest
@@ -1666,6 +1723,7 @@ if __name__ == "__main__":
         clustering,
         admin_levels,
         countries,
+        bidding_zones=snakemake.input.get("bidding_zones") or None,
     )
 
     onshore_regions, offshore_regions, onshore_shapes, offshore_shapes = (

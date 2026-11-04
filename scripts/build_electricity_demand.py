@@ -312,7 +312,18 @@ if __name__ == "__main__":
         synthetic_load = pd.read_csv(fn, index_col=0, parse_dates=True)
         # UA, MD, XK, CY, MT do not appear in synthetic load data
         countries = list(set(countries) - set(["UA", "MD", "XK", "CY", "MT"]))
-        synthetic_load = synthetic_load.loc[snapshots, countries]
+        # The synthetic archive need not cover every historical model year.
+        # Align without inventing data: unavailable hours/countries stay NaN,
+        # observed load retains precedence, and the completeness check below
+        # still rejects demand gaps that neither source can fill.
+        missing_hours = snapshots.difference(synthetic_load.index)
+        if len(missing_hours):
+            logger.warning(
+                "Synthetic demand does not cover %d requested hours; those hours "
+                "must be supplied by the other demand inputs and native gap filling.",
+                len(missing_hours),
+            )
+        synthetic_load = synthetic_load.reindex(index=snapshots, columns=countries)
         load = load.combine_first(synthetic_load)
 
     assert not load.isna().any().any(), (

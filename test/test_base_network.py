@@ -37,6 +37,83 @@ path_cwd = pathlib.Path.cwd()
 
 
 @pytest.mark.parametrize(
+    "coordinates", [[(0.5, 0.5)], [(0.25, 0.5), (0.75, 0.5), (5, 0.5)]]
+)
+def test_onshore_cells_cover_outline_without_missing_geometries(coordinates, caplog):
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from scripts.base_network import process_onshore_regions
+
+    buses = pd.DataFrame(coordinates, columns=["x", "y"])
+    buses.index = buses.index.map(lambda i: f"bus{i}")
+    buses = buses.assign(
+        country="NL", admin="NL00", onshore_bus=True, substation_lv=True
+    )
+    original = buses.copy(deep=True)
+    outline = box(0, 0, 1, 1)
+    admin = gpd.GeoDataFrame(
+        {"country": ["NL"]}, index=["NL00"], geometry=[outline], crs=4326
+    )
+    result = process_onshore_regions("NL00", buses, admin, "EPSG:4326")
+    assert result.geometry.notna().all()
+    assert not result.geometry.is_empty.any()
+    assert result.union_all().symmetric_difference(outline).area < 1e-12
+    pd.testing.assert_frame_equal(buses, original)
+    if len(coordinates) > 1:
+        assert set(result.name) == {"bus0", "bus1"}
+        assert "retaining the network buses" in caplog.text
+    else:
+        assert list(result.name) == ["bus0"]
+
+
+@pytest.mark.parametrize("levels", [{"level": "bz"}, {"level": 0, "SE": "bz"}])
+def test_bidding_zone_shapes_preserve_boundary_inside_nuts_region(tmp_path, levels):
+    """A majority-overlap NUTS label must not move a whole county into one zone."""
+    import geopandas as gpd
+    import pypsa
+    from shapely.geometry import box
+
+    from scripts.base_network import build_admin_shapes
+
+    # One administrative region spans both zones and is labelled SE04.
+    nuts = gpd.GeoDataFrame(
+        {
+            "id": ["SEcounty"],
+            "country": ["SE"],
+            "level1": ["SE1"],
+            "level2": ["SE11"],
+            "level3": ["SE111"],
+            "bidding_zone": ["SE04"],
+        },
+        geometry=[box(0, 0, 2, 1)],
+        crs=4326,
+    )
+    zones = gpd.GeoDataFrame(
+        {"zone_name": ["SE03", "SE04"], "country": ["SE", "SE"]},
+        geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)],
+        crs=4326,
+    )
+    nuts_path, zones_path = tmp_path / "nuts.geojson", tmp_path / "zones.geojson"
+    nuts.to_file(nuts_path, driver="GeoJSON")
+    zones.to_file(zones_path, driver="GeoJSON")
+    n = pypsa.Network()
+    n.add("Bus", ["west", "east"], x=[0.5, 1.5], y=[0.5, 0.5], country="SE")
+    result = build_admin_shapes(
+        n, nuts_path, "administrative", levels, ["SE"], bidding_zones=zones_path
+    )
+    assert set(result.index) == {"SE03", "SE04"}
+    assert result.loc["SE03", "geometry"].equals(zones.geometry.iloc[0])
+    assert result.loc["SE04", "geometry"].equals(zones.geometry.iloc[1])
+    assert result.substations.to_dict() == {"SE03": 1, "SE04": 1}
+
+    # A country-level build still uses its NUTS union without requiring zones.
+    national = build_admin_shapes(n, nuts_path, "administrative", {"level": 0}, ["SE"])
+    assert list(national.index) == ["SE"]
+    assert national.geometry.iloc[0].equals(nuts.geometry.iloc[0])
+
+
+@pytest.mark.parametrize(
     "column_name, expected",
     [
         ("tags", pd.Series(["NG", "CH", "AU"])),

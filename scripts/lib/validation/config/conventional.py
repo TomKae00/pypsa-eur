@@ -24,7 +24,11 @@ class ConventionalConfig(ConfigModel):
     )
     dynamic_fuel_price: bool = Field(
         False,
-        description="Consider the monthly fluctuating fuel prices for each conventional generator. Refer to the CSV file 'data/validation/monthly_fuel_price.csv'.",
+        description="Use time-varying fuel prices: the native monthly history or a prepared hourly CSV supplied with fuel_price_file.",
+    )
+    fuel_price_file: str | None = Field(
+        None,
+        description="Optional hourly CSV in EUR/MWh thermal with a gas column and optional carrier columns. Requires dynamic_fuel_price; supports {horizon}. Bypasses monthly price building and smoothing.",
     )
     fuel_price_rolling_window: int = Field(
         6,
