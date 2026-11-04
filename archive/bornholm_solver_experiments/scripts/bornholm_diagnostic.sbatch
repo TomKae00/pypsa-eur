@@ -18,7 +18,7 @@ method="${3:-barrier}"
 variant="${4:-original}"
 case "$stage" in
   all|build|solve|dry-run) ;;
-  *) echo "Usage: sbatch scripts/bornholm_diagnostic.sbatch [all|build|solve|dry-run] [hours] [barrier|pdhg] [original|simplified]" >&2; exit 2 ;;
+  *) echo "Usage: sbatch archive/bornholm_solver_experiments/scripts/bornholm_diagnostic.sbatch [all|build|solve|dry-run] [hours] [barrier|pdhg] [original|simplified]" >&2; exit 2 ;;
 esac
 [[ "$variant" == original || "$variant" == simplified ]] || { echo "Unknown baseline: $variant" >&2; exit 2; }
 [[ "$hours" =~ ^[0-9]+$ ]] && (( hours > 0 && hours < 8760 )) || { echo "Invalid hours: $hours" >&2; exit 2; }
@@ -31,16 +31,16 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
 
 if [[ "$stage" == dry-run ]]; then
-  bash scripts/bornholm_gas_capacity_rebuild.sbatch dry-run original
+  bash archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch dry-run original
   if [[ "$variant" == simplified ]]; then
-    bash scripts/bornholm_gas_capacity_rebuild.sbatch dry-run simplified
+    bash archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch dry-run simplified
   fi
   exit 0
 fi
 if [[ "$stage" == all || "$stage" == build ]]; then
-  bash scripts/bornholm_gas_capacity_rebuild.sbatch build original
+  bash archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch build original
   if [[ "$variant" == simplified ]]; then
-    bash scripts/bornholm_gas_capacity_rebuild.sbatch build simplified
+    bash archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch build simplified
   fi
 fi
 if [[ "$variant" == simplified ]]; then

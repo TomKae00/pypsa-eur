@@ -15,7 +15,7 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 variant="${1:-original}"
 case "$variant" in
   original|simplified) ;;
-  *) echo "Usage: sbatch scripts/bornholm_annual_barrier.sbatch [original|simplified]" >&2; exit 2 ;;
+  *) echo "Usage: sbatch archive/bornholm_solver_experiments/scripts/bornholm_annual_barrier.sbatch [original|simplified]" >&2; exit 2 ;;
 esac
 [[ -n "${SLURM_JOB_ID:-}" ]] || { echo "Submit with sbatch from the repository root." >&2; exit 2; }
 pixi_wrapper="${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}"

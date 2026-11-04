@@ -1,7 +1,7 @@
 # Layer AFTER config.bornholm.yaml AND config.bornholm-3h.yaml.
 # Retain the selected study's resource classes, sectors, grid and project data.
 run:
-  prefix: bornholm_1h_s1_w2_o3
+  prefix: bornholm_1h_s1_w3_o3_reviewed
   name: [bornholm_zonal_hybrid]
   shared_resources:
     # Only one case: isolate processed inputs, especially snapshot_weightings.csv,

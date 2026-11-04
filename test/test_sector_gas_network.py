@@ -20,7 +20,7 @@ def test_simplified_run_inherits_native_gas_connectivity():
     defaults = yaml.safe_load(Path("config/config.default.yaml").read_text())["sector"]
     base = yaml.safe_load(Path("config/config.bornholm.yaml").read_text())["sector"]
     simplified = yaml.safe_load(
-        Path("config/config.bornholm-simplified.yaml").read_text()
+        Path("archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml").read_text()
     )["sector"]
     effective = {**defaults, **base, **simplified}
     assert (

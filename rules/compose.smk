@@ -200,6 +200,11 @@ def get_compose_inputs(w):
         "scripts/_helpers.py",
     ]
 
+    from scripts.transmission_assumptions import paths as operating_paths
+    inputs.update({"operating_" + key: value for key, value in
+                   operating_paths(cfg.get("transmission_assumptions", {}), horizon).items()})
+    inputs["operating_code"] = "scripts/transmission_assumptions.py"
+
     return inputs
 
 

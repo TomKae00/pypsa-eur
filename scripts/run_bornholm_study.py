@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Build targets, input preflight and native annual solves for the eight 3h cases."""
+"""Legacy study helpers; current campaign: scripts.run_bornholm_calibrated."""
 
 import argparse
 import hashlib
@@ -8,6 +8,7 @@ import logging
 import resource
 import runpy
 import socket
+import sys
 import time
 from pathlib import Path
 
@@ -185,6 +186,11 @@ def solve(run):
 
 
 def main():
+    if "--legacy" not in sys.argv:
+        from scripts.run_bornholm_calibrated import main as reviewed_main
+
+        return reviewed_main()
+    sys.argv.remove("--legacy")
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--list-build-targets", action="store_true")

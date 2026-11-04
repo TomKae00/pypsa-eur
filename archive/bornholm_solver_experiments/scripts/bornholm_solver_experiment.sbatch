@@ -17,14 +17,14 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 case "${1:-scale2}" in
   scale2)
     case_name="bornholm_solver_scale2"
-    overlay="config/config.bornholm-solver-scale2.yaml"
+    overlay="archive/bornholm_solver_experiments/config/config.bornholm-solver-scale2.yaml"
     ;;
   relaxed)
     case_name="bornholm_solver_relaxed"
-    overlay="config/config.bornholm-solver-relaxed.yaml"
+    overlay="archive/bornholm_solver_experiments/config/config.bornholm-solver-relaxed.yaml"
     ;;
   *)
-    echo "Usage: sbatch scripts/bornholm_solver_experiment.sbatch [scale2|relaxed]" >&2
+    echo "Usage: sbatch archive/bornholm_solver_experiments/scripts/bornholm_solver_experiment.sbatch [scale2|relaxed]" >&2
     exit 2
     ;;
 esac

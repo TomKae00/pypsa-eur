@@ -233,7 +233,15 @@ if Path(sys.argv[0]).name == 'sbatch': print('999')
         "FAILED_CHECK": str(int(failed_check)),
     }
     result = subprocess.run(
-        ["bash", str(Path("scripts/bornholm_study_workq.sbatch").resolve()), stage],
+        [
+            "bash",
+            str(
+                Path(
+                    "archive/bornholm_solver_experiments/scripts/bornholm_study_workq.sbatch"
+                ).resolve()
+            ),
+            stage,
+        ],
         env=env,
         capture_output=True,
         text=True,
@@ -249,7 +257,7 @@ if Path(sys.argv[0]).name == 'sbatch': print('999')
             "--parsable",
             "--partition=workq",
             "--array=0-7",
-            "scripts/bornholm_study_solve.sbatch",
+            "archive/bornholm_solver_experiments/scripts/bornholm_study_solve.sbatch",
         ]
         assert commands.index(submissions[0]) > next(
             i for i, c in enumerate(commands) if "--preflight-all" in c
@@ -260,7 +268,7 @@ if Path(sys.argv[0]).name == 'sbatch': print('999')
             "--partition=workq",
             "--dependency=afterok:999",
             "--kill-on-invalid-dep=yes",
-            "scripts/bornholm_study_check.sbatch",
+            "archive/bornholm_solver_experiments/scripts/bornholm_study_check.sbatch",
         ]
     build = next(cmd for cmd in commands if cmd[:2] == ["run", "snakemake"])
     assert len(build[build.index("--") + 1 :]) == 8
@@ -276,7 +284,10 @@ def test_study_refuses_other_partitions(tmp_path, script):
         "SLURM_SUBMIT_DIR": str(tmp_path),
     }
     result = subprocess.run(
-        ["bash", str(Path("scripts") / script)], env=env, capture_output=True, text=True
+        ["bash", str(Path("archive/bornholm_solver_experiments/scripts") / script)],
+        env=env,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 2 and "workq" in result.stderr
 

@@ -25,7 +25,7 @@ is not a clean thread-scaling benchmark. Node hardware can affect runtime as wel
 From the cluster repository root after pulling this change:
 
 ```bash
-pair_job=$(sbatch --parsable scripts/bornholm_accuracy_workq.sbatch)
+pair_job=$(sbatch --parsable archive/bornholm_solver_experiments/scripts/bornholm_accuracy_workq.sbatch)
 pair_job=${pair_job%%;*}
 echo "Accuracy comparison array: $pair_job"
 watch -n 10 "squeue -j $pair_job -o '%.18i %.10P %.12T %.12M %.25R'"
@@ -151,7 +151,7 @@ Submit **four new solves**, without rebuilding:
 ```bash
 cd ~/projects/pypsa-eur-bornholm
 git pull --ff-only origin feature/bornholm-energy-island
-sweep_job=$(sbatch --parsable scripts/bornholm_solver_sweep_workq.sbatch)
+sweep_job=$(sbatch --parsable archive/bornholm_solver_experiments/scripts/bornholm_solver_sweep_workq.sbatch)
 sweep_job=${sweep_job%%;*}
 echo "Four solver trials: $sweep_job"
 watch -n 10 "squeue -j $sweep_job -o '%.18i %.10P %.12T %.12M %.25R'"
@@ -196,7 +196,7 @@ do not bypass the native rejection or change the physical formulation.
 For one trial only, e.g. the NF1 control:
 
 ```bash
-sbatch --array=0 scripts/bornholm_solver_sweep_workq.sbatch
+sbatch --array=0 archive/bornholm_solver_experiments/scripts/bornholm_solver_sweep_workq.sbatch
 ```
 
 Do not edit the physics or rebuild between trials. No objective-constant removal,
@@ -238,7 +238,7 @@ Submit only the **new** array:
 ```bash
 cd ~/projects/pypsa-eur-bornholm
 git pull --ff-only origin feature/bornholm-energy-island
-followup_job=$(sbatch --parsable scripts/bornholm_solver_followup_workq.sbatch)
+followup_job=$(sbatch --parsable archive/bornholm_solver_experiments/scripts/bornholm_solver_followup_workq.sbatch)
 followup_job=${followup_job%%;*}
 echo "Four additional solver trials: $followup_job"
 watch -n 10 "squeue -j 4929796,$followup_job -o '%.18i %.10P %.12T %.12M %.25R'"

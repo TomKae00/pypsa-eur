@@ -67,6 +67,21 @@ def check_networks(networks, config, *, solved=False):
         "Electricity buses do not cover the configured study countries",
     )
     for case, n in networks.items():
+        if config.get("transmission_assumptions", {}).get("enabled", False):
+            from scripts import transmission_assumptions
+
+            common = transmission_assumptions.validate(
+                n, config["transmission_assumptions"]
+            )
+            require(
+                common["fingerprint"]
+                == baseline.meta[transmission_assumptions.AUDIT_KEY]["fingerprint"],
+                f"{case}: operating transmission assumptions differ",
+            )
+            if solved:
+                transmission_assumptions.check_solution(
+                    n, config["transmission_assumptions"]
+                )
         if config.get("bornholm_model_assumptions", {}).get("enabled", False):
             from scripts.bornholm_model_assumptions import (
                 AUDIT_KEY,

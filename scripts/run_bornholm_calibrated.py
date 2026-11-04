@@ -23,7 +23,7 @@ from scripts.bornholm_model_assumptions import (
 )
 
 CONFIGS = [*study.CONFIGS, "config/config.bornholm-calibrated-base.yaml"]
-PREFIX = "bornholm_3h_s1_w3_o3_calibrated"
+PREFIX = "bornholm_3h_s1_w3_o3_reviewed"
 CLASSES = {**study.CLASSES, "onwind": 3}
 
 
@@ -40,6 +40,13 @@ def preview(network_path):
         "bornholm_model_assumptions"
     ]
     audit = apply_resource_and_coal_assumptions(n, settings)
+    from scripts import transmission_assumptions
+
+    transmission_settings = yaml.safe_load(Path(CONFIGS[-1]).read_text())[
+        "transmission_assumptions"
+    ]
+    transmission_assumptions.apply_asset_rules(n, transmission_settings, 2035)
+    transmission_assumptions.install(n, transmission_settings, 2035)
     install_transfer_assumptions(n, settings, 2035)
     return {
         "source": str(network_path),
@@ -65,6 +72,11 @@ def preflight(context):
     n = pypsa.Network(context.input.network)
     settings = context.config["bornholm_model_assumptions"]
     audit = validate_assumptions(n, settings)
+    from scripts import transmission_assumptions
+
+    transmission_assumptions.validate(
+        n, context.config.get("transmission_assumptions", {})
+    )
     study.require(
         audit["transfers"]["planning_year"] == 2035,
         "Transfer limits must use the planning year, not weather year",
@@ -186,6 +198,9 @@ def solve(run):
         settings = context.config["bornholm_model_assumptions"]
         report["coal"] = accuracy.coal_check(n, fixed_MWh=settings["coal_store_MWh"])
         report["assumption_checks"] = check_solved_assumptions(n, settings)
+        from scripts.dispatch_checks import check as check_dispatch
+
+        report["physical_quality"] = check_dispatch(n)
         report["screening_issues"] = accuracy.accuracy_issues(
             report["solver_quality"],
             report["coal"],

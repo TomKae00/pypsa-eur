@@ -10,6 +10,7 @@ import logging
 
 import pypsa
 
+from scripts import transmission_assumptions
 from scripts._helpers import (
     configure_logging,
     load_costs,
@@ -88,6 +89,10 @@ if __name__ == "__main__":
     costs = load_costs(snakemake.input.tech_costs)
 
     add_electricity_components(n, inputs, params, costs)
+    transmission_settings = config.get("transmission_assumptions", {})
+    transmission_assumptions.apply_asset_rules(
+        n, transmission_settings, current_horizon
+    )
 
     if sector_mode:
         add_sector_components(n, inputs, params, costs, nyears, current_horizon)
@@ -162,6 +167,10 @@ if __name__ == "__main__":
     maybe_adjust_costs_and_potentials(n, adjustments["electricity"], current_horizon)
     maybe_adjust_costs_and_potentials(n, adjustments["sector"], current_horizon)
 
+    transmission_assumptions.install(
+        n, transmission_settings, current_horizon, ac_losses=params.transmission_losses
+    )
+
     install_transfer_assumptions(
         n,
         assumption_settings,
@@ -173,7 +182,13 @@ if __name__ == "__main__":
     sanitize_carriers(n, config)
     sanitize_locations(n)
     assumption_audit = n.meta.get(AUDIT_KEY)
+    reviewed_audits = {
+        key: value
+        for key, value in n.meta.items()
+        if key.endswith("_audit") or key == "transmission_asset_rules"
+    }
     n.meta = dict(config, **dict(wildcards=dict(snakemake.wildcards)))
+    n.meta.update(reviewed_audits)
     if assumption_audit is not None:
         n.meta[AUDIT_KEY] = assumption_audit
     if n.investment_periods.empty:

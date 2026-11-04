@@ -1,3 +1,7 @@
+> This document records the earlier grid review. Its numeric limits are superseded
+> by [the dated transmission assumptions](transmission_assumptions.md), including
+> the 10,350 MW SE2–SE3 assumption for 2035.
+
 # Bornholm: wider Nordic transmission review
 
 Verification on 3 November 2026 of the previous Nordic nominal-rating audit and

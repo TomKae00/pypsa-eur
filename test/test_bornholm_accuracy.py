@@ -158,7 +158,9 @@ def test_workq_array_handoff(tmp_path, task, focus, label):
         "#!/bin/bash\npython3 -c 'import sys,json; print(json.dumps(sys.argv[1:]))' \"$@\"\n"
     )
     wrapper.chmod(0o755)
-    script = Path("scripts/bornholm_accuracy_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_accuracy_workq.sbatch"
+    ).resolve()
     env = os.environ | {
         "SLURM_SUBMIT_DIR": str(tmp_path),
         "SLURM_JOB_PARTITION": "workq",
@@ -180,7 +182,9 @@ def test_workq_array_handoff(tmp_path, task, focus, label):
 
 
 def test_workq_only(tmp_path):
-    script = Path("scripts/bornholm_accuracy_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_accuracy_workq.sbatch"
+    ).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         text=True,
@@ -533,7 +537,9 @@ def test_sweep_array_handoff(tmp_path, task, profile):
         "#!/bin/bash\npython3 -c 'import sys,json; print(json.dumps(sys.argv[1:]))' \"$@\"\n"
     )
     wrapper.chmod(0o755)
-    script = Path("scripts/bornholm_solver_sweep_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_solver_sweep_workq.sbatch"
+    ).resolve()
     env = os.environ | {
         "SLURM_SUBMIT_DIR": str(tmp_path),
         "SLURM_JOB_PARTITION": "workq",
@@ -564,7 +570,9 @@ def test_sweep_array_handoff(tmp_path, task, profile):
     ],
 )
 def test_sweep_rejects_wrong_allocation(tmp_path, override):
-    script = Path("scripts/bornholm_solver_sweep_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_solver_sweep_workq.sbatch"
+    ).resolve()
     env = (
         os.environ
         | {
@@ -848,7 +856,9 @@ def test_crossover_pair_array_handoff(tmp_path, task, profile):
         "python3 -c 'import sys,json; print(json.dumps(sys.argv[1:]))' \"$@\"\n"
     )
     wrapper.chmod(0o755)
-    script = Path("scripts/bornholm_crossover_pair_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_crossover_pair_workq.sbatch"
+    ).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -884,7 +894,9 @@ def test_crossover_pair_array_handoff(tmp_path, task, profile):
     ],
 )
 def test_crossover_pair_rejects_wrong_allocation(tmp_path, override):
-    script = Path("scripts/bornholm_crossover_pair_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_crossover_pair_workq.sbatch"
+    ).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -911,7 +923,9 @@ def test_followup_array_handoff(tmp_path, task, profile):
         "#!/bin/bash\npython3 -c 'import sys,json; print(json.dumps(sys.argv[1:]))' \"$@\"\n"
     )
     wrapper.chmod(0o755)
-    script = Path("scripts/bornholm_solver_followup_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_solver_followup_workq.sbatch"
+    ).resolve()
     env = os.environ | {
         "SLURM_SUBMIT_DIR": str(tmp_path),
         "SLURM_JOB_PARTITION": "workq",
@@ -942,7 +956,9 @@ def test_followup_array_handoff(tmp_path, task, profile):
     ],
 )
 def test_followup_rejects_wrong_allocation(tmp_path, override):
-    script = Path("scripts/bornholm_solver_followup_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_solver_followup_workq.sbatch"
+    ).resolve()
     env = (
         os.environ
         | {
@@ -1087,7 +1103,7 @@ def test_solver_array_handoff_and_container_allocation(
         'shift 3\nexec "$@"\n'
     )
     srun.chmod(0o755)
-    script = Path("scripts", script_name).resolve()
+    script = Path("archive/bornholm_solver_experiments/scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -1133,7 +1149,7 @@ def test_solver_array_handoff_and_container_allocation(
     ["bornholm_presolve_workq.sbatch", "bornholm_threads32_workq.sbatch"],
 )
 def test_solver_array_rejects_wrong_allocation(tmp_path, override, script_name):
-    script = Path("scripts", script_name).resolve()
+    script = Path("archive/bornholm_solver_experiments/scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -1208,7 +1224,9 @@ def test_objective_pair_has_identical_solver_options_and_independent_outputs(tmp
     ],
 )
 def test_objective_pair_rejects_wrong_allocation(tmp_path, override):
-    script = Path("scripts/bornholm_objective_pair_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_objective_pair_workq.sbatch"
+    ).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -1235,7 +1253,9 @@ def test_objective_pair_rejects_wrong_allocation(tmp_path, override):
     ],
 )
 def test_fourway_array_rejects_wrong_allocation(tmp_path, override):
-    script = Path("scripts/bornholm_fourway_workq.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_fourway_workq.sbatch"
+    ).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -1281,7 +1301,7 @@ def test_single_candidate_submission(tmp_path, script_name, profile, threads, la
         'shift 3\nexec "$@"\n'
     )
     srun.chmod(0o755)
-    script = Path("scripts", script_name).resolve()
+    script = Path("archive/bornholm_solver_experiments/scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,
@@ -1323,7 +1343,7 @@ def test_single_candidate_submission(tmp_path, script_name, profile, threads, la
     ["bornholm_auto_threads_workq.sbatch", "bornholm_overnight_workq.sbatch"],
 )
 def test_single_candidate_rejects_wrong_allocation(tmp_path, override, script_name):
-    script = Path("scripts", script_name).resolve()
+    script = Path("archive/bornholm_solver_experiments/scripts", script_name).resolve()
     result = subprocess.run(
         ["bash", str(script)],
         check=False,

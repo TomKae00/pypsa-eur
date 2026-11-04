@@ -40,7 +40,7 @@ def variant_settings(variant):
     configs = ["config/config.bornholm.yaml"]
     run = "bornholm_zonal_baseline"
     if variant == "simplified":
-        configs.append("config/config.bornholm-simplified.yaml")
+        configs.append("archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml")
         run = "bornholm_simplified_baseline"
     return configs, run
 

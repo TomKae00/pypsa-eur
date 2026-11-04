@@ -15,7 +15,7 @@ mode="${1:-dry-run}"
 variant="${2:-original}"
 case "$mode" in
   dry-run|build) ;;
-  *) echo "Usage: sbatch scripts/bornholm_gas_capacity_rebuild.sbatch [dry-run|build] [original|simplified]" >&2; exit 2 ;;
+  *) echo "Usage: sbatch archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch [dry-run|build] [original|simplified]" >&2; exit 2 ;;
 esac
 case "$variant" in
   original) name="bornholm_zonal_baseline" ;;
@@ -31,7 +31,7 @@ test -x "$pixi_wrapper"
 test -f config/config.bornholm.yaml
 configs=(config/config.bornholm.yaml)
 if [[ "$variant" == simplified ]]; then
-  configs+=(config/config.bornholm-simplified.yaml)
+  configs+=(archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml)
 fi
 target="resources/${name}/networks/composed_2035.nc"
 

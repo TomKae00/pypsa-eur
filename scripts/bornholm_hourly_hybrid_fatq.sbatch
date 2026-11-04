@@ -27,7 +27,7 @@ export SINGULARITYENV_SLURM_JOB_ID="$SLURM_JOB_ID"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
 
-prefix=bornholm_1h_s1_w2_o3
+prefix=bornholm_1h_s1_w3_o3_reviewed
 scenario=bornholm_zonal_hybrid
 target="resources/$prefix/$scenario/networks/composed_2035.nc"
 directory="results/$prefix/$SLURM_JOB_ID/$scenario"
@@ -52,7 +52,7 @@ else
         "$pixi_wrapper" run snakemake --executor local --cores 16 \
         --resources "mem_mb=$build_memory_mb" --rerun-incomplete --latency-wait 120 \
         --configfile config/config.bornholm.yaml config/config.bornholm-3h.yaml \
-        config/config.bornholm-hourly-hybrid.yaml -- "$target"
+        config/config.bornholm-calibrated-base.yaml config/config.bornholm-hourly-hybrid.yaml -- "$target"
 fi
 
 # Deduct preprocessing from the 70-hour budget, leaving two hours for shutdown

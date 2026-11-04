@@ -12,8 +12,13 @@ import pytest
 
 @pytest.fixture
 def diagnostic_job(tmp_path):
+    (tmp_path / "archive/bornholm_solver_experiments/config").mkdir(parents=True)
     (tmp_path / "scripts").mkdir()
-    (tmp_path / "scripts/bornholm_gas_capacity_rebuild.sbatch").write_text(
+    (tmp_path / "archive/bornholm_solver_experiments/scripts").mkdir(parents=True)
+    (
+        tmp_path
+        / "archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch"
+    ).write_text(
         '#!/bin/bash\nprintf "%s\\n" "$1" > build_stage.txt\nprintf "%s\\n" "$*" >> build_calls.txt\nexit "${MOCK_BUILD_EXIT:-0}"\n'
     )
     wrapper = tmp_path / "pixi-mock"
@@ -28,7 +33,13 @@ def diagnostic_job(tmp_path):
         "SLURM_SUBMIT_DIR": str(tmp_path),
         "SLURM_CPUS_PER_TASK": "4",
     }
-    return tmp_path, Path("scripts/bornholm_diagnostic.sbatch").resolve(), env
+    return (
+        tmp_path,
+        Path(
+            "archive/bornholm_solver_experiments/scripts/bornholm_diagnostic.sbatch"
+        ).resolve(),
+        env,
+    )
 
 
 def test_diagnostic_build_then_solves_default_window(diagnostic_job):
@@ -109,8 +120,13 @@ def test_real_rebuild_helper_uses_selected_resources(diagnostic_job, variant, ex
     root, _, env = diagnostic_job
     (root / "config").mkdir()
     (root / "config/config.bornholm.yaml").touch()
-    (root / "config/config.bornholm-simplified.yaml").touch()
-    script = Path("scripts/bornholm_gas_capacity_rebuild.sbatch").resolve()
+    (
+        root
+        / "archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml"
+    ).touch()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch"
+    ).resolve()
     result = subprocess.run(
         ["bash", str(script), "dry-run", variant],
         env=env,
@@ -121,9 +137,10 @@ def test_real_rebuild_helper_uses_selected_resources(diagnostic_job, variant, ex
     args = json.loads((root / "solve_args.json").read_text())
     assert args[:2] == ["run", "snakemake"]
     assert args[-1] == f"resources/{expected}/networks/composed_2035.nc"
-    assert ("config/config.bornholm-simplified.yaml" in args) == (
-        variant == "simplified"
-    )
+    assert (
+        "archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml"
+        in args
+    ) == (variant == "simplified")
 
 
 @pytest.mark.parametrize("variant", ["original", "simplified"])
@@ -172,7 +189,9 @@ def test_real_build_reaches_workflow_without_git_on_host(diagnostic_job):
         'if sys.argv[1:3] == ["run", "python"]:\n'
         "    sys.exit(subprocess.call([sys.executable, *sys.argv[3:]]))\n"
     )
-    script = Path("scripts/bornholm_gas_capacity_rebuild.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_gas_capacity_rebuild.sbatch"
+    ).resolve()
     result = subprocess.run(
         [shutil.which("bash"), str(script), "build"],
         env=env | {"PATH": str(binary_dir)},
@@ -194,7 +213,9 @@ def test_real_build_reaches_workflow_without_git_on_host(diagnostic_job):
 @pytest.mark.parametrize("variant", ["original", "simplified"])
 def test_annual_job_selects_full_year_without_rebuild(diagnostic_job, variant):
     root, _, env = diagnostic_job
-    script = Path("scripts/bornholm_annual_barrier.sbatch").resolve()
+    script = Path(
+        "archive/bornholm_solver_experiments/scripts/bornholm_annual_barrier.sbatch"
+    ).resolve()
     result = subprocess.run(
         ["bash", str(script), variant], env=env, capture_output=True, text=True
     )

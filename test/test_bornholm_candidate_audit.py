@@ -284,7 +284,7 @@ def test_saved_audit_array_routes_every_scenario_without_a_solve(
         '#!/bin/bash\n[[ "$1" == --ntasks=1 && "$2" == --cpus-per-task=1 && "$3" == --cpu-bind=cores ]] || exit 3\nshift 3\nexec "$@"\n'
     )
     srun.chmod(0o755)
-    script = Path("scripts/bornholm_saved_audit_workq.sbatch").resolve()
+    script = Path("archive/bornholm_solver_experiments/scripts/bornholm_saved_audit_workq.sbatch").resolve()
     result = subprocess.run(
         ["bash", str(script), campaign],
         env=os.environ

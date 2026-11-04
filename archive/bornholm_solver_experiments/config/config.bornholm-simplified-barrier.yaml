@@ -1,5 +1,5 @@
 # Independent Gurobi barrier solve on the already composed simplified Bornholm 2035 network.
-# Layer after config/config.bornholm.yaml and config/config.bornholm-simplified.yaml.
+# Layer after config/config.bornholm.yaml and archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml.
 # Physical inputs are identical to the simplified PDHG and dual-simplex runs.
 run:
   name: bornholm_simplified_barrier

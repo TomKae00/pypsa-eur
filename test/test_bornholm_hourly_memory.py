@@ -80,7 +80,10 @@ class MemoryBudgetTests(unittest.TestCase):
                         sector={"limit_max_growth": {}},
                         custom_extra_functionality=None,
                     ),
-                    config={"solving": solving},
+                    config={
+                        "solving": solving,
+                        "bornholm_model_assumptions": {"enabled": False},
+                    },
                     wildcards={"run": hourly.RUN},
                     log=SimpleNamespace(
                         solver=str(output_path / "solver.log"),

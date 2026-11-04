@@ -231,6 +231,6 @@ def test_simplified_preflight_accepts_only_simplified_flags():
     configs, run = variant_settings("simplified")
     assert configs == [
         "config/config.bornholm.yaml",
-        "config/config.bornholm-simplified.yaml",
+        "archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml",
     ]
     assert run == "bornholm_simplified_baseline"

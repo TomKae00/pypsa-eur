@@ -5753,6 +5753,15 @@ def lossy_bidirectional_links(n, carrier, efficiencies={}, link_indices=None):
         "Splitting bidirectional links."
     )
 
+    # Preserve directional hourly availability when splitting a converter.
+    # Otherwise the reverse clone can bypass dated outages/commissioning and
+    # the original can retain negative dynamic bounds despite static p_min=0.
+    original_min = n.links.loc[carrier_i, "p_min_pu"].copy()
+    dynamic_min = n.links_t.p_min_pu.loc[
+        :, n.links_t.p_min_pu.columns.intersection(carrier_i)
+    ].copy()
+    if original_min.gt(0).any() or dynamic_min.gt(0).any().any():
+        raise ValueError("Lossy bidirectional splitting requires nonpositive p_min_pu")
     n.links.loc[carrier_i, "p_min_pu"] = 0
     n.links.loc[carrier_i, "efficiency"] = (
         efficiency_static
@@ -5761,6 +5770,7 @@ def lossy_bidirectional_links(n, carrier, efficiencies={}, link_indices=None):
     rev_links = (
         n.links.loc[carrier_i].copy().rename({"bus0": "bus1", "bus1": "bus0"}, axis=1)
     )
+    rev_links["p_max_pu"] = -original_min
     rev_links["length_original"] = rev_links["length"]
     rev_links["capital_cost"] = 0
     rev_links["length"] = 0
@@ -5773,6 +5783,10 @@ def lossy_bidirectional_links(n, carrier, efficiencies={}, link_indices=None):
         n.links["reversed"] = n.links["reversed"].fillna(False).astype(bool)
     n.links = pd.concat([n.links, rev_links], sort=False)
     n.links["length_original"] = n.links["length_original"].fillna(n.links.length)
+    n.links_t.p_min_pu.drop(columns=dynamic_min.columns, inplace=True)
+    if not dynamic_min.empty:
+        reversed_max = -dynamic_min.rename(columns=lambda name: name + "-reversed")
+        n.links_t.p_max_pu = pd.concat([n.links_t.p_max_pu, reversed_max], axis=1)
 
     # do compression losses after concatenation to take electricity consumption at bus0 in either direction
     carrier_i = carrier_i.append(rev_links.index)

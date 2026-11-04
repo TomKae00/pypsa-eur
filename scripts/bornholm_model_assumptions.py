@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts import transmission_assumptions as transfer_rules
+
 AUDIT_KEY = "bornholm_assumptions_audit"
 VERSION = 1
 ZONE_ALIASES = {
@@ -227,70 +229,7 @@ def apply_resource_and_coal_assumptions(n, settings):
 
 def corridor_branches(n, zone0, zone1):
     """Describe each direct AC/DC crossing once, with terminal MW coefficients."""
-    records = []
-    zones = pd.Series(n.buses.index, index=n.buses.index).replace(ZONE_ALIASES)
-    for component, frame, nominal, attrs in (
-        ("Line", n.lines, "s_nom", ["s_max_pu"]),
-        (
-            "Link",
-            n.links[n.links.carrier.isin(["DC", "AC"])],
-            "p_nom",
-            ["p_min_pu", "p_max_pu", "efficiency"],
-        ),
-    ):
-        z0, z1 = frame.bus0.map(zones), frame.bus1.map(zones)
-        selected = frame.index[
-            ((z0 == zone0) & (z1 == zone1)) | ((z0 == zone1) & (z1 == zone0))
-        ]
-        for attr in attrs:
-            dynamic = getattr(getattr(n, component.lower() + "s_t"), attr)
-            require(
-                dynamic.columns.intersection(selected).empty,
-                f"Dynamic {component} {attr} is unsupported on calibrated corridors",
-            )
-        for name in selected:
-            row = frame.loc[name]
-            forward = z0[name] == zone0
-            if component == "Line":
-                flow = [1.0, -1.0] if forward else [-1.0, 1.0]
-                envelope = [float(row.s_max_pu)] * 2
-            else:
-                require(
-                    all(not row.get(f"bus{i}", "") for i in range(2, 5)),
-                    f"Multiterminal crossing needs a separate audit: {name}",
-                )
-                require(
-                    np.isfinite(row.efficiency) and 0 < row.efficiency <= 1,
-                    f"Invalid DC transmission efficiency: {name}",
-                )
-                outgoing = max(float(row.p_max_pu), 0)
-                incoming = max(-float(row.p_min_pu), 0) * float(row.efficiency)
-                flow = [1.0, -float(row.efficiency)]
-                envelope = [outgoing, incoming]
-                if not forward:
-                    flow.reverse()
-                    envelope.reverse()
-            baseline = float(
-                row[nominal + "_min"] if row[nominal + "_extendable"] else row[nominal]
-            )
-            require(
-                np.isfinite(baseline)
-                and baseline >= 0
-                and np.isfinite(envelope).all()
-                and min(envelope) >= 0,
-                f"Invalid corridor envelope: {name}",
-            )
-            records.append(
-                {
-                    "component": component,
-                    "name": str(name),
-                    "bus0": str(row.bus0),
-                    "bus1": str(row.bus1),
-                    "baseline_MW": baseline,
-                    "flow": flow,
-                    "envelope": envelope,
-                }
-            )
+    records = transfer_rules.branches(n, zone0, zone1)
     require(records, f"No physical crossing for {zone0}--{zone1}")
     return records
 
@@ -309,6 +248,14 @@ def install_transfer_assumptions(n, settings, planning_year, *, ac_losses=0):
         settings.get("expansion_policy") in ("fixed", "proportional"),
         "Unknown corridor expansion policy",
     )
+    common = n.meta.get(transfer_rules.AUDIT_KEY)
+    if common:
+        audit["transfers"] = {
+            "planning_year": common["year"],
+            "expansion_policy": common["expansion_policy"],
+            "corridors": common["corridors"],
+        }
+        return audit["transfers"]
     table = pd.read_csv(settings["transfer_limits"])
     columns = {"planning_year", "zone0", "zone1", "forward_MW", "reverse_MW"}
     require(columns.issubset(table), "Missing zonal transfer-limit columns")
@@ -399,6 +346,11 @@ def add_zonal_transfer_constraints(n, snapshots, settings):
     audit = validate_assumptions(n, settings)
     if audit is None:
         return
+    if transfer_rules.AUDIT_KEY in n.meta:
+        transfer_rules.add_constraints(
+            n, snapshots, n.meta[transfer_rules.AUDIT_KEY]["settings"]
+        )
+        return
     transfers = audit["transfers"]
     for corridor in transfers["corridors"]:
         for direction in range(2):
@@ -411,11 +363,14 @@ def add_zonal_transfer_constraints(n, snapshots, settings):
                 ].sel(
                     name=name,
                     snapshot=snapshots,
+                    drop=True,
                 )
                 nominal = "s_nom" if component == "Line" else "p_nom"
                 frame = getattr(n, component.lower() + "s")
                 if frame.at[name, nominal + "_extendable"]:
-                    capacity = n.model[f"{component}-{nominal}"].sel(name=name)
+                    capacity = n.model[f"{component}-{nominal}"].sel(
+                        name=name, drop=True
+                    )
                 else:
                     capacity = float(frame.at[name, nominal])
                 added_envelope += branch["envelope"][direction] * (
@@ -480,6 +435,16 @@ def check_solved_assumptions(n, settings, *, tolerance_MW=1e-3):
         and inventory.max() <= coal["fixed_MWh"] + tolerance_MW,
         "Returned coal inventory exceeds fixed buffer bounds",
     )
+    if transfer_rules.AUDIT_KEY in n.meta:
+        results = transfer_rules.check_solution(
+            n, n.meta[transfer_rules.AUDIT_KEY]["settings"], tolerance_MW
+        )
+        return {
+            "coal_min_MWh": float(inventory.min()),
+            "coal_max_MWh": float(inventory.max()),
+            "corridors": results,
+            "onshore": resource_report(n, solved=True),
+        }
     results = []
     for corridor in audit["transfers"]["corridors"]:
         for direction in range(2):

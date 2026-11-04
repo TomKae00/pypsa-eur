@@ -20,4 +20,4 @@ test -x "$pixi_wrapper"
 export SINGULARITYENV_GRB_LICENSE_FILE="${GRB_LICENSE_FILE:-$HOME/gurobi.lic}"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
-"$pixi_wrapper" run python -m scripts.run_bornholm_study --index "$index"
+"$pixi_wrapper" run python -m scripts.run_bornholm_study --legacy --index "$index"

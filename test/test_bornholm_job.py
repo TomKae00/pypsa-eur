@@ -33,7 +33,7 @@ def job(tmp_path):
         "MOCK_CALLS": str(tmp_path / "calls.jsonl"),
     }
     env.pop("HINDCAST_NETWORK", None)
-    script = Path("scripts/bornholm_sophia.sbatch").resolve()
+    script = Path("archive/bornholm_solver_experiments/scripts/bornholm_sophia.sbatch").resolve()
     return tmp_path, script, env
 
 

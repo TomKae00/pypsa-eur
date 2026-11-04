@@ -15,13 +15,13 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 mode="${1:-solve}"
 if [[ "$mode" != "solve" && "$mode" != "dry-run" ]]; then
-  echo "Usage: sbatch scripts/bornholm_simplified_solver_experiment.sbatch [solve|dry-run]" >&2
+  echo "Usage: sbatch archive/bornholm_solver_experiments/scripts/bornholm_simplified_solver_experiment.sbatch [solve|dry-run]" >&2
   exit 2
 fi
 
 base="config/config.bornholm.yaml"
-simplified="config/config.bornholm-simplified.yaml"
-variant="config/config.bornholm-simplified-pdhg-relaxed.yaml"
+simplified="archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml"
+variant="archive/bornholm_solver_experiments/config/config.bornholm-simplified-pdhg-relaxed.yaml"
 for cfg in "$base" "$simplified" "$variant"; do test -s "$cfg"; done
 
 source_nc="resources/bornholm_simplified_baseline/networks/composed_2035.nc"

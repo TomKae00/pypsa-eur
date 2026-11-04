@@ -2,7 +2,7 @@
 # No solver time limit; only the HPC scheduler's walltime applies.
 # Overlay order:
 #  1. config/config.bornholm.yaml
-#  2. config/config.bornholm-simplified.yaml
+#  2. archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml
 #  3. this file
 # Only the solver and output run name change; no physical model changes.
 run:

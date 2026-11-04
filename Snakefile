@@ -61,7 +61,8 @@ resources = path_provider("resources/", RDIR, shared_resources, exclude_from_sha
 def renewable_profile_path(filename):
     # Keep changed class partitions separate from previous shared profiles while
     # building them only once for all cases in this opt-in campaign.
-    if config.get("bornholm_model_assumptions", {}).get("enabled", False):
+    if (config.get("bornholm_model_assumptions", {}).get("enabled", False)
+            and config["run"]["shared_resources"].get("policy") is not False):
         prefix = config["run"].get("prefix", "")
         if not prefix:
             raise ValueError("Calibrated renewable profiles require a run prefix")

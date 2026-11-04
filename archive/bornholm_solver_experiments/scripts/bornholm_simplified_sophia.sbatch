@@ -17,11 +17,11 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 stage="${1:-build}"
 case "$stage" in
   build|solve|all|check|dry-run) ;;
-  *) echo "Usage: sbatch scripts/bornholm_simplified_sophia.sbatch [build|solve|all|check|dry-run]" >&2; exit 2 ;;
+  *) echo "Usage: sbatch archive/bornholm_solver_experiments/scripts/bornholm_simplified_sophia.sbatch [build|solve|all|check|dry-run]" >&2; exit 2 ;;
 esac
 
 base="config/config.bornholm.yaml"
-overlay="config/config.bornholm-simplified.yaml"
+overlay="archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml"
 for f in "$base" "$overlay"; do test -s "$f"; done
 
 pixi_wrapper="${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}"

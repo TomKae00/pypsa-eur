@@ -302,7 +302,9 @@ def test_three_class_workflow_uses_explicit_tables_and_isolated_targets():
             "compose_network", configfiles=campaign.CONFIGS, run=run, horizon="2035"
         )
         assert compose.input.onshore_calibration.endswith("onshore_calibration.csv")
-        assert compose.input.zonal_transfer_limits.endswith("zonal_transfer_limits.csv")
+        assert compose.input.zonal_transfer_limits.endswith(
+            "reviewed_transfer_limits.csv"
+        )
         assert (
             compose.input.profile_onwind
             != mock_snakemake(
@@ -322,3 +324,35 @@ def test_three_class_workflow_uses_explicit_tables_and_isolated_targets():
         "bornholm_model_assumptions"
     ]
     assert json.loads(json.dumps(assumptions.fingerprint(settings)))[0]
+
+
+def test_reviewed_shared_constraints_replace_legacy_caps_once(model, tmp_path):
+    from scripts import transmission_assumptions as transfers
+
+    n, settings = model
+    table = Path(settings["transfer_limits"])
+    table.write_text(
+        "planning_year,zone0,zone1,forward_MW,reverse_MW\n2035,DK2,SE4,15,10\n"
+    )
+    n.add("Link", "dc", bus0="DK2", bus1="SE4", carrier="DC", p_nom=100, p_min_pu=-1)
+    n.add("Generator", "cheap", bus="DK2", p_nom=100, marginal_cost=1)
+    n.add("Generator", "local", bus="SE4", p_nom=100, marginal_cost=100)
+    n.add("Load", "demand", bus="SE4", p_set=40)
+    common = {"enabled": True, "limits": str(table), "expansion_policy": "fixed"}
+    assumptions.apply_resource_and_coal_assumptions(n, settings)
+    transfers.install(n, common, 2035)  # Planning year, although weather is 2013.
+    assumptions.install_transfer_assumptions(n, settings, 2035)
+    path = tmp_path / "reviewed.nc"
+    n.export_to_netcdf(path)
+    n = pypsa.Network(path)
+    assert n.meta[transfers.AUDIT_KEY]["year"] == 2035
+    status = n.optimize(
+        solver_name="highs",
+        include_objective_constant=False,
+        extra_functionality=lambda net, sns: assumptions.add_zonal_transfer_constraints(
+            net, sns, settings
+        ),
+    )
+    assert status == ("ok", "optimal")
+    np.testing.assert_allclose(n.generators_t.p.cheap, 15, atol=1e-5)
+    assert len(assumptions.check_solved_assumptions(n, settings)["corridors"]) == 2

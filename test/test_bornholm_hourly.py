@@ -107,7 +107,7 @@ def test_runtime_context_uses_hourly_namespace_and_selected_resource_classes():
     reference = hourly.study.context_for(hourly.RUN)
     assert "/bornholm_3h_s1_w2_o3/" in str(reference.input.network)
     assert reference.config["clustering"]["temporal"]["averaging"] == "3h"
-    for technology, count in hourly.study.CLASSES.items():
+    for technology, count in hourly.reviewed.CLASSES.items():
         assert context.config["renewable"][technology]["resource_classes"] == count
 
 
@@ -221,7 +221,11 @@ def test_solve_caps_memory_after_model_and_preserves_rejected_candidate(
                 "custom_extra_functionality": None,
             }
         ),
-        config={"solving": solving, "foresight": "overnight"},
+        config={
+            "solving": solving,
+            "foresight": "overnight",
+            "bornholm_model_assumptions": {"coal_store_MWh": 1000},
+        },
         output=OutputFiles(fromdict={"network": "old.nc"}),
         log=Log(fromdict={"solver": "old.log"}),
         threads=4,
@@ -241,6 +245,15 @@ def test_solve_caps_memory_after_model_and_preserves_rejected_candidate(
     monkeypatch.setattr(hourly.study, "context_for", lambda *a, **k: context)
     monkeypatch.setattr(hourly.study, "preflight", lambda *a, **k: {})
     monkeypatch.setattr(hourly, "check_hybrid", lambda n: {})
+    from scripts import bornholm_model_assumptions, dispatch_checks
+
+    monkeypatch.setattr(
+        bornholm_model_assumptions, "validate_assumptions", lambda *a: {}
+    )
+    monkeypatch.setattr(
+        bornholm_model_assumptions, "check_solved_assumptions", lambda *a: {}
+    )
+    monkeypatch.setattr(dispatch_checks, "check", lambda *a: {})
     monkeypatch.setattr(hourly, "code_provenance", dict)
     monkeypatch.setattr(_helpers, "configure_logging", lambda c: None)
     monkeypatch.setattr(_benchmark, "memory_logger", lambda **k: nullcontext())
@@ -269,7 +282,9 @@ def test_solve_caps_memory_after_model_and_preserves_rejected_candidate(
     )
     monkeypatch.setattr(pypsa, "Network", lambda *a: n)
     monkeypatch.setattr(
-        hourly.accuracy, "coal_check", lambda n: {"same_dispatch_avoidable_cost_eur": 0}
+        hourly.accuracy,
+        "coal_check",
+        lambda n, **kwargs: {"same_dispatch_avoidable_cost_eur": 0},
     )
     directory = Path("results") / hourly.PREFIX / "job" / hourly.RUN
     if optimal:

@@ -29,7 +29,7 @@ export SINGULARITYENV_MKL_NUM_THREADS=1
 stage="${1:-build}"
 case "$stage" in
     all|build|rebuild|solve|dry-run) ;;
-    *) echo "Usage: sbatch scripts/bornholm_sophia.sbatch [build|rebuild|solve|all|dry-run] [short-scenario-name|all]" >&2; exit 2 ;;
+    *) echo "Usage: sbatch archive/bornholm_solver_experiments/scripts/bornholm_sophia.sbatch [build|rebuild|solve|all|dry-run] [short-scenario-name|all]" >&2; exit 2 ;;
 esac
 if [[ -z "${SLURM_JOB_ID:-}" ]]; then
     echo "Run inside a Slurm allocation on a compute node, including dry-run; use srun or sbatch." >&2

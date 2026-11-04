@@ -19,7 +19,7 @@ export PIXI_SOPHIA="$pixi_wrapper"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
 export SINGULARITYENV_GRB_LICENSE_FILE="${GRB_LICENSE_FILE:-$HOME/gurobi.lic}"
-spool="$PWD/results/bornholm_3h_s1_w3_o3_calibrated/submissions/${SLURM_JOB_ID}"
+spool="$PWD/results/bornholm_3h_s1_w3_o3_reviewed/submissions/${SLURM_JOB_ID}"
 mkdir -p "$spool"
 export BORNHOLM_WORKQ_BRIDGE="$spool"
 export SINGULARITYENV_BORNHOLM_WORKQ_BRIDGE="$spool"

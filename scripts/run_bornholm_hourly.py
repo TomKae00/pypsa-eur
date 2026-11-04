@@ -14,12 +14,13 @@ from pathlib import Path
 import yaml
 
 from scripts import run_bornholm_accuracy as accuracy
+from scripts import run_bornholm_calibrated as reviewed
 from scripts import run_bornholm_study as study
 from scripts.bornholm_provenance import code_provenance
 
 RUN = "bornholm_zonal_hybrid"
-PREFIX = "bornholm_1h_s1_w2_o3"
-CONFIGS = [*study.CONFIGS, "config/config.bornholm-hourly-hybrid.yaml"]
+PREFIX = "bornholm_1h_s1_w3_o3_reviewed"
+CONFIGS = [*reviewed.CONFIGS, "config/config.bornholm-hourly-hybrid.yaml"]
 TARGET = f"resources/{PREFIX}/{RUN}/networks/composed_2035.nc"
 MEMORY_PROFILES = {
     "standard": {"limit_gb": None, "fraction": 0.75, "reserve_gb": 0.0},
@@ -167,6 +168,7 @@ def solve(
     )
     import numpy as np
     import pypsa
+
     from scripts._benchmark import memory_logger
     from scripts._helpers import configure_logging
     from scripts.run_bornholm_diagnostic import memory_snapshot
@@ -228,16 +230,30 @@ def solve(
         if reference_summary is not None:
             report.update(
                 check_reference(
-                    reference_summary, report["source_sha256"], options,
+                    reference_summary,
+                    report["source_sha256"],
+                    options,
                     aggfill_zero=memory_profile == "aggfill0",
                 )
             )
         checkpoint("preflight")
         report["preflight"] = study.preflight(
-            context, configfiles=CONFIGS, prefix=PREFIX, step_hours=1
+            context,
+            configfiles=CONFIGS,
+            prefix=PREFIX,
+            step_hours=1,
+            classes=reviewed.CLASSES,
         )
         n = pypsa.Network(source)
         report["fixed_hybrid"] = check_hybrid(n)
+        from scripts.bornholm_model_assumptions import validate_assumptions
+
+        validate_assumptions(n, context.config["bornholm_model_assumptions"])
+        from scripts import transmission_assumptions
+
+        transmission_assumptions.validate(
+            n, context.config.get("transmission_assumptions", {})
+        )
         solving = context.params.solving
         solve_opts = solving["options"]
         study.require(
@@ -335,7 +351,13 @@ def solve(
             "status": getattr(status, "value", status),
             "termination_condition": getattr(condition, "value", condition),
         }
+        reviewed_audits = {
+            key: value
+            for key, value in n.meta.items()
+            if key.endswith("_audit") or key == "transmission_asset_rules"
+        }
         n.meta = dict(context.config, wildcards=dict(context.wildcards))
+        n.meta.update(reviewed_audits)
         n.meta["solve_result"] = report["solve_result"]
         report["solver_quality"] = accuracy.solver_quality(n.model.solver_model)
         report["barrier_final"] = accuracy.barrier_result(directory / "solver.log")
@@ -349,7 +371,13 @@ def solve(
         report["objective"] = float(n.objective)
         # Preserve an assigned solution before any acceptance screen can fail.
         n.export_to_netcdf(directory / "candidate_2035.nc")
-        report["coal"] = accuracy.coal_check(n)
+        settings = context.config["bornholm_model_assumptions"]
+        report["coal"] = accuracy.coal_check(n, fixed_MWh=settings["coal_store_MWh"])
+        from scripts.bornholm_model_assumptions import check_solved_assumptions
+        from scripts.dispatch_checks import check as check_dispatch
+
+        report["assumption_checks"] = check_solved_assumptions(n, settings)
+        report["physical_quality"] = check_dispatch(n)
         report["screening_issues"] = accuracy.accuracy_issues(
             report["solver_quality"],
             report["coal"],
@@ -404,7 +432,9 @@ def main():
         if args.output_dir is None:
             parser.error("--output-dir is required")
         if args.memory_profile != "standard" and args.reference_summary is None:
-            parser.error(f"--memory-profile {args.memory_profile} requires --reference-summary")
+            parser.error(
+                f"--memory-profile {args.memory_profile} requires --reference-summary"
+            )
         logging.basicConfig(level=logging.INFO)
         solve(
             args.output_dir,
