@@ -154,6 +154,28 @@ def _utc(index):
     return pd.DatetimeIndex(pd.to_datetime(index, utc=True))
 
 
+def _snapshot_hash(index, unit="ns"):
+    # DatetimeIndex.asi8 uses the index's current unit, not always nanoseconds.
+    # NetCDF/CSV roundtrips can change that unit without changing any instant.
+    values = _utc(index).as_unit(unit, round_ok=False).asi8
+    return hashlib.sha256(values.tobytes()).hexdigest()
+
+
+def _snapshot_hash_matches(index, audit):
+    unit = audit.get("snapshot_hash_unit")
+    if unit is not None:
+        return unit == "ns" and _snapshot_hash(index) == audit["snapshots_sha256"]
+    # Version-1 files hashed raw integers without recording their unit. Accept
+    # only exact, lossless representations of the same ordered timestamps.
+    for legacy_unit in ("ns", "us", "ms", "s"):
+        try:
+            if _snapshot_hash(index, legacy_unit) == audit["snapshots_sha256"]:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def apply_asset_rules(n, settings, year):
     """Apply before sector losses split bidirectional converters; never apply twice."""
     if not settings.get("enabled", False) or not settings.get("asset_rules"):
@@ -377,9 +399,8 @@ def install(n, settings, year, *, ac_losses=0):
         "corridors": records,
         "joint_limits": joint,
         "skipped_references": skipped,
-        "snapshots_sha256": hashlib.sha256(
-            _utc(n.snapshots).asi8.tobytes()
-        ).hexdigest(),
+        "snapshot_hash_unit": "ns",
+        "snapshots_sha256": _snapshot_hash(n.snapshots),
         "interpretation": "Additional zonal NTC approximation; not a reconstructed flow-based market domain",
     }
     n.meta[AUDIT_KEY] = audit
@@ -394,9 +415,9 @@ def validate(n, settings=None):
             "Missing transmission assumptions; rebuild composition",
         )
         return None
-    actual = hashlib.sha256(_utc(n.snapshots).asi8.tobytes()).hexdigest()
     require(
-        actual == audit["snapshots_sha256"], "Transmission snapshots changed; recompose"
+        _snapshot_hash_matches(n.snapshots, audit),
+        "Transmission snapshots changed; recompose",
     )
     if settings is not None:
         require(
