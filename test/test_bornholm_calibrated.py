@@ -2,6 +2,8 @@
 """Physical solves and provenance checks for the combined Bornholm correction."""
 
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -356,3 +358,48 @@ def test_reviewed_shared_constraints_replace_legacy_caps_once(model, tmp_path):
     assert status == ("ok", "optimal")
     np.testing.assert_allclose(n.generators_t.p.cheap, 15, atol=1e-5)
     assert len(assumptions.check_solved_assumptions(n, settings)["corridors"]) == 2
+
+
+@pytest.mark.parametrize("fail_comparison", [False, True])
+def test_check_stage_validates_existing_inputs_without_rebuilding(
+    tmp_path, fail_comparison
+):
+    scheduler = tmp_path / "bin"
+    scheduler.mkdir()
+    for name in ["sbatch", "sacct", "scancel"]:
+        path = scheduler / name
+        path.write_text("#!/usr/bin/env bash\nexit 99\n")
+        path.chmod(0o755)
+    calls = tmp_path / "calls.txt"
+    wrapper = tmp_path / "pixi-sophia"
+    wrapper.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$CALLS"\n'
+        'if [[ "$FAIL_COMPARISON" == 1 && "$*" == *scripts.check_bornholm_networks* ]]; then exit 7; fi\n'
+    )
+    wrapper.chmod(0o755)
+    env = dict(
+        os.environ,
+        SLURM_JOB_ID="123",
+        SLURM_JOB_PARTITION="workq",
+        SLURM_SUBMIT_DIR=str(tmp_path),
+        PIXI_SOPHIA=str(wrapper),
+        CALLS=str(calls),
+        FAIL_COMPARISON=str(int(fail_comparison)),
+    )
+    env["PATH"] = str(scheduler) + os.pathsep + env["PATH"]
+    script = (
+        Path(__file__).resolve().parents[1] / "scripts/bornholm_calibrated_workq.sbatch"
+    )
+    result = subprocess.run(
+        ["bash", str(script), "check"], env=env, capture_output=True, text=True
+    )
+    commands = calls.read_text()
+    assert "scripts.check_bornholm_networks" in commands
+    assert "snakemake" not in commands
+    assert "--list-build-targets" not in commands
+    if fail_comparison:
+        assert result.returncode == 7
+        assert "--preflight-all" not in commands
+    else:
+        assert result.returncode == 0, result.stderr
+        assert "--preflight-all" in commands

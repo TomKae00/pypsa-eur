@@ -40,7 +40,9 @@ def variant_settings(variant):
     configs = ["config/config.bornholm.yaml"]
     run = "bornholm_zonal_baseline"
     if variant == "simplified":
-        configs.append("archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml")
+        configs.append(
+            "archive/bornholm_solver_experiments/config/config.bornholm-simplified.yaml"
+        )
         run = "bornholm_simplified_baseline"
     return configs, run
 
@@ -130,10 +132,10 @@ def check_source(n, gas_inputs, variant="original", *, step_hours=1):
         "Source has incorrect physical weights",
     )
     require(
-        n.snapshots.equals(
+        n.snapshots.as_unit("ns").equals(
             pd.date_range(
                 "2013-01-01", periods=8760 // step_hours, freq=f"{step_hours}h"
-            )
+            ).as_unit("ns")
         ),
         "Source must cover the consecutive configured year",
     )

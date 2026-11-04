@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 stage="${1:-all}"
-case "$stage" in all|build|dry-run) ;; *) echo 'Usage: sbatch scripts/bornholm_calibrated_workq.sbatch [all|build|dry-run]' >&2; exit 2 ;; esac
+case "$stage" in all|build|check|dry-run) ;; *) echo 'Usage: sbatch scripts/bornholm_calibrated_workq.sbatch [all|build|check|dry-run]' >&2; exit 2 ;; esac
 [[ -n "${SLURM_JOB_ID:-}" && "${SLURM_JOB_PARTITION:-}" == workq ]] || { echo 'This controller must run in workq.' >&2; exit 2; }
 pixi_wrapper="${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}"
 test -x "$pixi_wrapper"
@@ -42,6 +42,17 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 "$pixi_wrapper" run python -m scripts.bornholm_provenance --output-dir "$spool"
+check_inputs() {
+    "$pixi_wrapper" run python -m scripts.check_bornholm_networks \
+        --overlay config/config.bornholm-3h.yaml --overlay config/config.bornholm-calibrated-base.yaml
+    "$pixi_wrapper" run python -m scripts.run_bornholm_calibrated --preflight-all
+}
+# Read and validate existing composed inputs without invoking the build workflow.
+if [[ "$stage" == check ]]; then
+    check_inputs
+    echo "Existing composed networks passed comparison and preflight checks."
+    exit 0
+fi
 targets_text=$("$pixi_wrapper" run python -m scripts.run_bornholm_calibrated --list-build-targets)
 mapfile -t targets <<< "$targets_text"
 (( ${#targets[@]} == 8 )) || { echo 'Expected exactly eight build targets.' >&2; exit 2; }
@@ -59,9 +70,7 @@ fi
 workflow_pid=$!
 wait "$workflow_pid"
 workflow_pid=""
-"$pixi_wrapper" run python -m scripts.check_bornholm_networks \
-    --overlay config/config.bornholm-3h.yaml --overlay config/config.bornholm-calibrated-base.yaml
-"$pixi_wrapper" run python -m scripts.run_bornholm_calibrated --preflight-all
+check_inputs
 touch "$spool/stop"
 wait "$bridge_pid"
 bridge_pid=""

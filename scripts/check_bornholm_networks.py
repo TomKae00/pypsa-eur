@@ -116,7 +116,7 @@ def check_networks(networks, config, *, solved=False):
                 )
                 check_solved_assumptions(n, settings)
         require(
-            n.snapshots.equals(timing.index),
+            n.snapshots.as_unit("ns").equals(timing.index.as_unit("ns")),
             f"{case}: expected the full configured year",
         )
         require(

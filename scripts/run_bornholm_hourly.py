@@ -35,7 +35,9 @@ def check_hybrid(n):
     import pandas as pd
 
     study.require(
-        n.snapshots.equals(pd.date_range("2013-01-01", periods=8760, freq="h"))
+        n.snapshots.as_unit("ns").equals(
+            pd.date_range("2013-01-01", periods=8760, freq="h").as_unit("ns")
+        )
         and np.allclose(n.snapshot_weightings, 1),
         "Expected 8760 consecutive hours with unit objective/generator/store weights",
     )

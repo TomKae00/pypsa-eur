@@ -82,3 +82,31 @@ estimate. The source-level limitations in the transmission specification and
 the provisional CF factors remain relevant when interpreting results.
 
 No full annual HPC solve is claimed by this implementation update.
+
+
+## Rechecking completed inputs after a timestamp-unit validation failure
+
+The transmission snapshot fingerprint is now normalized to nanoseconds. Earlier
+version-1 metadata hashed raw datetime integers; a microsecond index could be
+reloaded from NetCDF as nanoseconds and spuriously trigger “Transmission
+snapshots changed; recompose”. Existing metadata is accepted only if a lossless
+representation of the same ordered timestamps reproduces its digest. Real
+changes to dates, ordering or count still fail. Physical limits and network
+inputs are not altered by this compatibility fix.
+
+If composition already reached 119/119 and failed only during validation, run
+checks on a workq node without rebuilding the inputs, then release just the
+baseline and Hybrid solves after success:
+
+```bash
+cd ~/projects/pypsa-eur-bornholm
+git pull --ff-only &&
+check_job=$(sbatch --parsable scripts/bornholm_calibrated_workq.sbatch check) &&
+sbatch --array=0,2 --dependency="afterok:${check_job%%;*}" \
+  --kill-on-invalid-dep=yes scripts/bornholm_calibrated_solve.sbatch
+```
+
+The `check` stage reads all eight existing composed networks and runs their
+comparison and solve preflights. It neither launches composition workers nor
+submits solves itself. A genuinely changed network will still fail validation;
+do not edit its fingerprint manually to bypass that failure.

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 """Numerical dispatch tests for the operating constraints, including NetCDF reuse."""
 
+import hashlib
+
 import numpy as np
 import pandas as pd
 import pypsa
@@ -250,3 +252,49 @@ def test_native_loss_split_preserves_both_directional_hourly_limits():
     np.testing.assert_allclose(
         n.links_t.p0["dated cable-reversed"], [0, 0, 40], atol=1e-5
     )
+
+
+@pytest.mark.parametrize("unit", ["ns", "us", "ms", "s"])
+def test_snapshot_hash_is_independent_of_datetime_storage_unit(tmp_path, unit):
+    n, settings = pair(tmp_path)
+    n.set_snapshots(n.snapshots.as_unit(unit))
+    audit = t.install(n, settings, 2023)
+    assert audit["snapshot_hash_unit"] == "ns"
+    original = audit["snapshots_sha256"]
+    n.set_snapshots(n.snapshots.as_unit("ns"))
+    assert t.validate(n, settings)["snapshots_sha256"] == original
+
+
+@pytest.mark.parametrize("unit", ["ns", "us", "ms", "s"])
+def test_legacy_three_hour_hash_survives_netcdf_roundtrip(tmp_path, unit):
+    n, settings = pair(tmp_path, year=2035)
+    n.set_snapshots(pd.date_range("2013-01-01", periods=3, freq="3h").as_unit(unit))
+    audit = t.install(n, settings, 2035)
+    audit.pop("snapshot_hash_unit")
+    audit["snapshots_sha256"] = hashlib.sha256(
+        t._utc(n.snapshots).asi8.tobytes()
+    ).hexdigest()
+    output = tmp_path / "legacy_3h.nc"
+    n.export_to_netcdf(output)
+    m = pypsa.Network(output)
+    t.validate(m, settings)
+    # A fractional-time change must not be hidden by rounding to a legacy unit.
+    m.set_snapshots(m.snapshots.as_unit("ns") + pd.Timedelta(nanoseconds=1))
+    with pytest.raises(ValueError, match="snapshots changed"):
+        t.validate(m, settings)
+
+
+@pytest.mark.parametrize("change", ["shift", "drop", "reverse"])
+def test_legacy_snapshot_compatibility_rejects_real_time_changes(tmp_path, change):
+    n, settings = pair(tmp_path)
+    audit = t.install(n, settings, 2023)
+    audit.pop("snapshot_hash_unit")
+    audit["snapshots_sha256"] = t._snapshot_hash(n.snapshots, "us")
+    changed = {
+        "shift": n.snapshots + pd.Timedelta(hours=1),
+        "drop": n.snapshots[:-1],
+        "reverse": n.snapshots[::-1],
+    }[change]
+    n.set_snapshots(changed)
+    with pytest.raises(ValueError, match="snapshots changed"):
+        t.validate(n, settings)

@@ -415,3 +415,11 @@ def test_comparison_rejects_changed_gas_storage_bounds(comparison):
     networks["hybrid"].stores.at["DK gas Store", "e_nom_min"] = 2000
     with pytest.raises(AssertionError, match="shared gas-storage inputs"):
         check_networks(networks, config)
+
+
+@pytest.mark.parametrize("unit", ["ns", "us", "ms", "s"])
+def test_comparison_accepts_equivalent_datetime_storage_units(comparison, unit):
+    networks, config = comparison
+    for n in networks.values():
+        n.set_snapshots(n.snapshots.as_unit(unit))
+    check_networks(networks, config)
