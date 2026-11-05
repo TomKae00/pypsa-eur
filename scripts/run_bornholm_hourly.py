@@ -19,7 +19,7 @@ from scripts import run_bornholm_study as study
 from scripts.bornholm_provenance import code_provenance
 
 RUN = "bornholm_zonal_hybrid"
-PREFIX = "bornholm_1h_s1_w3_o3_reviewed"
+PREFIX = "bornholm_1h_s1_w3_o3_reviewed_biomass30"
 CONFIGS = [*reviewed.CONFIGS, "config/config.bornholm-hourly-hybrid.yaml"]
 TARGET = f"resources/{PREFIX}/{RUN}/networks/composed_2035.nc"
 MEMORY_PROFILES = {

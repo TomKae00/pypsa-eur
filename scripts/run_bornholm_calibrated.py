@@ -23,7 +23,7 @@ from scripts.bornholm_model_assumptions import (
 )
 
 CONFIGS = [*study.CONFIGS, "config/config.bornholm-calibrated-base.yaml"]
-PREFIX = "bornholm_3h_s1_w3_o3_reviewed"
+PREFIX = "bornholm_3h_s1_w3_o3_reviewed_biomass30"
 CLASSES = {**study.CLASSES, "onwind": 3}
 
 
@@ -63,6 +63,22 @@ def context_for(run):
     return study.context_for(run, configfiles=CONFIGS)
 
 
+def check_biomass_fuel(n):
+    """Reject stale primary biomass supplies before submitting an annual solve."""
+    import numpy as np
+
+    supplies = n.generators.loc[
+        n.generators.carrier.eq("solid biomass")
+        & n.generators.index.to_series().eq(n.generators.bus)
+    ]
+    study.require(not supplies.empty, "Missing primary solid biomass fuel supply")
+    study.require(
+        np.isclose(supplies.marginal_cost, 30.0, rtol=0, atol=1e-9).all(),
+        "Solid biomass fuel must cost EUR2025 30/MWh_fuel; rebuild composed inputs",
+    )
+    return {"fuel_EUR_MWh": 30.0, "currency_year": 2025, "suppliers": len(supplies)}
+
+
 def preflight(context):
     import pypsa
 
@@ -70,6 +86,7 @@ def preflight(context):
         context, configfiles=CONFIGS, prefix=PREFIX, classes=CLASSES
     )
     n = pypsa.Network(context.input.network)
+    biomass = check_biomass_fuel(n)
     settings = context.config["bornholm_model_assumptions"]
     audit = validate_assumptions(n, settings)
     from scripts import transmission_assumptions
@@ -86,6 +103,7 @@ def preflight(context):
         onshore=resource_report(n),
         coal=audit["coal"],
         transfers=audit["transfers"],
+        biomass=biomass,
     )
     return report
 

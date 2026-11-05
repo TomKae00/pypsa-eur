@@ -27,7 +27,7 @@ export SINGULARITYENV_SLURM_JOB_ID="$SLURM_JOB_ID"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
 
-prefix=bornholm_1h_s1_w3_o3_reviewed
+prefix=bornholm_1h_s1_w3_o3_reviewed_biomass30
 scenario=bornholm_zonal_hybrid
 target="resources/$prefix/$scenario/networks/composed_2035.nc"
 directory="results/$prefix/$SLURM_JOB_ID/$scenario"

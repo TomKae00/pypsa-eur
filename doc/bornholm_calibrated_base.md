@@ -21,6 +21,14 @@ The fixed 1,000 MWh coal Store is a numerical fuel buffer with an independent
 fuel supplier. It does not cap annual coal consumption. It applies only to the
 sector-coupled Bornholm case, never to the electricity-only hindcast.
 
+The current Bornholm campaign uses **EUR2025 30/MWh of solid biomass fuel**,
+uniformly across countries, before conversion losses and the existing transport
+charges. `data/model_assumptions/bornholm_biomass30_costs.csv` retains the native
+custom operating-cost entries and overrides both `solid biomass` and the
+conventional `biomass` alias. This is a 2035 study assumption; the separate 2023
+hindcast remains at EUR2023 35/MWh of fuel. Preflight checks the actual primary
+solid biomass suppliers in every composed network and rejects old fuel costs.
+
 The [reviewed transmission specification](transmission_assumptions.md) supersedes
 the earlier four-corridor implementation. In particular, SE2–SE3 uses the cited
 10,350 MW 2035 step in both directions. Core fallback NTCs are explicit scenario
@@ -38,11 +46,17 @@ sbatch scripts/bornholm_calibrated_workq.sbatch dry-run
 sbatch scripts/bornholm_calibrated_workq.sbatch build
 ```
 
-After reviewing the updated 2023 hindcast, start the baseline and Hybrid first:
+The six-case biomass-30 campaign, including fresh baseline and Hybrid runs, is:
 
 ```bash
-sbatch --array=0,2 scripts/bornholm_calibrated_solve.sbatch
+sbatch scripts/bornholm_calibrated_workq.sbatch six
 ```
+
+This builds and preflights the shared eight-case input set, then submits only
+array tasks **0–5**: baseline, radial DK, fixed Hybrid DK–DE, radial DE,
+optimised DK–DE and open DK–DE–SE–PL. A comparison check depends on successful
+completion of these six tasks and selects exactly these six scenarios. Tasks
+6–7 (the expandable-grid pair) are not submitted by `six`.
 
 The full campaign can be submitted with:
 
@@ -54,8 +68,10 @@ It builds and preflights all eight cases, then submits the solve array and a
 comparison check after successful completion. The old study workq command is
 an alias for this reviewed controller. The study module CLI also selects the
 reviewed campaign; `--legacy` is reserved for archived reproductions. The output prefix is
-`bornholm_3h_s1_w3_o3_reviewed`; old results cannot satisfy these new targets.
-Do not use a new campaign's comparison checker until all eight results exist.
+`bornholm_3h_s1_w3_o3_reviewed_biomass30`; old results cannot satisfy these new
+targets. Previous `bornholm_3h_s1_w3_o3_reviewed` results remain untouched.
+The default comparison checker requires all eight results; the `six` stage
+passes an explicit six-scenario selection to the same checker.
 
 The hourly fixed Hybrid is retained with the same reviewed assumptions:
 
@@ -63,7 +79,7 @@ The hourly fixed Hybrid is retained with the same reviewed assumptions:
 sbatch scripts/bornholm_hourly_hybrid_fatq.sbatch 16 standard
 ```
 
-It uses `bornholm_1h_s1_w3_o3_reviewed` and its own temporal cache. An older
+It uses `bornholm_1h_s1_w3_o3_reviewed_biomass30` and its own temporal cache. An older
 hourly retry summary cannot be used for the reviewed input, because source
 hashes must match. Hourly feasibility and performance still require a full run.
 

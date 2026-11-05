@@ -328,6 +328,34 @@ def test_three_class_workflow_uses_explicit_tables_and_isolated_targets():
     assert json.loads(json.dumps(assumptions.fingerprint(settings)))[0]
 
 
+@pytest.mark.parametrize("fuel", [30.0, 17.3312, float("nan")])
+def test_biomass_preflight_checks_primary_fuel_not_transport_or_conversion(fuel):
+    n = pypsa.Network()
+    for name in ("DK solid biomass", "DE solid biomass"):
+        n.add("Bus", name, carrier="solid biomass")
+        n.add(
+            "Generator", name, bus=name, carrier="solid biomass", marginal_cost=fuel
+        )
+    n.add(
+        "Generator",
+        "DK solid biomass transported",
+        bus="DK solid biomass",
+        carrier="solid biomass",
+        marginal_cost=35,
+    )
+    if fuel == 30.0:
+        report = campaign.check_biomass_fuel(n)
+        assert report == {"fuel_EUR_MWh": 30.0, "currency_year": 2025, "suppliers": 2}
+    else:
+        with pytest.raises(ValueError, match="rebuild composed inputs"):
+            campaign.check_biomass_fuel(n)
+
+
+def test_biomass_preflight_rejects_missing_primary_supply():
+    with pytest.raises(ValueError, match="Missing primary solid biomass"):
+        campaign.check_biomass_fuel(pypsa.Network())
+
+
 def test_reviewed_shared_constraints_replace_legacy_caps_once(model, tmp_path):
     from scripts import transmission_assumptions as transfers
 

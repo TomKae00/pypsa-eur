@@ -15,4 +15,4 @@ test -x "$pixi_wrapper"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
 "$pixi_wrapper" run python -m scripts.check_bornholm_networks \
-    --overlay config/config.bornholm-3h.yaml --overlay config/config.bornholm-calibrated-base.yaml --solved
+    --overlay config/config.bornholm-3h.yaml --overlay config/config.bornholm-calibrated-base.yaml --solved "$@"

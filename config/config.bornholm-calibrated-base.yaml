@@ -1,7 +1,10 @@
 # Layer AFTER config.bornholm.yaml and config.bornholm-3h.yaml.
 # Model assumptions and sources: doc/bornholm_calibrated_base.md.
 run:
-  prefix: bornholm_3h_s1_w3_o3_reviewed
+  prefix: bornholm_3h_s1_w3_o3_reviewed_biomass30
+costs:
+  # EUR2025/MWh of fuel, before conversion losses and existing transport charges.
+  custom_cost_fn: data/model_assumptions/bornholm_biomass30_costs.csv
 renewable:
   onwind:
     resource_classes: 3

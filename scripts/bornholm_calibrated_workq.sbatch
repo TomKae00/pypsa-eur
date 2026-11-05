@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 stage="${1:-all}"
-case "$stage" in all|build|check|dry-run) ;; *) echo 'Usage: sbatch scripts/bornholm_calibrated_workq.sbatch [all|build|check|dry-run]' >&2; exit 2 ;; esac
+case "$stage" in all|six|build|check|dry-run) ;; *) echo 'Usage: sbatch scripts/bornholm_calibrated_workq.sbatch [all|six|build|check|dry-run]' >&2; exit 2 ;; esac
 [[ -n "${SLURM_JOB_ID:-}" && "${SLURM_JOB_PARTITION:-}" == workq ]] || { echo 'This controller must run in workq.' >&2; exit 2; }
 pixi_wrapper="${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}"
 test -x "$pixi_wrapper"
@@ -19,7 +19,7 @@ export PIXI_SOPHIA="$pixi_wrapper"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export SINGULARITYENV_OMP_NUM_THREADS=1 SINGULARITYENV_OPENBLAS_NUM_THREADS=1 SINGULARITYENV_MKL_NUM_THREADS=1
 export SINGULARITYENV_GRB_LICENSE_FILE="${GRB_LICENSE_FILE:-$HOME/gurobi.lic}"
-spool="$PWD/results/bornholm_3h_s1_w3_o3_reviewed/submissions/${SLURM_JOB_ID}"
+spool="$PWD/results/bornholm_3h_s1_w3_o3_reviewed_biomass30/submissions/${SLURM_JOB_ID}"
 mkdir -p "$spool"
 export BORNHOLM_WORKQ_BRIDGE="$spool"
 export SINGULARITYENV_BORNHOLM_WORKQ_BRIDGE="$spool"
@@ -74,13 +74,19 @@ check_inputs
 touch "$spool/stop"
 wait "$bridge_pid"
 bridge_pid=""
-if [[ "$stage" == all ]]; then
-    solve_array=$(sbatch --parsable --partition=workq --array=0-7 scripts/bornholm_calibrated_solve.sbatch)
+if [[ "$stage" == all || "$stage" == six ]]; then
+    array_range=0-7
+    check_scenarios=()
+    if [[ "$stage" == six ]]; then
+        array_range=0-5
+        check_scenarios=(--scenarios baseline radial hybrid radial_de optimised open)
+    fi
+    solve_array=$(sbatch --parsable --partition=workq --array="$array_range" scripts/bornholm_calibrated_solve.sbatch)
     printf '%s\n' "$solve_array" > "$spool/solve_array.txt"
-    echo "Eight calibrated workq solves submitted: array $solve_array (tasks 0 through 7)."
+    echo "Calibrated workq solves submitted: array $solve_array (tasks $array_range)."
     check_job=$(sbatch --parsable --partition=workq --dependency="afterok:${solve_array%%;*}" \
-        --kill-on-invalid-dep=yes scripts/bornholm_calibrated_check.sbatch)
+        --kill-on-invalid-dep=yes scripts/bornholm_calibrated_check.sbatch "${check_scenarios[@]}")
     printf '%s\n' "$check_job" > "$spool/check_job.txt"
-    echo "Comparison check after all eight solves: $check_job"
+    echo "Comparison check after the selected solves: $check_job"
 fi
 echo "Build checks complete. Submission records: $spool"
