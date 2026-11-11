@@ -157,7 +157,13 @@ def _utc(index):
 def _snapshot_hash(index, unit="ns"):
     # DatetimeIndex.asi8 uses the index's current unit, not always nanoseconds.
     # NetCDF/CSV roundtrips can change that unit without changing any instant.
-    values = _utc(index).as_unit(unit, round_ok=False).asi8
+    original = _utc(index)
+    converted = original.as_unit(unit)
+    # pandas versions differ on whether as_unit accepts round_ok. Check
+    # precision explicitly so compatibility never accepts truncated instants.
+    if not np.array_equal(converted.as_unit(original.unit).asi8, original.asi8):
+        raise ValueError("Snapshot unit conversion would lose precision")
+    values = converted.asi8
     return hashlib.sha256(values.tobytes()).hexdigest()
 
 

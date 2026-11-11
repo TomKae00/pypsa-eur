@@ -1259,6 +1259,11 @@ def extra_functionality(
     """
     config = n.config
     constraints = config["solving"].get("constraints", {})
+    if settings := config.get("bornholm_welfare_sensitivity", {}):
+        if settings.get("enabled", False):
+            from scripts.bornholm_welfare_sensitivity import add_capacity_constraints
+
+            add_capacity_constraints(n, settings)
     if not config.get("bornholm_model_assumptions", {}).get("enabled", False):
         transmission_assumptions.add_constraints(
             n, snapshots, config.get("transmission_assumptions", {})

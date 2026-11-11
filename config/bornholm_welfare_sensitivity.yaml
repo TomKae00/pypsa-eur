@@ -1,0 +1,50 @@
+# All monetary assumptions are EUR2025. Sources and boundaries: doc/bornholm_welfare_sensitivity.md.
+version: 1
+prefix: bornholm_welfare_2035_v1
+source_prefix: bornholm_3h_s1_w3_o3_reviewed_biomass30
+planning_year: 2035
+demand:
+  # Fixed AC/low-voltage electricity Loads, NOT official forecasts of gross demand.
+  countries: [DK, DE]
+  factors: {central: 1.0, plus10: 1.1, plus20: 1.2}
+  scope: fixed_electricity_loads
+deployment:
+  central:
+    # AF26 primo-2035 nameplate AC capacity, MW; regional totals include existing assets.
+    onshore_DK1_MW: 6144.18
+    onshore_DK2_MW: 928.52
+    # EEG 2035 target documented in BNetzA April 2025 approval, p.52.
+    onshore_DE_MW: 150000.0
+  slow_onshore:
+    # DK: halve AF26's 2030-2035 new-wind increment, retaining its regional split.
+    onshore_DK1_MW: 5744.18
+    onshore_DK2_MW: 828.52
+    # Study interpolation: 115 GW (2030 anchor) + 5/7*(126.6-115) GW.
+    onshore_DE_MW: 123285.71428571429
+solar:
+  # AF26 is AC; PV profiles use peak module ratings. 1.2 is an explicit study
+  # conversion, NOT an AF26 forecast or a technology-specific inverter design.
+  DK_DC_AC_ratio: 1.2
+  DK1_rooftop_MW_AC: 2306.83
+  DK2_rooftop_MW_AC: 1213.32
+  DK1_ground_MW_AC: 14832.01
+  DK2_ground_MW_AC: 6581.39
+  # Module-nameplate ceiling; interpolate 2030 215 GW -> B2037 345.4 GW.
+  DE_total_MW: 308142.85714285716
+postprocessing:
+  # Exact native investment value is used for the low case; rounded values are labels only.
+  wind_capex_EUR_kW: {current: 2039.704, intermediate: 2760.0, bcg_wind: 3480.0}
+  wind_lifetime_years: 30
+  discount_rate: 0.07
+  # Hold absolute annual O&M and collection cost fixed to isolate wind CAPEX.
+  fixed_OM_policy: retain_native_absolute_annual_cost
+  export_cost_in_wind_LCOE: false
+  strike_grid_EUR_MWh: [60, 65, 70, 75, 80, 90, 100, 110, 120, 130]
+  funding: {DK: 0.3, DE: 0.7}
+  project_congestion_income: {DK: 0.5, DE: 0.5}
+sources:
+  AF26_dataset: https://ens.dk/media/8833/download
+  AF26_onshore_method: https://ens.dk/media/8845/download
+  German_approval: https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/NEP/DL_Szenariorahmen/2025/Genehm_SR_2025Strom.pdf?__blob=publicationFile&v=2
+  BCG_Bornholm: https://ens.dk/media/7826/download
+  native_costs: https://github.com/PyPSA/technology-data/blob/v0.15.0/outputs/costs_2035.csv
