@@ -2053,6 +2053,68 @@ def get_temp_efficency(
 
 
 def add_EVs(
+    n,
+    avail_profile,
+    dsm_profile,
+    p_set,
+    electric_share,
+    number_cars,
+    temperature,
+    spatial,
+    options,
+):
+    """Use native EV physics, optionally separating V2G from managed-only cars."""
+    v2g_share = options.get("bev_v2g_availability")
+    if v2g_share is None:
+        return _add_EV_cohort(
+            n,
+            avail_profile,
+            dsm_profile,
+            p_set,
+            electric_share,
+            number_cars,
+            temperature,
+            spatial,
+            options,
+        )
+    dsm_share = float(options["bev_dsm_availability"])
+    v2g_share = float(v2g_share)
+    if not 0 <= v2g_share <= dsm_share <= 1:
+        raise ValueError("V2G share must lie between zero and the DSM share")
+    if not options["bev_dsm"]:
+        raise ValueError("Independent V2G participation requires managed charging")
+    if not options["v2g"]:
+        v2g_share = 0.0
+    # Each cohort supplies its own mobility load. V2G cannot borrow energy from
+    # the batteries belonging to drivers who only permit managed charging.
+    cohorts = [
+        (
+            1 - v2g_share,
+            (dsm_share - v2g_share) / (1 - v2g_share) if v2g_share < 1 else 0,
+            False,
+            "",
+        ),
+        (v2g_share, 1.0, True, " V2G fleet"),
+    ]
+    for fraction, available, discharge, suffix in cohorts:
+        if fraction == 0:
+            continue
+        cohort_options = dict(options, bev_dsm_availability=available, v2g=discharge)
+        _add_EV_cohort(
+            n,
+            avail_profile,
+            dsm_profile,
+            p_set,
+            electric_share * fraction,
+            number_cars,
+            temperature,
+            spatial,
+            cohort_options,
+            name_suffix=suffix,
+        )
+
+
+def _add_EV_cohort(
     n: pypsa.Network,
     avail_profile: pd.DataFrame,
     dsm_profile: pd.DataFrame,
@@ -2062,6 +2124,7 @@ def add_EVs(
     temperature: pd.DataFrame,
     spatial: SimpleNamespace,
     options: dict,
+    name_suffix: str = "",
 ) -> None:
     """
     Add electric vehicle (EV) infrastructure to the network.
@@ -2121,12 +2184,15 @@ def add_EVs(
     a rolling average smoothing for the power profile.
     """
     # Add EV battery carrier and buses
-    n.add("Carrier", "EV battery")
+    if "EV battery" not in n.carriers.index:
+        n.add("Carrier", "EV battery")
+
+    battery_buses = spatial.nodes + " EV battery" + name_suffix
 
     n.add(
         "Bus",
         spatial.nodes,
-        suffix=" EV battery",
+        suffix=" EV battery" + name_suffix,
         location=spatial.nodes,
         carrier="EV battery",
         unit="MWh_el",
@@ -2155,8 +2221,8 @@ def add_EVs(
     n.add(
         "Load",
         spatial.nodes,
-        suffix=" land transport EV",
-        bus=spatial.nodes + " EV battery",
+        suffix=" land transport EV" + name_suffix,
+        bus=battery_buses,
         carrier="land transport EV",
         p_set=profile.loc[n.snapshots],
     )
@@ -2166,9 +2232,9 @@ def add_EVs(
     n.add(
         "Link",
         spatial.nodes,
-        suffix=" BEV charger",
+        suffix=" BEV charger" + name_suffix,
         bus0=spatial.nodes,
-        bus1=spatial.nodes + " EV battery",
+        bus1=battery_buses,
         p_nom=p_nom,
         carrier="BEV charger",
         p_max_pu=avail_profile.loc[n.snapshots, spatial.nodes],
@@ -2188,8 +2254,8 @@ def add_EVs(
         n.add(
             "Store",
             spatial.nodes,
-            suffix=" EV battery",
-            bus=spatial.nodes + " EV battery",
+            suffix=" EV battery" + name_suffix,
+            bus=battery_buses,
             carrier="EV battery",
             e_cyclic=True,
             e_nom=e_nom,
@@ -2202,9 +2268,9 @@ def add_EVs(
             n.add(
                 "Link",
                 spatial.nodes,
-                suffix=" V2G",
+                suffix=" V2G" + name_suffix,
                 bus1=spatial.nodes,
-                bus0=spatial.nodes + " EV battery",
+                bus0=battery_buses,
                 p_nom=p_nom * options["bev_dsm_availability"],
                 carrier="V2G",
                 p_max_pu=avail_profile.loc[n.snapshots, spatial.nodes],

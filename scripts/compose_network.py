@@ -178,6 +178,11 @@ if __name__ == "__main__":
         ac_losses=params.transmission_losses,
     )
 
+    if settings := config.get("bornholm_2035", {}):
+        from scripts.bornholm_2035 import apply as apply_2035_settings
+
+        apply_2035_settings(n, settings)
+
     sanitize_custom_columns(n)
     sanitize_carriers(n, config)
     sanitize_locations(n)

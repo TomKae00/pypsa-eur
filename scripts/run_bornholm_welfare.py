@@ -212,7 +212,15 @@ def prepare(config, config_path):
     print("All 12 inputs and six paired demand/budget checks passed.")
 
 
-def solve(config, config_path, index):
+def solve(
+    config,
+    config_path,
+    index,
+    *,
+    scenario_table=None,
+    context_factory=None,
+    validate_fn=None,
+):
     import pypsa
 
     from scripts import run_bornholm_accuracy as accuracy
@@ -225,7 +233,10 @@ def solve(config, config_path, index):
     from scripts.dispatch_checks import check as check_dispatch
     from scripts.run_bornholm_diagnostic import memory_snapshot, soft_memory_limit
 
-    scenario = sensitivity.scenarios(config)[index]
+    scenario = (
+        sensitivity.scenarios(config) if scenario_table is None else scenario_table
+    )[index]
+    validate_network = sensitivity.validate if validate_fn is None else validate_fn
     source, directory = paths(config, scenario)
     prepared = json.loads((directory / "prepared.json").read_text())
     sensitivity.require(
@@ -244,7 +255,11 @@ def solve(config, config_path, index):
         directory / "attempts" / (os.environ.get("SLURM_JOB_ID") or str(time.time_ns()))
     )
     attempt.mkdir(parents=True, exist_ok=False)
-    context = calibrated.context_for(scenario["source_run"])
+    context = (
+        calibrated.context_for(scenario["source_run"])
+        if context_factory is None
+        else context_factory(scenario)
+    )
     context.input = type(context.input)(fromdict={"network": str(source)})
     context.output = type(context.output)(
         fromdict={
@@ -305,7 +320,7 @@ def solve(config, config_path, index):
 
     try:
         n = pypsa.Network(source)
-        sensitivity.validate(n, config, scenario)
+        validate_network(n, config, scenario)
         validate_assumptions(n, context.config["bornholm_model_assumptions"])
         transmission_assumptions.validate(n, context.config["transmission_assumptions"])
         calibrated.check_biomass_fuel(n)
@@ -334,9 +349,7 @@ def solve(config, config_path, index):
         )
         report["objective"] = float(n.objective)
         report["objective_constant"] = float(n.objective_constant)
-        report["capacity_checks"] = sensitivity.validate(
-            n, config, scenario, solved=True
-        )
+        report["capacity_checks"] = validate_network(n, config, scenario, solved=True)
         report["assumption_checks"] = check_solved_assumptions(
             n, context.config["bornholm_model_assumptions"]
         )

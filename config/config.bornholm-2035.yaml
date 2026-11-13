@@ -1,0 +1,25 @@
+# Layer after the reviewed calibrated overlays; old campaigns stay unchanged.
+run:
+  prefix: bornholm_2035_final_v1
+  name: all
+  scenarios:
+    enable: true
+    file: config/scenarios_bornholm_2035.yaml
+  shared_resources:
+    policy: base
+    # Native horizon wildcards already keep industrial transition inputs per case.
+    exclude: [temp_ambient_air_temporal_aggregate.nc, costs_]
+renewable:
+  offwind-ac:
+    correction_factor: 0.85
+  offwind-dc:
+    correction_factor: 0.85
+  offwind-float:
+    correction_factor: 0.85
+energy_islands:
+  project_correction_factor: 0.8855
+sector:
+  bev_dsm: true
+  bev_dsm_availability: 0.5
+  bev_v2g_availability: 0.25
+  v2g: true

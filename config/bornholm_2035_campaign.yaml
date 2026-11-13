@@ -1,0 +1,20 @@
+# Explicit study assumptions; see doc/bornholm_2035_campaign.md.
+version: 2
+prefix: bornholm_2035_final_v1
+planning_year: 2035
+worlds:
+  central:
+    ev_share: 0.45
+    industrial_progress: 0.45
+    additional_data_centres_TWh: {DK1: 0.0, DK2: 0.0, DE: 0.0}
+  ev55:
+    ev_share: 0.55
+    industrial_progress: 0.55
+    additional_data_centres_TWh: {DK1: 2.0, DK2: 1.0, DE: 40.0}
+  ev65:
+    ev_share: 0.65
+    industrial_progress: 0.65
+    additional_data_centres_TWh: {DK1: 4.0, DK2: 2.0, DE: 80.0}
+central_v2g_share: 0.25
+managed_charging_share: 0.5
+capacity_assumptions: config/bornholm_welfare_sensitivity.yaml

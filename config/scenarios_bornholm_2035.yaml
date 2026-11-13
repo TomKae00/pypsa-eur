@@ -1,0 +1,1046 @@
+central_baseline:
+  energy_islands:
+    enabled: false
+    case: baseline
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id001
+      index: 0
+      name: central_baseline
+      world: central
+      project: baseline
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: &id003
+      DK1: 0.0
+      DK2: 0.0
+      DE: 0.0
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id001
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: &id002
+      - solar
+      - solar-hsat
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+central_hybrid:
+  energy_islands:
+    enabled: true
+    case: hybrid
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id004
+      index: 1
+      name: central_hybrid
+      world: central
+      project: hybrid
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id004
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+central_split_radial:
+  energy_islands:
+    enabled: true
+    case: split_radial
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id005
+      index: 2
+      name: central_split_radial
+      world: central
+      project: split_radial
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id005
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+ev55_baseline:
+  energy_islands:
+    enabled: false
+    case: baseline
+  sector:
+    land_transport_electric_share:
+      2035: 0.55
+    land_transport_ice_share:
+      2035: 0.44999999999999996
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.55
+  bornholm_2035:
+    enabled: true
+    scenario: &id006
+      index: 3
+      name: ev55_baseline
+      world: ev55
+      project: baseline
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: &id007
+      DK1: 2.0
+      DK2: 1.0
+      DE: 40.0
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id006
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+ev55_hybrid:
+  energy_islands:
+    enabled: true
+    case: hybrid
+  sector:
+    land_transport_electric_share:
+      2035: 0.55
+    land_transport_ice_share:
+      2035: 0.44999999999999996
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.55
+  bornholm_2035:
+    enabled: true
+    scenario: &id008
+      index: 4
+      name: ev55_hybrid
+      world: ev55
+      project: hybrid
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id007
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id008
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+ev55_split_radial:
+  energy_islands:
+    enabled: true
+    case: split_radial
+  sector:
+    land_transport_electric_share:
+      2035: 0.55
+    land_transport_ice_share:
+      2035: 0.44999999999999996
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.55
+  bornholm_2035:
+    enabled: true
+    scenario: &id009
+      index: 5
+      name: ev55_split_radial
+      world: ev55
+      project: split_radial
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id007
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id009
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+ev65_baseline:
+  energy_islands:
+    enabled: false
+    case: baseline
+  sector:
+    land_transport_electric_share:
+      2035: 0.65
+    land_transport_ice_share:
+      2035: 0.35
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.65
+  bornholm_2035:
+    enabled: true
+    scenario: &id010
+      index: 6
+      name: ev65_baseline
+      world: ev65
+      project: baseline
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: &id011
+      DK1: 4.0
+      DK2: 2.0
+      DE: 80.0
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id010
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+ev65_hybrid:
+  energy_islands:
+    enabled: true
+    case: hybrid
+  sector:
+    land_transport_electric_share:
+      2035: 0.65
+    land_transport_ice_share:
+      2035: 0.35
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.65
+  bornholm_2035:
+    enabled: true
+    scenario: &id012
+      index: 7
+      name: ev65_hybrid
+      world: ev65
+      project: hybrid
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id011
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id012
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+ev65_split_radial:
+  energy_islands:
+    enabled: true
+    case: split_radial
+  sector:
+    land_transport_electric_share:
+      2035: 0.65
+    land_transport_ice_share:
+      2035: 0.35
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.65
+  bornholm_2035:
+    enabled: true
+    scenario: &id013
+      index: 8
+      name: ev65_split_radial
+      world: ev65
+      project: split_radial
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id011
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id013
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+central_radial_dk:
+  energy_islands:
+    enabled: true
+    case: radial
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id014
+      index: 9
+      name: central_radial_dk
+      world: central
+      project: radial_dk
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id014
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+central_radial_de:
+  energy_islands:
+    enabled: true
+    case: radial_de
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.25
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id015
+      index: 10
+      name: central_radial_de
+      world: central
+      project: radial_de
+      deployment: central
+      v2g_share: 0.25
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id015
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+v2g0_baseline:
+  energy_islands:
+    enabled: false
+    case: baseline
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.0
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id016
+      index: 11
+      name: v2g0_baseline
+      world: central
+      project: baseline
+      deployment: central
+      v2g_share: 0.0
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id016
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+v2g0_hybrid:
+  energy_islands:
+    enabled: true
+    case: hybrid
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.0
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id017
+      index: 12
+      name: v2g0_hybrid
+      world: central
+      project: hybrid
+      deployment: central
+      v2g_share: 0.0
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id017
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+v2g50_baseline:
+  energy_islands:
+    enabled: false
+    case: baseline
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.5
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id018
+      index: 13
+      name: v2g50_baseline
+      world: central
+      project: baseline
+      deployment: central
+      v2g_share: 0.5
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id018
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716
+v2g50_hybrid:
+  energy_islands:
+    enabled: true
+    case: hybrid
+  sector:
+    land_transport_electric_share:
+      2035: 0.45
+    land_transport_ice_share:
+      2035: 0.55
+    land_transport_fuel_cell_share:
+      2035: 0.0
+    bev_v2g_availability: 0.5
+  industry:
+    sector_ratios_fraction_future:
+      2035: 0.45
+  bornholm_2035:
+    enabled: true
+    scenario: &id019
+      index: 14
+      name: v2g50_hybrid
+      world: central
+      project: hybrid
+      deployment: central
+      v2g_share: 0.5
+    additional_data_centres_TWh: *id003
+  bornholm_welfare_sensitivity:
+    enabled: true
+    scenario: *id019
+    capacity_limits:
+    - id: onshore_DK1
+      region: DK1
+      carriers:
+      - onwind
+      maximum_MW: 6144.18
+    - id: onshore_DK2
+      region: DK2
+      carriers:
+      - onwind
+      maximum_MW: 928.52
+    - id: onshore_DE
+      region: DE
+      carriers:
+      - onwind
+      maximum_MW: 150000.0
+    - id: solar_DK1_rooftop
+      region: DK1
+      carriers:
+      - solar rooftop
+      maximum_MW: 2768.196
+    - id: solar_DK1_ground
+      region: DK1
+      carriers: *id002
+      maximum_MW: 17798.412
+    - id: solar_DK2_rooftop
+      region: DK2
+      carriers:
+      - solar rooftop
+      maximum_MW: 1455.984
+    - id: solar_DK2_ground
+      region: DK2
+      carriers: *id002
+      maximum_MW: 7897.668
+    - id: solar_DE
+      region: DE
+      carriers:
+      - solar
+      - solar-hsat
+      - solar rooftop
+      maximum_MW: 308142.85714285716

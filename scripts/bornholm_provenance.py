@@ -19,6 +19,8 @@ def code_provenance(root=Path(".")):
             if p.suffix in [".py", ".smk", ".yaml", ".yml", ".json", ".sbatch", ".sh"]
         )
     paths.extend((root / "data/model_assumptions").glob("*.csv"))
+    paths.extend((root / "data/energy_islands").glob("*.csv"))
+    paths.extend((root / "data/energy_islands").glob("*.geojson"))
     hashes = {
         p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(paths)

@@ -299,7 +299,8 @@ def _add_wind(
             profile = n.generators_t.p_max_pu[source].copy()
             collection_cost = 0.0
         else:
-            ds = project_profile.sel(bus=generator_id, bin=0)
+            profile_id = _optional_string(row.get("profile_source"), generator_id)
+            ds = project_profile.sel(bus=profile_id, bin=0)
             if "year" in ds.dims:
                 # Match native overnight attachment: use the first turbine model.
                 ds = ds.sel(year=ds.year.min(), drop=True)
@@ -332,7 +333,7 @@ def _add_wind(
                 distance,
                 length_factor=collection_length_factor,
             )
-            source = f"project_area:{generator_id}"
+            source = f"project_area:{profile_id}"
 
         if subtract_potential and _as_bool(row.get("subtract_potential"), True):
             _subtract_generic_potential(
@@ -563,6 +564,30 @@ def main(
     _require_unique(wind, "generator_id", "wind")
 
     case = str(config.get("case", "hybrid"))
+    if case == "split_radial":
+        # Two isolated electrical systems share the same wind-resource sample.
+        # Profile preparation still uses the original single project-area row.
+        if len(wind) != 1 or len(hubs) != 1:
+            raise ValueError("Split radial requires one original project wind/hub")
+        source = wind.iloc[0]
+        if float(source.capacity_mw) != 3000:
+            raise ValueError("Split radial requires the same 3000 MW project")
+        original_hub = hubs.iloc[0]
+        wind_rows, hub_rows = [], []
+        for country, capacity in (("DK", 1000.0), ("DE", 2000.0)):
+            hub_id = f"{source.hub_id}_{country}"
+            wind_rows.append(
+                dict(
+                    source,
+                    generator_id=f"{source.generator_id}_{country}",
+                    hub_id=hub_id,
+                    capacity_mw=capacity,
+                    profile_source=source.generator_id,
+                )
+            )
+            hub_rows.append(dict(original_hub, hub_id=hub_id))
+        wind = pd.DataFrame(wind_rows)
+        hubs = pd.DataFrame(hub_rows)
     links = links.loc[links["case"].isin([case, "all"])].copy()
     _require_unique(links, "link_id", f"links for case {case}")
 

@@ -360,6 +360,14 @@ def energy_island_renewable(w):
     technology = energy_island_technology(w)
     renewable = deepcopy(config_provider("renewable")(w))
     renewable[technology]["resource_classes"] = 1
+    # Keep a dedicated project assumption when background offshore is derated.
+    correction = config_provider("energy_islands", default={})(w).get(
+        "project_correction_factor"
+    )
+    if correction is not None:
+        if not 0 < float(correction) <= 1:
+            raise ValueError("Project correction factor must be in (0, 1]")
+        renewable[technology]["correction_factor"] = float(correction)
     return renewable
 
 

@@ -79,11 +79,14 @@ def check_biomass_fuel(n):
     return {"fuel_EUR_MWh": 30.0, "currency_year": 2025, "suppliers": len(supplies)}
 
 
-def preflight(context):
+def preflight(context, *, configfiles=None, prefix=PREFIX):
     import pypsa
 
     report = study.preflight(
-        context, configfiles=CONFIGS, prefix=PREFIX, classes=CLASSES
+        context,
+        configfiles=CONFIGS if configfiles is None else configfiles,
+        prefix=prefix,
+        classes=CLASSES,
     )
     n = pypsa.Network(context.input.network)
     biomass = check_biomass_fuel(n)

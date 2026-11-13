@@ -139,8 +139,9 @@ def check_source(n, gas_inputs, variant="original", *, step_hours=1):
         ),
         "Source must cover the consecutive configured year",
     )
+    project_buses = n.buses.index.to_series().str.startswith("BEI_HUB")
     require(
-        n.buses.drop(index="BEI_HUB", errors="ignore").carrier.eq("AC").sum() == 52,
+        n.buses.loc[~project_buses, "carrier"].eq("AC").sum() == 52,
         "Expected 52 electricity bidding zones",
     )
     settings = {

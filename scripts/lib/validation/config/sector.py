@@ -450,6 +450,13 @@ class SectorConfig(BaseModel):
         0.5,
         description="The share for battery electric vehicles (BEV) that are able to do demand side management (DSM).",
     )
+    bev_v2g_availability: float | None = Field(
+        None,
+        ge=0,
+        le=1,
+        description="Optional V2G share of all BEVs, no greater than the DSM share. "
+        "Separates V2G and managed-only battery cohorts. Null retains native pooled behaviour.",
+    )
     bev_energy: float = Field(
         0.05,
         description="The average available net battery capacity of battery electric vehicles (BEV) in MWh.",
