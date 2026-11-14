@@ -6,8 +6,8 @@ run:
     policy: false
 data:
   swiss_energy_balances:
-    # Native archived 2024 workbook; the live URL now serves a revised layout.
-    source: archive
+    # Sophia cannot reach Wayback; the reader supports both cached/live layouts.
+    source: primary
     version: '2025-10-01'
 sector:
   H2_network: true

@@ -67,12 +67,42 @@ active campaign.
 
 The live BFE Swiss-workbook URL changed its contents while retaining the same
 download address. Job 5015804 therefore failed in `build_swiss_energy_balances`
-on `Total Endenergieverbrauch`, before the optimization model was built. This
-overlay pins the existing native archived `2025-10-01` dataset (the 2000-2024
-workbook), avoiding an unintended switch to the revised live dataset. The Swiss
-reader also handles the revised explicit total labels, cooking/dishwasher split
-and rail footnote, and logs the actual source SHA256 and year coverage. Both
-layouts retain the native 24 energy categories and PJ-to-TWh conversion.
+on `Total Endenergieverbrauch`, before the optimization model was built. The
+Swiss reader now handles both original and revised total labels, the
+cooking/dishwasher split and the rail footnote, and logs the actual source
+SHA256 and year coverage. Both layouts retain the native 24 energy categories
+and PJ-to-TWh conversion. An attempted archived source failed on Sophia in job
+5015836 because Wayback could not be accessed during DAG construction. The
+overlay therefore selects native `primary` source/version `2025-10-01`; it does
+not depend on Wayback. The filename/version alone does not identify the actual
+workbook revision, so retain the logged SHA256 and year coverage.
+
+For the rerun, reuse the main checkout's cached Swiss workbook if present,
+copying only that small input into the separate checkout. Validate the actual
+local workbook with the corrected reader before submitting another fatq job:
+
+```bash
+(
+  set -e
+  cd "$HOME/projects/pypsa-eur-bornholm-full-sector"
+  git pull --ff-only origin feature/bornholm-2035-full-sector-test
+  swiss_input=data/swiss_energy_balances/primary/2025-10-01/12361-VWZ_Webtabellen_2024.xlsx
+  reference="$HOME/projects/pypsa-eur-bornholm/$swiss_input"
+  if [[ -f "$reference" ]]; then
+    mkdir -p "$(dirname "$swiss_input")"
+    cp -- "$reference" "$swiss_input"
+  fi
+  "$HOME/bin/pixi-sophia" run python -c 'from scripts.build_swiss_energy_balances import build_energy_balances; n=build_energy_balances("data/swiss_energy_balances/primary/2025-10-01/12361-VWZ_Webtabellen_2024.xlsx"); print("Swiss reader OK:", n.shape)'
+  sbatch scripts/bornholm_full_sector_fatq.sbatch
+)
+```
+
+The first failed job had already downloaded the native primary workbook; if the
+main cached copy is unavailable, the corrected reader can use that existing
+local input. A revised workbook may revise Swiss historical demands as well as
+labels; this is a feasibility test, and matching source content must be checked
+before treating it as a controlled economic comparison. No reader check alone
+establishes full-model solvability or memory feasibility.
 
 After updating only this full-sector checkout, resubmit the same batch script;
 `--rerun-incomplete` resumes the build and reuses completed valid outputs. Do not

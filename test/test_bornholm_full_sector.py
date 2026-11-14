@@ -121,7 +121,7 @@ def test_effective_native_config_is_one_isolated_central_hybrid():
     assert context.config["sector"]["shipping_oil_share"][2035] == 0.65
     assert context.config["sector"]["imports"]["enable"] is False
     assert context.config["data"]["swiss_energy_balances"] == {
-        "source": "archive",
+        "source": "primary",
         "version": "2025-10-01",
     }
 
