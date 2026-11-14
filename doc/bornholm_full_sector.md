@@ -43,19 +43,25 @@ memory test succeeds.
 ## Submit without changing the running campaign
 
 The active campaign fingerprints all scripts/configuration, including newly added
-files. Do not pull this branch into its active checkout. From that checkout on
-Sophia, create a separate worktree:
+files. Do not pull this branch into its active checkout. Sophia's system Git may
+not support `git worktree`, so use a separate clone. From the active campaign
+checkout, run this block; the subshell stops if cloning or changing directory
+fails, preventing submission from the wrong checkout:
 
 ```bash
-git fetch origin feature/bornholm-2035-full-sector-test
-git worktree add -b feature/bornholm-2035-full-sector-test ../pypsa-eur-bornholm-full-sector FETCH_HEAD
-cd ../pypsa-eur-bornholm-full-sector
-sbatch scripts/bornholm_full_sector_fatq.sbatch
+(
+  set -e
+  cd ..
+  git clone --branch feature/bornholm-2035-full-sector-test https://github.com/TomKae00/pypsa-eur.git pypsa-eur-bornholm-full-sector
+  cd pypsa-eur-bornholm-full-sector
+  test -f scripts/bornholm_full_sector_fatq.sbatch
+  sbatch scripts/bornholm_full_sector_fatq.sbatch
+)
 ```
 
 Native cached HTTP downloads reuse the user's download cache automatically.
-The new worktree rebuilds processed inputs, so preprocessing may take time.
-If necessary, existing raw datasets can be copied into this worktree before
+The new checkout rebuilds processed inputs, so preprocessing may take time.
+If necessary, existing raw datasets can be copied into this checkout before
 submission; do not share processed `resources` or mutable configuration with the
 active campaign.
 
