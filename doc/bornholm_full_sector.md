@@ -48,7 +48,7 @@ Sophia, create a separate worktree:
 
 ```bash
 git fetch origin feature/bornholm-2035-full-sector-test
-git worktree add -b feature/bornholm-2035-full-sector-test ../pypsa-eur-bornholm-full-sector origin/feature/bornholm-2035-full-sector-test
+git worktree add -b feature/bornholm-2035-full-sector-test ../pypsa-eur-bornholm-full-sector FETCH_HEAD
 cd ../pypsa-eur-bornholm-full-sector
 sbatch scripts/bornholm_full_sector_fatq.sbatch
 ```
