@@ -78,8 +78,11 @@ not depend on Wayback. The filename/version alone does not identify the actual
 workbook revision, so retain the logged SHA256 and year coverage.
 
 For the rerun, reuse the main checkout's cached Swiss workbook if present,
-copying only that small input into the separate checkout. Validate the actual
-local workbook with the corrected reader before submitting another fatq job:
+copying only that small input into the separate checkout. Submit the existing
+batch script directly: its native Swiss preprocessing rule runs the corrected
+reader inside the compute-node allocation. Do not invoke `pixi-sophia` directly
+on the login node; the wrapper requires a Slurm allocation, and a rejected
+login-node precheck under `set -e` prevents the later `sbatch` command:
 
 ```bash
 (
@@ -92,14 +95,15 @@ local workbook with the corrected reader before submitting another fatq job:
     mkdir -p "$(dirname "$swiss_input")"
     cp -- "$reference" "$swiss_input"
   fi
-  "$HOME/bin/pixi-sophia" run python -c 'from scripts.build_swiss_energy_balances import build_energy_balances; n=build_energy_balances("data/swiss_energy_balances/primary/2025-10-01/12361-VWZ_Webtabellen_2024.xlsx"); print("Swiss reader OK:", n.shape)'
   sbatch scripts/bornholm_full_sector_fatq.sbatch
 )
 ```
 
 The first failed job had already downloaded the native primary workbook; if the
 main cached copy is unavailable, the corrected reader can use that existing
-local input. A revised workbook may revise Swiss historical demands as well as
+local input. If a standalone reader test is needed, run it through a small
+`srun --partition=workq` allocation rather than on the login node.
+A revised workbook may revise Swiss historical demands as well as
 labels; this is a feasibility test, and matching source content must be checked
 before treating it as a controlled economic comparison. No reader check alone
 establishes full-model solvability or memory feasibility.
