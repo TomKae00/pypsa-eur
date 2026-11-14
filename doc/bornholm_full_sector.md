@@ -65,6 +65,19 @@ If necessary, existing raw datasets can be copied into this checkout before
 submission; do not share processed `resources` or mutable configuration with the
 active campaign.
 
+The live BFE Swiss-workbook URL changed its contents while retaining the same
+download address. Job 5015804 therefore failed in `build_swiss_energy_balances`
+on `Total Endenergieverbrauch`, before the optimization model was built. This
+overlay pins the existing native archived `2025-10-01` dataset (the 2000-2024
+workbook), avoiding an unintended switch to the revised live dataset. The Swiss
+reader also handles the revised explicit total labels, cooking/dishwasher split
+and rail footnote, and logs the actual source SHA256 and year coverage. Both
+layouts retain the native 24 energy categories and PJ-to-TWh conversion.
+
+After updating only this full-sector checkout, resubmit the same batch script;
+`--rerun-incomplete` resumes the build and reuses completed valid outputs. Do not
+pull these changes into the main checkout while its 15 solves are active.
+
 The job reserves one whole fatq node, 32 CPUs and all node RAM for up to 72h.
 Preprocessing uses four cores; the single native annual solve uses 16 Gurobi
 threads, barrier, crossover off and NumericFocus 1. No rolling horizon, artificial

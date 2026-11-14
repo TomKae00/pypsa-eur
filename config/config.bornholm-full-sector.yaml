@@ -4,6 +4,11 @@ run:
   name: [central_hybrid]
   shared_resources:
     policy: false
+data:
+  swiss_energy_balances:
+    # Native archived 2024 workbook; the live URL now serves a revised layout.
+    source: archive
+    version: '2025-10-01'
 sector:
   H2_network: true
   H2_retrofit: true
