@@ -1,0 +1,19 @@
+# One additional central Hybrid feasibility/memory test; layer AFTER 2035 config.
+run:
+  prefix: bornholm_2035_full_sector_v1
+  name: [central_hybrid]
+  shared_resources:
+    policy: false
+sector:
+  H2_network: true
+  H2_retrofit: true
+  shipping: true
+  aviation: true
+  # Already enabled by native defaults; pin explicitly for this diagnostic.
+  co2_spatial: true
+  co2_network: true
+solving:
+  solver_options:
+    gurobi-calibrated-base:
+      # Recomputed from MemAvailable AFTER Linopy model construction.
+      SoftMemLimit: 210

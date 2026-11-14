@@ -9,6 +9,8 @@ import os
 import resource
 import socket
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -27,6 +29,18 @@ MEMORY_PROFILES = {
     "retry": {"limit_gb": 210.0, "fraction": 0.90, "reserve_gb": 20.0},
     "aggfill0": {"limit_gb": 210.0, "fraction": 0.90, "reserve_gb": 20.0},
 }
+
+
+@dataclass(frozen=True)
+class AnnualRun:
+    """Inputs and checks for another full-year, fixed-grid native solve."""
+
+    scenario: str
+    prefix: str
+    configfiles: tuple[str, ...]
+    target: str
+    preflight: Callable
+    check_project: Callable
 
 
 def check_hybrid(n):
@@ -162,12 +176,22 @@ def solve(
     *,
     memory_profile="standard",
     reference_summary=None,
+    annual_run=None,
 ):
     study.require(memory_profile in MEMORY_PROFILES, "Unknown memory profile")
     study.require(
         memory_profile == "standard" or reference_summary is not None,
         "Memory retry requires --reference-summary from the previous job",
     )
+    study.require(
+        annual_run is None
+        or (memory_profile == "standard" and reference_summary is None),
+        "Alternate annual inputs require a fresh standard run",
+    )
+    run = RUN if annual_run is None else annual_run.scenario
+    prefix = PREFIX if annual_run is None else annual_run.prefix
+    configfiles = CONFIGS if annual_run is None else list(annual_run.configfiles)
+    target = TARGET if annual_run is None else annual_run.target
     import numpy as np
     import pypsa
 
@@ -182,17 +206,17 @@ def solve(
     )
 
     directory = Path(directory).resolve()
-    root = (Path("results") / PREFIX).resolve()
+    root = (Path("results") / prefix).resolve()
     study.require(
         directory.is_relative_to(root) and directory != root,
-        "Use a new hourly results subdirectory",
+        "Use a new annual results subdirectory",
     )
     directory.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
     report = {
         "status": "running",
         "phase": "initialising",
-        "scenario": RUN,
+        "scenario": run,
         "node": socket.gethostname(),
         "threads": threads,
         "memory_profile": memory_profile,
@@ -217,10 +241,10 @@ def solve(
     n = None
     try:
         checkpoint()
-        context = study.context_for(RUN, configfiles=CONFIGS)
+        context = study.context_for(run, configfiles=configfiles)
         source = Path(context.input.network)
         study.require(
-            source.resolve() == Path(TARGET).resolve(), "Wrong hourly source path"
+            source.resolve() == Path(target).resolve(), "Wrong annual source path"
         )
         options = configure(context, directory, threads, time_limit)
         if memory_profile == "aggfill0":
@@ -239,15 +263,21 @@ def solve(
                 )
             )
         checkpoint("preflight")
-        report["preflight"] = study.preflight(
-            context,
-            configfiles=CONFIGS,
-            prefix=PREFIX,
-            step_hours=1,
-            classes=reviewed.CLASSES,
+        report["preflight"] = (
+            study.preflight(
+                context,
+                configfiles=configfiles,
+                prefix=prefix,
+                step_hours=1,
+                classes=reviewed.CLASSES,
+            )
+            if annual_run is None
+            else annual_run.preflight(context)
         )
         n = pypsa.Network(source)
-        report["fixed_hybrid"] = check_hybrid(n)
+        report["fixed_hybrid"] = (
+            check_hybrid(n) if annual_run is None else annual_run.check_project(n)
+        )
         from scripts.bornholm_model_assumptions import validate_assumptions
 
         validate_assumptions(n, context.config["bornholm_model_assumptions"])
@@ -344,7 +374,7 @@ def solve(
             )
             checkpoint("native_solve")
             print(
-                f"Hourly fixed Hybrid: threads={threads}, memory profile={memory_profile}, "
+                f"Annual {run}: threads={threads}, memory profile={memory_profile}, "
                 f"Gurobi cap={cap:.2f} GB; results={directory}",
                 flush=True,
             )
