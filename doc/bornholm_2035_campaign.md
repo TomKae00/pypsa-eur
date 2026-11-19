@@ -192,3 +192,6 @@ cable charge moves entirely to Denmark. This gives approximately −€7.6m for 
 and +€3.1m for Germany. This is an ownership sensitivity from rounded previous
 results, before allowing for jointly owned equipment. All original cases triggered
 numerical quality flags.
+
+The [Bornholm assessment README](bornholm_assessment/README.md) sets out the
+decision method and shows how to run the strike and funding-share screen.

@@ -370,3 +370,41 @@ def test_matched_solver_inputs_and_local_welfare(tmp_path):
         assert selected[k].iloc[:2].sum() == pytest.approx(
             selected[k].iloc[2], abs=1e-7
         )
+
+    from scripts.assess_bornholm_agreement import Participation, assess_matched
+
+    destination = tmp_path / "assessment"
+    assess_matched(tmp_path, destination, Participation(), dk_weight=1)
+    screen = pd.read_csv(destination / "agreement_screen.csv")
+    assert len(screen) == 4 and not screen.provisional.any()
+    assert len(screen.design.unique()) == 2
+    assert (destination / "strike_and_funding_share.png").stat().st_size > 0
+
+
+def test_agreement_screen_uses_signed_support_and_separate_account_limits():
+    from scripts.assess_bornholm_agreement import (
+        AgreementCase,
+        Participation,
+        balanced_agreement,
+        support_interval,
+    )
+
+    case = AgreementCase.from_anchor(14.09, 75 - 90.94 / 14.09, 4.78, -9.23, 9.99)
+    requirements = Participation()
+    assert support_interval(case, requirements) == pytest.approx((80.95, 86.49))
+    assert support_interval(case, requirements, fixed_german_share=0.7) is None
+    selected = balanced_agreement(case, requirements)
+    assert selected["dk_gain"] == pytest.approx(2.77)
+    assert selected["de_gain"] == pytest.approx(2.77)
+    assert selected["developer_gain"] == pytest.approx(0)
+    assert selected["german_share"] == pytest.approx(51.658 / 80.95)
+    assert support_interval(case, Participation(dk_cap=20)) is None
+
+    weighted = balanced_agreement(case, requirements, dk_weight=2)
+    assert weighted["dk_gain"] == pytest.approx(2 * weighted["de_gain"])
+    credits = AgreementCase(1.0, 10.0, -2.0, 3.0, 5.0)
+    assert support_interval(credits, requirements) == (-5.0, -2.0)
+    selected = balanced_agreement(credits, requirements)
+    assert selected["dk_support"] == -5.0
+    assert selected["de_support"] == 0.0
+    assert selected["dk_gain"] == selected["de_gain"] == 3.0
