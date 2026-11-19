@@ -37,6 +37,64 @@ Deduct resource costs and count support, congestion income and other transfers
 exactly once. Physical gains and changes in who pays should reconcile across
 the chosen accounting boundary.
 
+### Explain the cost changes across demand pathways
+
+The original 2035 runs give the following provisional annual cost bridge in
+real 2025 euros. The project cost comprises the wind farm and export cables,
+including annualised investment and modelled operation. Avoided background
+cost is the cost reduction in the rest of the model when the project is added.
+
+| Pathway | No-island objective, €bn/year | Hybrid project cost, €m/year | Avoided background cost, €m/year | Hybrid cost premium, €m/year |
+|---|---:|---:|---:|---:|
+| Central | 540.618 | 1,276 | 1,110.6 | 165.7 |
+| EV55 | 522.801 | 1,276 | 1,088.7 | 187.6 |
+| EV65 | 508.260 | 1,276 | 1,075.0 | 201.3 |
+
+The €35.6m/year increase in the hybrid premium from Central to EV65 comes
+from lower avoided background costs. In Central, the hybrid displaces
+1.32 GW of German offshore DC wind and 6.35 TWh/year of its generation.
+This illustrates how the no-island system substitutes for Bornholm. We still
+need the cost attribution across pathways to identify which substitutions
+account for the weaker savings in EV65.
+
+The €32.36bn/year fall in the no-island objective is a separate comparison.
+EV55 and EV65 vary the electric vehicle fleet, industrial process and fuel
+intensities, and fixed electricity demand together. German electricity use
+rises from 732.88 to 822.54 TWh/year between Central and EV65. The objective
+also includes the costs of supplying fuels, heat, transport and industry.
+The objective accounts for resource costs. The CfD ledger records financial
+transfers separately.
+Use the investment and operating cost contributions to establish which of
+those changes drive the lower objective. The combined runs cannot isolate
+the causal effect of additional electricity load.
+[Campaign scenario inputs](../bornholm_2035_campaign.md#native-demand-assumptions-and-additional-fixed-electricity)
+
+Run the cost bridge from the repository root with the six final-v1 no-island
+and treaty-hybrid candidates. The script reads the solved NetCDFs, checks
+paired fixed loads and snapshot weights, and reconciles the native investment
+and operating costs with each saved objective.
+
+```bash
+pixi run --as-is python -m scripts.analyse_bornholm_system_cost \
+  /path/to/bornholm_2035_final_v1/transfer \
+  --output results/bornholm_assessment/system_cost
+```
+
+Use `system_cost_summary.csv` for the annual cost bridge. In
+`system_cost_drivers.csv`, select **no island minus central no island** to
+explain the change in the background system, or **hybrid impact minus central
+hybrid impact** to explain why the project premium changes. Each row reports
+the region, technology carrier and investment or operating contribution.
+Positive numbers increase cost. Cross-border and unallocated costs have
+separate rows. Original solver flags remain relevant to interpreting small
+differences.
+
+If the combined transition obscures the effect of extra load, add only the
+EV65 data-centre demand to Central (+6 TWh in Denmark, +80 TWh in Germany).
+Solve the no-island and treaty-hybrid pair with the same weather, fleet and
+industrial assumptions. Compare its cost premium to Central before treating
+the EV65 result as evidence about electricity demand alone.
+
 ## 2. Screen strikes and funding shares
 
 **Implemented for the central matched campaign.** From the repository root,
