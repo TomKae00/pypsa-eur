@@ -185,10 +185,3 @@ Make location, wind capacity, cable rating, landing country and build date
 explicit choices. Recompute the alternatives available to each country and
 the value of combinations of hubs as the network expands. Reuse the Bornholm
 welfare, participation and staged-commitment tests for these portfolios.
-
-## Analysis of the original 15 runs
-
-The [executed final-v1 notebook](bornholm_final_v1_analysis.ipynb) uses the saved
-rounded tables to compare all 15 runs and evaluate the same central CfD terms
-in EV55 and EV65. It records the source tables, screening flags and the eight
-available national welfare comparisons.
