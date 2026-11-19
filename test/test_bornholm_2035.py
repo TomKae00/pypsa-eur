@@ -263,3 +263,110 @@ echo 800
         assert len(calls) == 2
         assert "--array=0-14%6" in calls[0]
         assert "--dependency=afterany:800" in calls[1]
+
+
+def test_matched_solver_inputs_and_local_welfare(tmp_path):
+    """Exercise both directions, the forced-link allowance and three solved ledgers."""
+    import json
+
+    from scripts.analyse_bornholm_matched import compare
+    from scripts.run_bornholm_matched import DESIGNS, project_legs, resize_danish_leg
+
+    for name, parent, dk_mw in DESIGNS:
+        n = pypsa.Network()
+        n.set_snapshots(pd.date_range("2013-01-01", periods=2, freq="h"))
+        n.snapshot_weightings.loc[:, :] = 4380
+        n.add("Carrier", ["AC", "DC", "wind", "backup"])
+        split = parent == "central_split_radial"
+        for bus, country in (("DKE1", "DK"), ("DE00", "DE")):
+            n.add("Bus", bus, country=country, carrier="AC")
+            n.add("Load", bus + " demand", bus=bus, p_set=[300, 1500])
+            n.add(
+                "Generator",
+                bus + " backup",
+                bus=bus,
+                p_nom=3000,
+                carrier="backup",
+                marginal_cost=80 if country == "DE" else 40,
+            )
+        for ct, bus, mw in (
+            ("DK", "DKE1", 1000 if split else 1200),
+            ("DE", "DE00", 2000),
+        ):
+            hub = "BEI_HUB_" + ct if split else "BEI_HUB"
+            if hub not in n.buses.index:
+                n.add("Bus", hub, country="DK", carrier="AC")
+                wind_cap = mw if split else 3000
+                n.add(
+                    "Generator",
+                    "BEI_WIND_" + ct if split else "BEI_WIND",
+                    bus=hub,
+                    p_nom_extendable=True,
+                    p_nom_min=wind_cap,
+                    p_nom_max=wind_cap,
+                    p_max_pu=[0.85, 0.4],
+                    carrier="wind",
+                    capital_cost=100,
+                )
+            link = (
+                "BEI_TO_"
+                + ("DK2" if ct == "DK" else "DE")
+                + ("_SPLIT" if split else "")
+            )
+            n.add(
+                "Link",
+                link,
+                bus0=hub,
+                bus1=bus,
+                carrier="DC",
+                length=80,
+                p_min_pu=-1,
+                capital_cost=10,
+                p_nom_extendable=True,
+                p_nom_min=mw,
+                p_nom_max=mw,
+            )
+        lossy_bidirectional_links(n, "DC", {"efficiency_static": 0.98})
+        total = n.links.eval("length*p_nom_min").sum()
+        n.add(
+            "GlobalConstraint",
+            "budget",
+            type="transmission_volume_expansion_limit",
+            carrier_attribute="DC",
+            sense="<=",
+            constant=total + 500,
+        )
+        n.global_constraints.loc["budget", "energy_island_allowance"] = total
+        if name == "central_hybrid_matched":
+            resize_danish_leg(n)
+            assert n.global_constraints.at["budget", "constant"] == 3000 * 80 + 500
+        kind = "split_radial" if split else "hybrid"
+        project_legs(n, {"project": kind}, dk_mw)
+        n.meta["matched_design"] = dict(name=name, parent=parent, dk_mw=dk_mw)
+        assert n.optimize(solver_name="highs", threads=1, log_to_console=False) == (
+            "ok",
+            "optimal",
+        )
+        dest = tmp_path / name
+        dest.mkdir()
+        n.export_to_netcdf(dest / "candidate_2035.nc")
+        (dest / "summary.json").write_text(
+            json.dumps(
+                dict(
+                    status="checks_passed",
+                    scenario={"name": name},
+                    objective=n.objective,
+                    screening_issues=[],
+                    source_sha256="test-input",
+                    code_sha256="test",
+                )
+            )
+        )
+    runs, changes = compare(tmp_path)
+    assert len(runs) == 3 and len(changes) == 24
+    assert changes.residual.abs().max() < 1e-7
+    selected = changes.query("strike==75 and pooled_cost_share==0")
+    for k in ("system", "DK", "DE", "developer", "others"):
+        assert selected[k].iloc[:2].sum() == pytest.approx(
+            selected[k].iloc[2], abs=1e-7
+        )

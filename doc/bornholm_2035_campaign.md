@@ -143,3 +143,52 @@ After this campaign, use two additional coherent weather years for fixed-capacit
 dispatch of the central baseline/hybrid pair. Those four operational tests are
 separate from this submission. Myopic investment and detailed country/CfD welfare
 accounting are later stages.
+
+## Central matched-cable experiment
+
+Run from the campaign checkout on Sophia with the two original unsolved networks
+and their prepared.json files still under the final-v1 resources and results
+prefixes. Submit from the repository root.
+
+```bash
+sbatch scripts/bornholm_matched.sbatch
+```
+
+The array solves split radial (1/2 GW), hybrid (1/2 GW), and hybrid (1.2/2 GW),
+in that order. It verifies the original input hashes before use. Both directional
+models of the Danish cable are resized in the middle case. The original per-MW
+line and converter costs and losses apply. Dedicated and shared fixed-station
+costs are not independently itemised by this model. All three use the same new
+numerical settings (NumericFocus 2, BarConvTol 1e-9) and the original acceptance
+thresholds. Exit code 3 retains a flagged candidate for review. A new submission
+has its own results and resources under bornholm_2035_matched/ARRAY_JOB_ID.
+
+After all three tasks have finished, copy the transfer folder **from your laptop**,
+substituting the Slurm array ID and the destination path to your local model checkout.
+
+```bash
+rsync -avL s253303@sophia.dtu.dk:projects/pypsa-eur-bornholm/results/bornholm_2035_matched/ARRAY_JOB_ID/transfer/ ~/bornholm-matched-results/transfer/
+```
+
+Open `doc/bornholm_matched_central.ipynb` in the local checkout of this branch and
+set DATA_DIR to the copied transfer directory (absolute path). It reports both
+increments and their total, solver flags and settlement residuals. Repeatability
+means comparing the sizes and signs of the *economic* differences as well as the
+solver diagnostics. All figures represent one operating year. The pooled cable-cost
+and landing-country allocations bracket two accounting assumptions; replace the
+shared equipment assumption with itemised costs when available. The notebook
+uses a two-sided actual-output proxy with a 70% German charge or credit and equal
+rent shares.
+
+From the original executed central notebooks, the treaty hybrid saved €18.7651m/year
+against split radial, while its annual cable charge was about €24.7m higher
+(€365.1m versus €340.4m). Other system cost therefore fell by about €43.5m/year.
+Those two terms do not separately identify the operational and capacity effects.
+Under pooled export costs at €75/MWh, the Danish, German and developer gains were
++€4.78m, −€9.23m and +€9.99m. With both designs charging their bundled cables to
+their landing countries and keeping congestion rent pooled, the incremental German
+cable cost is unchanged (same German route and rating). The €24.7m incremental
+cable charge moves entirely to Denmark. This gives approximately −€7.6m for Denmark
+and +€3.1m for Germany. This is an ownership sensitivity from rounded previous
+results, before allowing for jointly owned equipment. All original cases triggered
+numerical quality flags.
