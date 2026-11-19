@@ -195,3 +195,50 @@ numerical quality flags.
 
 The [Bornholm assessment README](bornholm_assessment/README.md) sets out the
 decision method and shows how to run the strike and funding-share screen.
+
+## Commitment stress runs
+
+This optional nine-task array retains the 3 GW Bornholm build. It crosses
+split radial (1/2 GW), treaty hybrid (1.2/2 GW) and matched hybrid (1/2 GW)
+with three stresses. The matched hybrid is an equal-rating modelling control.
+All three stresses start from Central demand and use the same weather,
+solver settings and other system inputs.
+
+| Tasks | Stress | Intervention |
+|---|---|---|
+| 0–2 | More demand in DK2 | Add 5 TWh/year as a flat fixed load at the DK2 receiving bus. |
+| 3–5 | More demand in Germany | Add the same 5 TWh/year and flat profile at the German receiving bus. |
+| 6–8 | More wind competing with Bornholm | Raise native offshore capacity minima in DK2 and Germany by 1 GW per region above the original solved Central split-radial portfolio. Allocate the increment to eligible sites in order of correlation with the Bornholm availability profile. |
+
+The offshore stress uses existing native profiles, potential bounds and
+investment costs. It commits the reference portfolio in the two regions
+and the additional capacity on top of it. Other investment and dispatch
+can respond. Germany’s modelled offshore resources are aggregated at
+national resolution. The doses are controlled sensitivities.
+
+Run from the campaign checkout on Sophia. Keep the original Central hybrid
+and split-radial composed inputs, their prepared records, and the original
+Central split-radial solved network and summary. The input check verifies
+the original hashes, the reference solution, capacity headroom and the
+paired demand and snapshot weights before starting the solves.
+
+```bash
+check_id=$(sbatch --parsable --array=0 --time=00:30:00 \
+  scripts/bornholm_commitment_stress.sbatch --check) &&
+sbatch --dependency=afterok:"${check_id%%;*}" --kill-on-invalid-dep=yes \
+  scripts/bornholm_commitment_stress.sbatch
+```
+
+The check does not start a solver. At most six solves can run concurrently.
+Logs are written to `slurm-bornholm-commitment-<job>_<task>.out`.
+Transfer outputs are under `results/bornholm_2035_commitment_stress/<job>/transfer/`.
+Each case includes its candidate network, summary and prepared record. An
+optimal candidate with numerical screening flags is labelled
+`optimal_needs_review` and its Slurm task exits with code 3. Inspect those
+flags before interpreting small differences.
+
+For the joint funding comparison, pair the three layouts *within* each
+stress. Compare each hybrid against split radial, and use the difference
+between the two hybrids to measure the value of the extra Danish rating.
+Test a common funding rule against the original demand cases and these
+stress cases after the physical solves.
