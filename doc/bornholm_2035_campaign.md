@@ -196,6 +196,46 @@ numerical quality flags.
 The [Bornholm assessment README](bornholm_assessment/README.md) sets out the
 decision method and shows how to run the strike and funding-share screen.
 
+## Five-layout screen across the three demand pathways
+
+Run this screen to compare connection choices before adding separate demand
+and offshore stresses. The wind build remains 3 GW. Each pathway uses its
+archived final-v1 split-radial and treaty-hybrid inputs.
+
+| Layout | Denmark / Germany rating | Comparison |
+|---|---|---|
+| Split radial | 1.0 / 2.0 GW | Modelled fallback |
+| Treaty hybrid | 1.2 / 2.0 GW | Negotiated configuration |
+| Matched hybrid | 1.0 / 2.0 GW | Compare hybrid routing at equal ratings |
+| Hybrid, more DK capacity | 1.4 / 1.8 GW | Shift 200 MW toward Denmark at the same total rating |
+| Hybrid, more DE capacity | 1.0 / 2.2 GW | Shift 200 MW toward Germany at the same total rating |
+
+Tasks 0–4 run Central, 5–9 EV55, and 10–14 EV65, in table order within each
+group. This re-solves the six original split-radial and treaty-hybrid cases
+alongside the nine additional combinations under the same solver settings.
+The shifted ratings are modelling sensitivities. The model scales existing
+per-MW cable costs and keeps the original losses. Both flow directions use
+the new rating. Any change in mandatory transmission allowance is applied
+to its matching global constraint to preserve the background grid budget.
+
+From the Sophia checkout, run the input check and queue the dependent array.
+The check reads all six prepared input networks and their provenance records
+and verifies matched demand, snapshots, wind availability and background
+resource budgets after resizing.
+
+```bash
+check_id=$(sbatch --parsable --array=0 --time=00:30:00 \
+  scripts/bornholm_matched.sbatch --layout-screen --check) &&
+sbatch --array=0-14%6 --dependency=afterok:"${check_id%%;*}" \
+  --kill-on-invalid-dep=yes scripts/bornholm_matched.sbatch --layout-screen
+```
+
+The input check does not start a solver. Outputs go to
+`results/bornholm_2035_layout_screen/<job>/transfer/`. Each case includes the
+candidate network, prepared record and summary. An optimal candidate with
+solver screening flags is labelled `optimal_needs_review` and the task exits
+with code 3. Use comparable, screened runs for the final welfare comparison.
+
 ## Commitment stress runs
 
 This optional nine-task array retains the 3 GW Bornholm build. It crosses

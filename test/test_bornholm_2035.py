@@ -408,3 +408,72 @@ def test_agreement_screen_uses_signed_support_and_separate_account_limits():
     assert selected["dk_support"] == -5.0
     assert selected["de_support"] == 0.0
     assert selected["dk_gain"] == selected["de_gain"] == 3.0
+
+
+@pytest.mark.parametrize(("dk_mw", "de_mw"), [(1000, 2000), (1400, 1800), (1000, 2200)])
+def test_layout_resizing_keeps_native_transmission_budgets(dk_mw, de_mw):
+    from scripts.run_bornholm_matched import project_legs, resize_hybrid_legs
+
+    n = pypsa.Network()
+    n.add("Bus", ["BEI_HUB", "DKE1", "DE00"])
+    for name, bus, capacity, length, cost in (
+        ("BEI_TO_DK2", "DKE1", 1200, 80, 12),
+        ("BEI_TO_DE", "DE00", 2000, 150, 20),
+    ):
+        n.add(
+            "Link",
+            name,
+            bus0="BEI_HUB",
+            bus1=bus,
+            carrier="DC",
+            length=length,
+            capital_cost=cost,
+            p_min_pu=-1,
+            p_nom_extendable=True,
+            p_nom_min=capacity,
+            p_nom_max=capacity,
+        )
+    lossy_bidirectional_links(n, "DC", {"efficiency_static": 0.98})
+    for name, measure, constraint_type in (
+        ("volume", "length", "transmission_volume_expansion_limit"),
+        ("cost", "capital_cost", "transmission_expansion_cost_limit"),
+    ):
+        allowance = n.links.p_nom_min @ n.links[measure]
+        n.add(
+            "GlobalConstraint",
+            name,
+            type=constraint_type,
+            carrier_attribute="DC",
+            sense="<=",
+            constant=allowance + 500,
+        )
+        n.global_constraints.loc[name, "energy_island_allowance"] = allowance
+
+    resize_hybrid_legs(n, dk_mw, de_mw)
+    project_legs(n, {"project": "hybrid"}, dk_mw, de_mw=de_mw)
+    for name, measure in (("volume", "length"), ("cost", "capital_cost")):
+        row = n.global_constraints.loc[name]
+        assert row.energy_island_allowance == pytest.approx(
+            n.links.p_nom_min @ n.links[measure]
+        )
+        assert row.constant - row.energy_island_allowance == pytest.approx(500)
+
+
+def test_layout_screen_has_all_five_ratings_in_each_original_pathway():
+    from scripts.run_bornholm_matched import design_table
+
+    designs = design_table(layout_screen=True)
+    expected = {
+        ("split_radial", 1000, 2000),
+        ("hybrid", 1200, 2000),
+        ("hybrid_matched", 1000, 2000),
+        ("hybrid_more_dk", 1400, 1800),
+        ("hybrid_more_de", 1000, 2200),
+    }
+    assert len(designs) == 15
+    for world in ("central", "ev55", "ev65"):
+        assert {
+            (name.removeprefix(f"{world}_"), dk_mw, de_mw)
+            for name, parent, dk_mw, de_mw in designs
+            if name.startswith(f"{world}_") and parent.startswith(f"{world}_")
+        } == expected

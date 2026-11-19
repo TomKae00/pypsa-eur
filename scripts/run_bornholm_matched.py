@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Re-solve the central split radial, matched hybrid and treaty hybrid from audited inputs."""
+"""Solve matched Bornholm layouts from the audited final-v1 campaign inputs."""
 
 import argparse
 import json
@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from scripts import bornholm_2035 as campaign
 from scripts import run_bornholm_2035 as original
@@ -17,15 +18,24 @@ DESIGNS = (
     ("central_hybrid_matched", "central_hybrid", 1000),
     ("central_hybrid", "central_hybrid", 1200),
 )
+LAYOUTS = (
+    ("split_radial", "split_radial", 1000, 2000),
+    ("hybrid", "hybrid", 1200, 2000),
+    ("hybrid_matched", "hybrid", 1000, 2000),
+    ("hybrid_more_dk", "hybrid", 1400, 1800),
+    ("hybrid_more_de", "hybrid", 1000, 2200),
+)
+LAYOUT_WORLDS = ("central", "ev55", "ev65")
 BOUNDS = ["p_nom_min", "p_nom_max"]
 ROOT = "bornholm_2035_matched"
+LAYOUT_ROOT = "bornholm_2035_layout_screen"
 require = campaign.welfare.require
 
 
-def project_legs(n, source_case, dk_mw, *, solved=False):
+def project_legs(n, source_case, dk_mw, *, de_mw=2000, solved=False):
     split = source_case["project"] == "split_radial"
     legs = []
-    for country, onshore, capacity in (("DK2", "DKE1", dk_mw), ("DE", "DE00", 2000)):
+    for country, onshore, capacity in (("DK2", "DKE1", dk_mw), ("DE", "DE00", de_mw)):
         name = f"BEI_TO_{country}" + ("_SPLIT" if split else "")
         hub = "BEI_HUB" + ("_DK" if country == "DK2" else "_DE") if split else "BEI_HUB"
         reverse = name + "-reversed"
@@ -60,10 +70,12 @@ def project_legs(n, source_case, dk_mw, *, solved=False):
     )
 
 
-def resize_danish_leg(n):
-    """Preserve the background transmission budget if the native cap is enabled."""
-    forward = "BEI_TO_DK2"
-    rows = [forward, forward + "-reversed"]
+def resize_hybrid_legs(n, dk_mw, de_mw):
+    """Resize both directions without changing the background grid budget."""
+    changes = {
+        "BEI_TO_DK2": dk_mw - n.links.at["BEI_TO_DK2", "p_nom_min"],
+        "BEI_TO_DE": de_mw - n.links.at["BEI_TO_DE", "p_nom_min"],
+    }
     for name, row in n.global_constraints.iterrows():
         unit = {
             "transmission_volume_expansion_limit": "length",
@@ -72,20 +84,42 @@ def resize_danish_leg(n):
         if unit and "DC" in str(row.carrier_attribute).replace(" ", "").split(","):
             allowance = row.get("energy_island_allowance", np.nan)
             require(np.isfinite(allowance), f"Missing forced-link allowance for {name}")
-            delta = 200 * n.links.at[forward, unit]
-            n.global_constraints.at[name, "constant"] -= delta
-            n.global_constraints.at[name, "energy_island_allowance"] -= delta
-    n.links.loc[rows, BOUNDS] = 1000.0
+            # The reverse copies have zero length and capital cost in PyPSA.
+            delta = sum(
+                change * n.links.at[leg, unit] for leg, change in changes.items()
+            )
+            n.global_constraints.at[name, "constant"] += delta
+            n.global_constraints.at[name, "energy_island_allowance"] += delta
+    for leg, capacity in (("BEI_TO_DK2", dk_mw), ("BEI_TO_DE", de_mw)):
+        n.links.loc[[leg, leg + "-reversed"], BOUNDS] = capacity
 
 
-def run(index, batch):
+def resize_danish_leg(n):
+    """Resize the original Central matched control to 1 GW on the Danish shore."""
+    resize_hybrid_legs(n, 1000, 2000)
+
+
+def design_table(layout_screen=False):
+    if not layout_screen:
+        return [(name, parent, dk_mw, 2000) for name, parent, dk_mw in DESIGNS]
+    return [
+        (f"{world}_{name}", f"{world}_{parent}", dk_mw, de_mw)
+        for world in LAYOUT_WORLDS
+        for name, parent, dk_mw, de_mw in LAYOUTS
+    ]
+
+
+def validate_design(n, config, source_case, dk_mw, de_mw, *, solved=False):
+    project_legs(n, source_case, dk_mw, de_mw=de_mw, solved=solved)
+    return campaign.validate(
+        n, config, source_case, solved, hybrid_dk_mw=dk_mw, hybrid_de_mw=de_mw
+    )
+
+
+def load_design(config, source_case, dk_mw, de_mw):
     import pypsa
 
-    config = campaign.read_config()
-    original.check_definitions(config)
-    name, parent, dk_mw = DESIGNS[index]
-    cases = {c["name"]: c for c in campaign.scenarios(config)}
-    source_case = cases[parent]
+    parent = source_case["name"]
     source, source_dir = runner.paths(config, source_case)
     provenance = json.loads((source_dir / "prepared.json").read_text())
     require(
@@ -97,19 +131,74 @@ def run(index, batch):
         runner.digest(source) == provenance["prepared_sha256"],
         f"Changed archived input: {source}",
     )
-    trial = dict(source_case, index=index, name=name)
-    config["prefix"] = f"{ROOT}/{batch}"
-    target, directory = runner.paths(config, trial)
-    directory.mkdir(parents=True, exist_ok=False)
-    target.parent.mkdir(parents=True, exist_ok=True)
     n = pypsa.Network(source)
     require("solve_result" not in n.meta, "Expected unsolved composed network")
     campaign.validate(n, config, source_case)
-    project_legs(
-        n, source_case, 1000 if source_case["project"] == "split_radial" else 1200
+    default_dk_mw = 1000 if source_case["project"] == "split_radial" else 1200
+    project_legs(n, source_case, default_dk_mw)
+    changed = (dk_mw, de_mw) != (default_dk_mw, 2000)
+    if changed:
+        require(source_case["project"] == "hybrid", "Only rescale the hybrid links")
+        resize_hybrid_legs(n, dk_mw, de_mw)
+    validate_design(n, config, source_case, dk_mw, de_mw)
+    return n, source, provenance, changed
+
+
+def comparison_inputs(n, source_case):
+    constraints = n.global_constraints.drop(columns="mu", errors="ignore").copy()
+    if "energy_island_allowance" in constraints:
+        constraints["constant"] -= constraints.pop("energy_island_allowance").fillna(0)
+    wind = "BEI_WIND_DK" if source_case["project"] == "split_radial" else "BEI_WIND"
+    return (
+        n.meta[campaign.AUDIT_KEY]["demand_sha256"],
+        n.snapshot_weightings.copy(),
+        n.generators_t.p_max_pu[wind].copy(),
+        constraints.sort_index(),
     )
-    if name == "central_hybrid_matched":
-        resize_danish_leg(n)
+
+
+def check_layout_inputs():
+    config = campaign.read_config()
+    original.check_definitions(config)
+    sources = {c["name"]: c for c in campaign.scenarios(config)}
+    reference = {}
+    for name, parent, dk_mw, de_mw in design_table(layout_screen=True):
+        source_case = sources[parent]
+        n, *_ = load_design(config, source_case, dk_mw, de_mw)
+        world = source_case["world"]
+        inputs = comparison_inputs(n, source_case)
+        if world in reference:
+            base = reference[world]
+            require(
+                inputs[0] == base[0]
+                and inputs[1].equals(base[1])
+                and np.array_equal(inputs[2], base[2]),
+                f"Unmatched demand, snapshots or wind resource in {name}",
+            )
+            pd.testing.assert_frame_equal(inputs[3], base[3], rtol=1e-10, atol=1e-6)
+        else:
+            reference[world] = inputs
+        print(f"Checked {name}: {dk_mw}/{de_mw} MW", flush=True)
+        del n
+    print("All fifteen inputs passed. No optimisation was run.")
+
+
+def run(index, batch, *, layout_screen=False):
+    config = campaign.read_config()
+    original.check_definitions(config)
+    name, parent, dk_mw, de_mw = design_table(layout_screen)[index]
+    sources = {c["name"]: c for c in campaign.scenarios(config)}
+    source_case = sources[parent]
+    n, source, provenance, changed = load_design(config, source_case, dk_mw, de_mw)
+    trial = dict(source_case, index=index, name=name)
+    if layout_screen:
+        trial.update(dk_mw=dk_mw, de_mw=de_mw)
+    root = LAYOUT_ROOT if layout_screen else ROOT
+    config["prefix"] = f"{root}/{batch}"
+    target, directory = runner.paths(config, trial)
+    directory.mkdir(parents=True, exist_ok=False)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if changed:
         temp = target.with_suffix(".tmp.nc")
         n.export_to_netcdf(temp)
         temp.replace(target)
@@ -118,8 +207,7 @@ def run(index, batch):
     del n
 
     def validate(network, cfg, case, solved=False):
-        project_legs(network, source_case, dk_mw, solved=solved)
-        return campaign.validate(network, cfg, source_case, solved, hybrid_dk_mw=dk_mw)
+        return validate_design(network, cfg, source_case, dk_mw, de_mw, solved=solved)
 
     def context_for(case):
         context = original.context_for(source_case)
@@ -129,7 +217,10 @@ def run(index, batch):
         options[context.params.solving["solver"]["options"]].update(
             NumericFocus=2, BarConvTol=1e-9
         )
-        context.config["matched_design"] = dict(name=name, parent=parent, dk_mw=dk_mw)
+        identity = dict(name=name, parent=parent, dk_mw=dk_mw)
+        if layout_screen:
+            identity["de_mw"] = de_mw
+        context.config["matched_design"] = identity
         return context
 
     runner.write_json(
@@ -143,6 +234,7 @@ def run(index, batch):
             campaign_config_sha256=runner.digest(campaign.SPEC),
             code_sha256=runner.code_fingerprint(),
             dk_leg_mw=dk_mw,
+            de_leg_mw=de_mw,
         ),
     )
     status = runner.solve(
@@ -161,16 +253,36 @@ def run(index, batch):
         for filename, src in (
             ("candidate_2035.nc", Path(result["candidate_network"])),
             ("summary.json", directory / "summary.json"),
+            ("prepared.json", directory / "prepared.json"),
         ):
             (transfer / filename).symlink_to(src.resolve(), target_is_directory=False)
     return status
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("index", choices=range(len(DESIGNS)), type=int)
+    parser.add_argument("index", type=int, nargs="?")
+    parser.add_argument("--layout-screen", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--plan", action="store_true")
+    mode.add_argument("--check", action="store_true")
     args = parser.parse_args()
+    designs = design_table(args.layout_screen)
+    if args.plan or args.check:
+        if args.index is not None or (args.check and not args.layout_screen):
+            parser.error("Use --layout-screen --check without a task index")
+        if args.plan:
+            for i, (name, _, dk_mw, de_mw) in enumerate(designs):
+                print(f"{i}\t{name}\t{dk_mw}/{de_mw} MW")
+        else:
+            check_layout_inputs()
+        return 0
+    if args.index not in range(len(designs)):
+        parser.error(f"Expected a task index from 0 to {len(designs) - 1}")
     batch = os.environ["SLURM_ARRAY_JOB_ID"]
-    if not batch.isdecimal():
-        raise ValueError("Expected a numeric Slurm array job ID")
-    raise SystemExit(run(args.index, batch))
+    require(batch.isdecimal(), "Expected a numeric Slurm array job ID")
+    return run(args.index, batch, layout_screen=args.layout_screen)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

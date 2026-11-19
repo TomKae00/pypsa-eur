@@ -202,7 +202,7 @@ def apply(n, settings):
     )
 
 
-def project_check(n, project, *, hybrid_dk_mw=1200):
+def project_check(n, project, *, hybrid_dk_mw=1200, hybrid_de_mw=2000):
     names = n.generators.index[n.generators.index.str.startswith("BEI_WIND")]
     expected = (
         {"BEI_WIND_DK": 1000.0, "BEI_WIND_DE": 2000.0}
@@ -220,7 +220,7 @@ def project_check(n, project, *, hybrid_dk_mw=1200):
         )
     expected_links = {
         "baseline": {},
-        "hybrid": {"BEI_TO_DK2": hybrid_dk_mw, "BEI_TO_DE": 2000},
+        "hybrid": {"BEI_TO_DK2": hybrid_dk_mw, "BEI_TO_DE": hybrid_de_mw},
         "split_radial": {"BEI_TO_DK2_SPLIT": 1000, "BEI_TO_DE_SPLIT": 2000},
         "radial_dk": {"BEI_TO_DK2_RADIAL": 3000},
         "radial_de": {"BEI_TO_DE_RADIAL": 3000},
@@ -251,7 +251,7 @@ def project_check(n, project, *, hybrid_dk_mw=1200):
     return dict(wind_MW=sum(expected.values()), export_MW=sum(expected_links.values()))
 
 
-def validate(n, config, case, solved=False, *, hybrid_dk_mw=1200):
+def validate(n, config, case, solved=False, *, hybrid_dk_mw=1200, hybrid_de_mw=2000):
     settings = definitions(config)[case["name"]]["bornholm_2035"]
     audit = n.meta.get(AUDIT_KEY, {})
     welfare.require(audit.get("settings") == settings, "Wrong 2035 scenario settings")
@@ -286,7 +286,9 @@ def validate(n, config, case, solved=False, *, hybrid_dk_mw=1200):
         n.meta["energy_islands"]["project_correction_factor"] == 0.8855,
         "Wrong dedicated Bornholm correction",
     )
-    project_check(n, case["project"], hybrid_dk_mw=hybrid_dk_mw)
+    project_check(
+        n, case["project"], hybrid_dk_mw=hybrid_dk_mw, hybrid_de_mw=hybrid_de_mw
+    )
     return welfare.capacity_report(
         n, welfare.capacity_limits(config, case), solved=solved
     )
