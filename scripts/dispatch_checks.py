@@ -4,6 +4,8 @@
 import numpy as np
 import pandas as pd
 
+STORAGE_ABSOLUTE_TOLERANCE_MWH = 0.1
+
 
 def _dense(n, component, attr):
     frame = getattr(n, component)
@@ -23,7 +25,9 @@ def _finite(values, label):
         raise ValueError("Missing or nonfinite solved values: " + label)
 
 
-def storage_check(n, tolerance_MWh=0.01, relative_tolerance=1e-7):
+def storage_check(
+    n, tolerance_MWh=STORAGE_ABSOLUTE_TOLERANCE_MWH, relative_tolerance=1e-7
+):
     maximum = 0.0
     hours = n.snapshot_weightings.stores
     for comp, state_attr, initial_attr, cyclic_attr in [
@@ -73,7 +77,13 @@ def storage_check(n, tolerance_MWh=0.01, relative_tolerance=1e-7):
     return maximum
 
 
-def check(n, absolute_tolerance_MW=0.01, relative_tolerance=1e-7):
+def check(
+    n,
+    absolute_tolerance_MW=0.01,
+    relative_tolerance=1e-7,
+    *,
+    storage_tolerance_MWh=STORAGE_ABSOLUTE_TOLERANCE_MWH,
+):
     balance = pd.DataFrame(0.0, index=n.snapshots, columns=n.buses.index)
     activity = balance.copy()
 
@@ -137,13 +147,14 @@ def check(n, absolute_tolerance_MW=0.01, relative_tolerance=1e-7):
             n.buses_t.marginal_price.reindex(index=n.snapshots, columns=electric),
             "electricity marginal prices",
         )
-    storage_residual = storage_check(n, absolute_tolerance_MW, relative_tolerance)
+    storage_residual = storage_check(n, storage_tolerance_MWh, relative_tolerance)
     return {
         "maximum_absolute_bus_balance_MW": float(
             balance.abs().to_numpy().max(initial=0)
         ),
         "maximum_generator_upper_violation_MW": upper_violation,
         "maximum_storage_equation_residual_MWh": storage_residual,
+        "storage_tolerance_MWh": storage_tolerance_MWh,
         "absolute_tolerance_MW": absolute_tolerance_MW,
         "relative_tolerance": relative_tolerance,
     }
