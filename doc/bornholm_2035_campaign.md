@@ -282,3 +282,87 @@ stress. Compare each hybrid against split radial, and use the difference
 between the two hybrids to measure the value of the extra Danish rating.
 Test a common funding rule against the original demand cases and these
 stress cases after the physical solves.
+
+## Central follow-up
+
+The follow-up uses the prepared final-v1 Central treaty case as its common
+input. It changes the required Bornholm wind and cable capacities. Wind
+availability, cable losses and per-MW costs retain the treaty assumptions.
+Removing a landing removes both directed links and adjusts the project's
+allowance in any native DC expansion budget. The one-country layouts are
+physical counterfactuals at the Bornholm site. They do not assume a particular
+national ownership or CfD agreement.
+
+| Array task | Layout | DK / DE cable GW | Wind GW |
+| --- | --- | --- | --- |
+| 0 | Matched hybrid | 1.0 / 2.0 | 3.0 |
+| 1 | Germany alone | 0 / 2.0 | 2.0 |
+| 2 | Denmark alone | 1.2 / 0 | 1.2 |
+| 3 | Smaller island | 1.2 / 2.0 | 2.0 |
+
+Reuse the Central no-island, split radial, treaty hybrid and more-DE results
+already available. Compare the smaller island directly with the treaty hybrid
+to assess the incremental third GW at identical cable ratings. On Sophia,
+from the Bornholm checkout:
+
+```bash
+git pull --ff-only
+sbatch --array=0-3 scripts/bornholm_matched.sbatch --central-followup
+```
+
+For an input-only run, use `--array=0` and pass
+`--central-followup --check` to the script. The prepared input is
+`resources/bornholm_2035_final_v1/central_hybrid/networks/composed_2035.nc`
+and its run-level `prepared.json` must be available. New candidates and
+summaries are under `results/bornholm_2035_central_followup/<array-job>/`.
+
+## Historical fixed-capacity comparison
+
+Start with the saved corrected 2024 hindcast if available. It is the most
+recent solved year identified on Sophia. The reviewed 2023 hindcast is an
+alternative if the 2024 file is unavailable or its data cannot be used. The
+runner checks the year, full hourly coverage (8,784 hours for 2024), fixed
+capacities and dynamic fuel costs. It uses the historical demand, fuel/CO2
+inputs, fleet, grid and any transmission constraints recorded in the archive.
+Both cases are dispatched afresh. The treatment adds the 3 GW wind and the
+1.2/2 GW treaty cables. The wind profile is the capacity-weighted availability
+of the existing DK2 offshore fleet in the selected weather year. It is a proxy
+for the project's site. Cable losses and annualised wind, collection and cable
+capital costs are taken from the prepared 2035 Central treaty template.
+
+From the same Bornholm checkout on Sophia:
+
+```bash
+historical="$HOME/projects/pypsa-eur-hindcast/results/hindcast-corrected-2024/network.nc"
+sbatch scripts/bornholm_historical.sbatch "$historical" --year 2024
+```
+
+For 2023, use `results/hindcast-reviewed-2023/network.nc` in the hindcast
+checkout and pass `--year 2023`. The historical job also accepts `--check` for
+input validation without dispatch. Results are written to
+`results/bornholm_historical/<year>/<job>/`. Examine operating savings and load
+shedding before comparing against annualised project cost. The summary shows
+operating savings in the original price basis and an indicative net figure in
+EUR2025. The historical operating-cost conversion uses [Eurostat euro-area
+annual average HICP](https://ec.europa.eu/eurostat/statistics-explained/SEPDF/cache/4176.pdf)
+(2.4% in 2024 and 2.1% in 2025). Use `--operating-to-eur2025` if the source
+requires another conversion. This is a one-year counterfactual with the
+historical fleet fixed.
+
+## Interpretation of demand sensitivities
+
+In final-v1, the treaty hybrid's incremental cost against the corresponding
+no-island case rises from €165.7m/year (Central) to €201.3m/year (EV65).
+Project costs are nearly constant and savings elsewhere fall from about
+€1,111m to €1,075m/year. EV55 and EV65 jointly change EV uptake and available
+flexibility, industrial conversion, and fixed data-centre demand. At Central
+demand, the separate V2G test lowered the Bornholm premium when participation
+increased. The bundled results leave the contribution of each driver open.
+
+The earlier +20% DK/DE fixed-load sensitivity increased total costs and reduced
+the Bornholm premium from €196.6m to €135.1m/year. In that run the hybrid
+displaced about 3.49 GW more German onshore wind capacity than it did at the
+starting demand. The slower-onshore ceiling remained above both solutions.
+This avoided investment depends on how much alternative capacity would still
+be open to change. Keep the fixed-fleet operating comparison alongside the
+endogenous 2035 investment result.

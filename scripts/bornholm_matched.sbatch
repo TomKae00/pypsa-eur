@@ -20,8 +20,12 @@ elif [[ $# == 1 && "$1" == --layout-screen && "$index" =~ ^([0-9]|1[0-4])$ ]]; t
     args=(--layout-screen "$index")
 elif [[ $# == 2 && "$1" == --layout-screen && "$2" == --check && "$index" == 0 ]]; then
     args=(--layout-screen --check)
+elif [[ $# == 1 && "$1" == --central-followup && "$index" =~ ^[0-3]$ ]]; then
+    args=(--central-followup "$index")
+elif [[ $# == 2 && "$1" == --central-followup && "$2" == --check && "$index" == 0 ]]; then
+    args=(--central-followup --check)
 else
-    printf 'Use the default matched array or --array=0-14%%6 with --layout-screen.\n' >&2
+    printf 'Use the default matched array or --array=0-14%%6 with --layout-screen or --array=0-3 with --central-followup.\n' >&2
     exit 2
 fi
 pixi_wrapper="${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}"

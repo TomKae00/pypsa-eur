@@ -410,7 +410,9 @@ def test_agreement_screen_uses_signed_support_and_separate_account_limits():
     assert selected["dk_gain"] == selected["de_gain"] == 3.0
 
 
-@pytest.mark.parametrize(("dk_mw", "de_mw"), [(1000, 2000), (1400, 1800), (1000, 2200)])
+@pytest.mark.parametrize(
+    ("dk_mw", "de_mw"), [(1000, 2000), (1400, 1800), (1000, 2200), (0, 2000), (1200, 0)]
+)
 def test_layout_resizing_keeps_native_transmission_budgets(dk_mw, de_mw):
     from scripts.run_bornholm_matched import project_legs, resize_hybrid_legs
 

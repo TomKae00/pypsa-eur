@@ -26,6 +26,12 @@ LAYOUTS = (
     ("hybrid_more_de", "hybrid", 1000, 2200),
 )
 LAYOUT_WORLDS = ("central", "ev55", "ev65")
+CENTRAL_FOLLOWUPS = (
+    ("central_hybrid_matched", 1000, 2000, 3000),
+    ("central_germany_alone", 0, 2000, 2000),
+    ("central_denmark_alone", 1200, 0, 1200),
+    ("central_smaller_island", 1200, 2000, 2000),
+)
 BOUNDS = ["p_nom_min", "p_nom_max"]
 ROOT = "bornholm_2035_matched"
 LAYOUT_ROOT = "bornholm_2035_layout_screen"
@@ -36,6 +42,8 @@ def project_legs(n, source_case, dk_mw, *, de_mw=2000, solved=False):
     split = source_case["project"] == "split_radial"
     legs = []
     for country, onshore, capacity in (("DK2", "DKE1", dk_mw), ("DE", "DE00", de_mw)):
+        if not capacity:
+            continue
         name = f"BEI_TO_{country}" + ("_SPLIT" if split else "")
         hub = "BEI_HUB" + ("_DK" if country == "DK2" else "_DE") if split else "BEI_HUB"
         reverse = name + "-reversed"
@@ -91,7 +99,11 @@ def resize_hybrid_legs(n, dk_mw, de_mw):
             n.global_constraints.at[name, "constant"] += delta
             n.global_constraints.at[name, "energy_island_allowance"] += delta
     for leg, capacity in (("BEI_TO_DK2", dk_mw), ("BEI_TO_DE", de_mw)):
-        n.links.loc[[leg, leg + "-reversed"], BOUNDS] = capacity
+        directions = [leg, leg + "-reversed"]
+        if capacity:
+            n.links.loc[directions, BOUNDS] = capacity
+        else:
+            n.remove("Link", directions)
 
 
 def resize_danish_leg(n):
@@ -109,14 +121,29 @@ def design_table(layout_screen=False):
     ]
 
 
-def validate_design(n, config, source_case, dk_mw, de_mw, *, solved=False):
+def validate_design(
+    n, config, source_case, dk_mw, de_mw, *, wind_mw=3000, solved=False
+):
     project_legs(n, source_case, dk_mw, de_mw=de_mw, solved=solved)
+    if solved and source_case["project"] == "hybrid":
+        require(
+            np.isclose(
+                n.generators.at["BEI_WIND", "p_nom_opt"], wind_mw, rtol=0, atol=0.01
+            ),
+            "Wrong solved Bornholm wind capacity",
+        )
     return campaign.validate(
-        n, config, source_case, solved, hybrid_dk_mw=dk_mw, hybrid_de_mw=de_mw
+        n,
+        config,
+        source_case,
+        solved,
+        hybrid_dk_mw=dk_mw,
+        hybrid_de_mw=de_mw,
+        hybrid_wind_mw=wind_mw,
     )
 
 
-def load_design(config, source_case, dk_mw, de_mw):
+def load_design(config, source_case, dk_mw, de_mw, *, wind_mw=3000):
     import pypsa
 
     parent = source_case["name"]
@@ -136,11 +163,20 @@ def load_design(config, source_case, dk_mw, de_mw):
     campaign.validate(n, config, source_case)
     default_dk_mw = 1000 if source_case["project"] == "split_radial" else 1200
     project_legs(n, source_case, default_dk_mw)
-    changed = (dk_mw, de_mw) != (default_dk_mw, 2000)
+    resize_legs = (dk_mw, de_mw) != (default_dk_mw, 2000)
+    changed = resize_legs or wind_mw != 3000
     if changed:
-        require(source_case["project"] == "hybrid", "Only rescale the hybrid links")
-        resize_hybrid_legs(n, dk_mw, de_mw)
-    validate_design(n, config, source_case, dk_mw, de_mw)
+        require(source_case["project"] == "hybrid", "Only rescale the hybrid")
+        require(
+            not n.meta.get("energy_islands", {}).get(
+                "subtract_generic_potential", False
+            ),
+            "Resizing expects unchanged background wind potential",
+        )
+        if resize_legs:
+            resize_hybrid_legs(n, dk_mw, de_mw)
+        n.generators.loc["BEI_WIND", BOUNDS] = wind_mw
+    validate_design(n, config, source_case, dk_mw, de_mw, wind_mw=wind_mw)
     return n, source, provenance, changed
 
 
@@ -183,17 +219,26 @@ def check_layout_inputs():
     print("All fifteen inputs passed. No optimisation was run.")
 
 
-def run(index, batch, *, layout_screen=False):
+def run(index, batch, *, layout_screen=False, central_followup=False):
     config = campaign.read_config()
     original.check_definitions(config)
-    name, parent, dk_mw, de_mw = design_table(layout_screen)[index]
+    if central_followup:
+        name, dk_mw, de_mw, wind_mw = CENTRAL_FOLLOWUPS[index]
+        parent = "central_hybrid"
+    else:
+        name, parent, dk_mw, de_mw = design_table(layout_screen)[index]
+        wind_mw = 3000
     sources = {c["name"]: c for c in campaign.scenarios(config)}
     source_case = sources[parent]
-    n, source, provenance, changed = load_design(config, source_case, dk_mw, de_mw)
+    n, source, provenance, changed = load_design(
+        config, source_case, dk_mw, de_mw, wind_mw=wind_mw
+    )
     trial = dict(source_case, index=index, name=name)
-    if layout_screen:
-        trial.update(dk_mw=dk_mw, de_mw=de_mw)
+    if layout_screen or central_followup:
+        trial.update(dk_mw=dk_mw, de_mw=de_mw, wind_mw=wind_mw)
     root = LAYOUT_ROOT if layout_screen else ROOT
+    if central_followup:
+        root = "bornholm_2035_central_followup"
     config["prefix"] = f"{root}/{batch}"
     target, directory = runner.paths(config, trial)
     directory.mkdir(parents=True, exist_ok=False)
@@ -207,7 +252,9 @@ def run(index, batch, *, layout_screen=False):
     del n
 
     def validate(network, cfg, case, solved=False):
-        return validate_design(network, cfg, source_case, dk_mw, de_mw, solved=solved)
+        return validate_design(
+            network, cfg, source_case, dk_mw, de_mw, wind_mw=wind_mw, solved=solved
+        )
 
     def context_for(case):
         context = original.context_for(source_case)
@@ -220,6 +267,8 @@ def run(index, batch, *, layout_screen=False):
         identity = dict(name=name, parent=parent, dk_mw=dk_mw)
         if layout_screen:
             identity["de_mw"] = de_mw
+        if central_followup:
+            identity.update(de_mw=de_mw, wind_mw=wind_mw)
         context.config["matched_design"] = identity
         return context
 
@@ -235,6 +284,7 @@ def run(index, batch, *, layout_screen=False):
             code_sha256=runner.code_fingerprint(),
             dk_leg_mw=dk_mw,
             de_leg_mw=de_mw,
+            wind_mw=wind_mw,
         ),
     )
     status = runner.solve(
@@ -262,18 +312,39 @@ def run(index, batch, *, layout_screen=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("index", type=int, nargs="?")
-    parser.add_argument("--layout-screen", action="store_true")
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--layout-screen", action="store_true")
+    scope.add_argument("--central-followup", action="store_true")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--plan", action="store_true")
     mode.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    designs = design_table(args.layout_screen)
+    designs = (
+        CENTRAL_FOLLOWUPS if args.central_followup else design_table(args.layout_screen)
+    )
     if args.plan or args.check:
-        if args.index is not None or (args.check and not args.layout_screen):
-            parser.error("Use --layout-screen --check without a task index")
+        if args.index is not None or (
+            args.check and not (args.layout_screen or args.central_followup)
+        ):
+            parser.error(
+                "Use --layout-screen or --central-followup with --check and no index"
+            )
         if args.plan:
-            for i, (name, _, dk_mw, de_mw) in enumerate(designs):
-                print(f"{i}\t{name}\t{dk_mw}/{de_mw} MW")
+            for i, (name, second, third, fourth) in enumerate(designs):
+                if args.central_followup:
+                    print(f"{i}\t{name}\t{second}/{third} MW\twind={fourth} MW")
+                else:
+                    print(f"{i}\t{name}\t{third}/{fourth} MW")
+        elif args.central_followup:
+            config = campaign.read_config()
+            original.check_definitions(config)
+            source = next(
+                c for c in campaign.scenarios(config) if c["name"] == "central_hybrid"
+            )
+            for name, dk, de, wind in CENTRAL_FOLLOWUPS:
+                n, *_ = load_design(config, source, dk, de, wind_mw=wind)
+                del n
+                print(f"Checked {name}", flush=True)
         else:
             check_layout_inputs()
         return 0
@@ -281,7 +352,12 @@ def main():
         parser.error(f"Expected a task index from 0 to {len(designs) - 1}")
     batch = os.environ["SLURM_ARRAY_JOB_ID"]
     require(batch.isdecimal(), "Expected a numeric Slurm array job ID")
-    return run(args.index, batch, layout_screen=args.layout_screen)
+    return run(
+        args.index,
+        batch,
+        layout_screen=args.layout_screen,
+        central_followup=args.central_followup,
+    )
 
 
 if __name__ == "__main__":

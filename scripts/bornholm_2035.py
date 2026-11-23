@@ -202,14 +202,16 @@ def apply(n, settings):
     )
 
 
-def project_check(n, project, *, hybrid_dk_mw=1200, hybrid_de_mw=2000):
+def project_check(
+    n, project, *, hybrid_dk_mw=1200, hybrid_de_mw=2000, hybrid_wind_mw=3000
+):
     names = n.generators.index[n.generators.index.str.startswith("BEI_WIND")]
     expected = (
         {"BEI_WIND_DK": 1000.0, "BEI_WIND_DE": 2000.0}
         if project == "split_radial"
         else {}
         if project == "baseline"
-        else {"BEI_WIND": 3000.0}
+        else {"BEI_WIND": hybrid_wind_mw if project == "hybrid" else 3000.0}
     )
     welfare.require(set(names) == set(expected), "Wrong project wind assets")
     for name, capacity in expected.items():
@@ -226,6 +228,9 @@ def project_check(n, project, *, hybrid_dk_mw=1200, hybrid_de_mw=2000):
         "radial_de": {"BEI_TO_DE_RADIAL": 3000},
     }[project]
     for name, capacity in expected_links.items():
+        if not capacity:
+            welfare.require(name not in n.links.index, f"Unexpected export {name}")
+            continue
         welfare.require(name in n.links.index, f"Missing project export {name}")
         link = n.links.loc[name]
         welfare.require(
@@ -251,7 +256,16 @@ def project_check(n, project, *, hybrid_dk_mw=1200, hybrid_de_mw=2000):
     return dict(wind_MW=sum(expected.values()), export_MW=sum(expected_links.values()))
 
 
-def validate(n, config, case, solved=False, *, hybrid_dk_mw=1200, hybrid_de_mw=2000):
+def validate(
+    n,
+    config,
+    case,
+    solved=False,
+    *,
+    hybrid_dk_mw=1200,
+    hybrid_de_mw=2000,
+    hybrid_wind_mw=3000,
+):
     settings = definitions(config)[case["name"]]["bornholm_2035"]
     audit = n.meta.get(AUDIT_KEY, {})
     welfare.require(audit.get("settings") == settings, "Wrong 2035 scenario settings")
@@ -287,7 +301,11 @@ def validate(n, config, case, solved=False, *, hybrid_dk_mw=1200, hybrid_de_mw=2
         "Wrong dedicated Bornholm correction",
     )
     project_check(
-        n, case["project"], hybrid_dk_mw=hybrid_dk_mw, hybrid_de_mw=hybrid_de_mw
+        n,
+        case["project"],
+        hybrid_dk_mw=hybrid_dk_mw,
+        hybrid_de_mw=hybrid_de_mw,
+        hybrid_wind_mw=hybrid_wind_mw,
     )
     return welfare.capacity_report(
         n, welfare.capacity_limits(config, case), solved=solved
