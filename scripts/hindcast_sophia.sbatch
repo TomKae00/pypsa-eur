@@ -9,7 +9,7 @@
 set -euo pipefail
 
 : "${SLURM_JOB_ID:?Run through sbatch, not on the login node}"
-mode="${1:?Expected weather, build-solve, rebuild-solve or solve}"
+mode="${1:?Expected weather, build-solve, rebuild-solve, solve or full-year}"
 year="${2:?Expected year or array}"
 submitted_revision="${3:?Expected submitted Git revision}"
 
@@ -22,7 +22,7 @@ if [[ "$year" == array ]]; then
     esac
 fi
 case "$year" in 2022|2023|2024|2025) ;; *) exit 2 ;; esac
-case "$mode" in weather|build-solve|rebuild-solve|solve) ;; *) exit 2 ;; esac
+case "$mode" in weather|build-solve|rebuild-solve|solve|full-year) ;; *) exit 2 ;; esac
 
 cd "${SLURM_SUBMIT_DIR:?Submit from the repository root}"
 # Host Git exists on the login node but is absent on Sophia compute nodes.
@@ -43,8 +43,16 @@ export SINGULARITYENV_NUMEXPR_NUM_THREADS=1
 
 # Reuse the installed environment without concurrent package/lock-file changes.
 run_pixi() {
-    "$HOME/bin/pixi-sophia" run --as-is "$@"
+    "${PIXI_SOPHIA:-$HOME/bin/pixi-sophia}" run --as-is "$@"
 }
+
+printf 'Stage=%s year=%s job=%s node=%s CPUs=%s revision=%s\n' \
+    "$mode" "$year" "$SLURM_JOB_ID" "$(hostname)" "$cores" "$submitted_revision"
+
+if [[ "$mode" == full-year ]]; then
+    run_pixi bash scripts/run_hindcast_full_year.sh "$year" "$cores"
+    exit
+fi
 
 network="resources/hindcast-build-$year/networks/composed_$year.nc"
 output="results/hindcast-build-$year/network.nc"
@@ -63,9 +71,6 @@ if [[ "$mode" != weather && ( -e "$output" || -e "${output%.nc}.audit.json" ) ]]
     echo "Existing solve output/audit found at $output; refusing to overwrite it." >&2
     exit 1
 fi
-
-printf 'Stage=%s year=%s job=%s node=%s CPUs=%s revision=%s\n' \
-    "$mode" "$year" "$SLURM_JOB_ID" "$(hostname)" "$cores" "$submitted_revision"
 
 if [[ "$mode" == weather ]]; then
     # This native rule has no upstream inputs; annual cutout outputs are disjoint.

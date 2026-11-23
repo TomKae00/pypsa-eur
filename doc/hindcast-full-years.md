@@ -19,6 +19,26 @@ pixi run --as-is bash scripts/run_hindcast_full_year.sh 2025 16
 
 The 2024 output path is distinct from the earlier corrected 2024 archive.
 
+### Submit on Sophia
+
+From the `feature/historical-hindcast` checkout on the login node, submit the
+two years in sequence so their Snakemake builds share the data cache safely.
+The 2025 job can start once the 2024 job exits, regardless of its outcome.
+
+```bash
+(
+  set -e
+  git pull --ff-only origin feature/historical-hindcast
+  revision=$(git rev-parse HEAD)
+  options=(--cpus-per-task=16 --exclusive --mem=0 --time=48:00:00 --output=slurm-%x-%j.out)
+  job_2024=$(sbatch --parsable "${options[@]}" --job-name=hindcast-full-2024 \
+    scripts/hindcast_sophia.sbatch full-year 2024 "$revision")
+  printf '2024 job %s\n' "${job_2024%%;*}"
+  sbatch "${options[@]}" --job-name=hindcast-full-2025 --dependency="afterany:${job_2024%%;*}" \
+    scripts/hindcast_sophia.sbatch full-year 2025 "$revision"
+)
+```
+
 ## Inspect the baselines
 
 Set `YEAR` in [inspect_hindcast.ipynb](../notebooks/inspect_hindcast.ipynb)
