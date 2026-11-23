@@ -1029,6 +1029,7 @@ def estimate_renewable_capacities(
     tech_map: dict,
     expansion_limit: bool,
     countries: list,
+    irenastat_file: str | None = None,
 ):
     """
     Estimate a different between renewable capacities in the network and
@@ -1043,6 +1044,7 @@ def estimate_renewable_capacities(
     - tech_map: A dictionary mapping fuel types to carrier names.
     - expansion_limit: Boolean value from config file
     - countries: A list of country codes to estimate capacities for.
+    - irenastat_file: Optional CSV supplied by the workflow.
 
     Returns:
     - None
@@ -1050,7 +1052,13 @@ def estimate_renewable_capacities(
     if not len(countries) or not len(tech_map):
         return
 
-    capacities = pm.data.IRENASTAT().powerplant.convert_country_to_alpha2()
+    capacities = (
+        pm.data.IRENASTAT().powerplant.convert_country_to_alpha2()
+        if irenastat_file is None
+        else pd.read_csv(
+            irenastat_file, usecols=["Year", "Technology", "Country", "Capacity"]
+        )
+    )
     if year not in capacities.Year.unique():
         raise ValueError(
             f"IRENASTAT has no data for {year}; available years: "
@@ -1403,7 +1411,12 @@ def main(
 
             if estimate_renewable_caps["from_irenastat"]:
                 estimate_renewable_capacities(
-                    n, year, tech_map, expansion_limit, params.countries
+                    n,
+                    year,
+                    tech_map,
+                    expansion_limit,
+                    params.countries,
+                    inputs.get("irenastat"),
                 )
 
     update_p_nom_max(n)

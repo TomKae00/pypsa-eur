@@ -6705,6 +6705,19 @@
           "description": "Supplement powerplantmatching dataset with heuristics based on country-level renewable capacities from IRENA (IRENASTAT).",
           "type": "boolean"
         },
+        "irenastat_capacity_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional IRENASTAT CSV with Year, Technology, Country (ISO-2), and Capacity (MW) in powerplantmatching format.",
+          "title": "Irenastat Capacity File"
+        },
         "year": {
           "default": 2024,
           "description": "Renewable capacities are based on existing capacities reported by IRENA (IRENASTAT) for the specified year.",

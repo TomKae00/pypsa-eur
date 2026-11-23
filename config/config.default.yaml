@@ -167,6 +167,7 @@ electricity:
     enable: true
     from_powerplantmatching: true
     from_irenastat: false
+    irenastat_capacity_file: null
     year: 2024
     expansion_limit: false
     technology_mapping:

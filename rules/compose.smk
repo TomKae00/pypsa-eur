@@ -21,6 +21,7 @@ def get_compose_inputs(w):
     horizons = cfg["planning_horizons"]
 
     conventional = cfg["conventional"]
+    renewable_capacity = cfg["electricity"]["estimate_renewable_capacities"]
     emission_prices = cfg["costs"]["emission_prices"]
     fuel_price_file = conventional.get("fuel_price_file")
     co2_price_file = emission_prices.get("price_file")
@@ -71,6 +72,15 @@ def get_compose_inputs(w):
             else []
         ),
     )
+
+    irenastat_file = renewable_capacity.get("irenastat_capacity_file")
+    if (
+        irenastat_file
+        and foresight == "overnight"
+        and renewable_capacity["enable"]
+        and renewable_capacity["from_irenastat"]
+    ):
+        inputs["irenastat"] = irenastat_file
 
     # Sector-specific inputs (only when sector coupling is enabled)
     if sector_enabled:

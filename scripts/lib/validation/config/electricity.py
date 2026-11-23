@@ -137,6 +137,10 @@ class _EstimateRenewableCapacitiesConfig(BaseModel):
         False,
         description="Supplement powerplantmatching dataset with heuristics based on country-level renewable capacities from IRENA (IRENASTAT).",
     )
+    irenastat_capacity_file: str | None = Field(
+        None,
+        description="Optional IRENASTAT CSV with Year, Technology, Country (ISO-2), and Capacity (MW) in powerplantmatching format.",
+    )
     year: int = Field(
         2024,
         description="Renewable capacities are based on existing capacities reported by IRENA (IRENASTAT) for the specified year.",
