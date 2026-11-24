@@ -18,25 +18,28 @@ done
 
 revision="$(git rev-parse HEAD)"
 options=(--cpus-per-task=16 --exclusive --mem=0 --time=48:00:00 --output=slurm-%x-%j.out)
-previous=()
+previous_job=
 for year in 2024 2025; do
     source="$hindcast/results/hindcast-wind-calibrated-$year/network.nc"
-    paired_dep=()
+    paired_options=(--job-name="bornholm-wind-calibrated-$year" --output=slurm-%x-%j.out)
     if [[ -s "$source" && -s "${source%.nc}.audit.json" ]]; then
         printf '%s calibrated hindcast already saved at %s\n' "$year" "$source"
     else
-        job="$(sbatch --parsable "${options[@]}" "${previous[@]}" \
-            --job-name="hindcast-wind-calibrated-$year" \
+        hindcast_options=("${options[@]}" --job-name="hindcast-wind-calibrated-$year")
+        if [[ -n "$previous_job" ]]; then
+            hindcast_options+=(--dependency="afterany:$previous_job")
+        fi
+        job="$(sbatch --parsable "${hindcast_options[@]}" \
             scripts/hindcast_sophia.sbatch full-year "$year" "$revision" wind-calibrated)"
         job="${job%%;*}"
         printf '%s calibrated hindcast job %s\n' "$year" "$job"
-        paired_dep=(--dependency="afterok:$job" --kill-on-invalid-dep=yes)
-        previous=(--dependency="afterany:$job")
+        paired_options+=(--dependency="afterok:$job" --kill-on-invalid-dep=yes)
+        previous_job="$job"
     fi
     (
         cd "$bornholm"
-        job="$(sbatch --parsable "${paired_dep[@]}" --job-name="bornholm-wind-calibrated-$year" \
-            --output=slurm-%x-%j.out "$worker" "$source" --year "$year" --template "$template")"
+        job="$(sbatch --parsable "${paired_options[@]}" \
+            "$worker" "$source" --year "$year" --template "$template")"
         printf '%s paired Bornholm job %s\n' "$year" "${job%%;*}"
     )
 done
