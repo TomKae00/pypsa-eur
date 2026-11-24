@@ -319,23 +319,28 @@ summaries are under `results/bornholm_2035_central_followup/<array-job>/`.
 
 ## Historical fixed-capacity comparison
 
-Start with the saved corrected 2024 hindcast if available. It is the most
-recent solved year identified on Sophia. The reviewed 2023 hindcast is an
-alternative if the 2024 file is unavailable or its data cannot be used. The
-runner checks the year, full hourly coverage (8,784 hours for 2024), fixed
-capacities and dynamic fuel costs. It uses the historical demand, fuel/CO2
-inputs, fleet, grid and any transmission constraints recorded in the archive.
-Both cases are dispatched afresh. The treatment adds the 3 GW wind and the
-1.2/2 GW treaty cables. The wind profile is the capacity-weighted availability
-of the existing DK2 offshore fleet in the selected weather year. It is a proxy
-for the project's site. Cable losses and annualised wind, collection and cable
-capital costs are taken from the prepared 2035 Central treaty template.
+Use the full-year electricity-only hindcasts for 2024 and 2025. The runner
+checks complete hourly coverage (8,784 hours for 2024 and 8,760 for 2025),
+fixed capacities and dynamic fuel costs. Both cases use the same historical
+demand, fleet, grid and operating constraints. They optimise dispatch and
+flows separately. The project case adds 3 GW of wind, a 1.2 GW cable to DK2
+and a 2 GW cable to Germany. The wind profile uses capacity-weighted
+availability from the existing DK2 offshore fleet in the same weather year
+as a proxy for the project site. Cable losses and annualised project costs
+come from the prepared 2035 Central treaty template.
 
 From the same Bornholm checkout on Sophia:
 
 ```bash
-historical="$HOME/projects/pypsa-eur-hindcast/results/hindcast-corrected-2024/network.nc"
-sbatch scripts/bornholm_historical.sbatch "$historical" --year 2024
+for year in 2024 2025; do
+  historical="$HOME/projects/pypsa-eur-hindcast/results/hindcast-full-$year/network.nc"
+  if [[ -s "$historical" ]]; then
+    sbatch --job-name="bornholm-hindcast-$year" \
+      scripts/bornholm_historical.sbatch "$historical" --year "$year"
+  else
+    printf 'Waiting for hindcast output %s\n' "$historical"
+  fi
+done
 ```
 
 For 2023, use `results/hindcast-reviewed-2023/network.nc` in the hindcast
@@ -349,27 +354,6 @@ annual average HICP](https://ec.europa.eu/eurostat/statistics-explained/SEPDF/ca
 (2.4% in 2024 and 2.1% in 2025). Use `--operating-to-eur2025` if the source
 requires another conversion. This is a one-year counterfactual with the
 historical fleet fixed.
-
-### Historical sector-coupled pairs
-
-The same launcher accepts `--sector-coupled` for a prepared historical sector
-network. Compose the no-project network for each year using the historical
-electricity fleet and grid together with existing heat, transport and industrial
-assets and demands. Reconcile these demands with the original electricity load
-before dispatch. All capacities must be fixed. The composed input must include
-its native historical configuration and dynamic fuel costs.
-
-The paired solver uses complete three-hour chronology with 2,928 snapshots in
-2024 and 2,920 in 2025. It applies the native sector constraints and reads the
-original final-v1 Gurobi preset, including 16 threads, `NumericFocus=1` and
-`BarConvTol=1e-8`. It solves the baseline first, then the same system with the
-fixed treaty project. It reports operating savings and the project's annualised
-cost in a common price basis.
-
-Supply the path to a prepared sector network and its year. Add `--check` to
-validate the input without solving. Use a 48-hour Slurm allocation for the two
-sequential solves in a pair. Outputs are under
-`results/bornholm_historical_sector/<year>/<job>/`.
 
 ## Interpretation of demand sensitivities
 

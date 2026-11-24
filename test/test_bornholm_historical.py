@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: MIT
 import json
-from pathlib import Path
 
 import pandas as pd
 import pypsa
 import pytest
-import yaml
 
-from scripts.run_bornholm_historical import dispatch_solver_options, run
+from scripts.run_bornholm_historical import run
 from scripts.run_bornholm_matched import CENTRAL_FOLLOWUPS
 
 
@@ -20,14 +18,9 @@ def test_central_followup_designs():
     )
 
 
-@pytest.mark.parametrize("sector_coupled", [False, True])
-def test_historical_pair_preserves_the_fleet_and_accounts_for_project_cost(
-    tmp_path, sector_coupled
-):
+def test_historical_pair_preserves_the_fleet_and_accounts_for_project_cost(tmp_path):
     n = pypsa.Network()
-    hours = 3 if sector_coupled else 1
-    n.set_snapshots(pd.date_range("2024", "2025", freq=f"{hours}h", inclusive="left"))
-    n.snapshot_weightings.loc[:, :] = hours
+    n.set_snapshots(pd.date_range("2024", "2025", freq="h", inclusive="left"))
     n.add("Carrier", ["AC", "DC", "offwind-ac", "gas"])
     n.add("Bus", ["DKE1", "DE00"], carrier="AC")
     n.add(
@@ -56,22 +49,6 @@ def test_historical_pair_preserves_the_fleet_and_accounts_for_project_cost(
     )
     n.add("Load", "DE demand", bus="DE00", p_set=2000)
     n.add("Load", "DK demand", bus="DKE1", p_set=1500)
-    if sector_coupled:
-        n.meta = yaml.safe_load(Path("config/config.default.yaml").read_text())
-        n.meta["sector"]["enabled"] = True
-        n.meta["planning_horizons"] = [2024]
-        n.add("Carrier", ["urban central heat", "heat pump"])
-        n.add("Bus", "DKE1 urban central heat", carrier="urban central heat")
-        n.add(
-            "Link",
-            "DK heat pump",
-            carrier="heat pump",
-            bus0="DKE1",
-            bus1="DKE1 urban central heat",
-            p_nom=100,
-            efficiency=3,
-        )
-        n.add("Load", "DK heat demand", bus="DKE1 urban central heat", p_set=150)
     source = tmp_path / "historical.nc"
     n.export_to_netcdf(source)
 
@@ -119,11 +96,10 @@ def test_historical_pair_preserves_the_fleet_and_accounts_for_project_cost(
     template.export_to_netcdf(template_path)
 
     output = tmp_path / "comparison"
-    run(source, template_path, output, 2024, "highs", 1, sector_coupled=sector_coupled)
+    run(source, template_path, output, 2024, "highs", 1)
     result = json.loads((output / "summary.json").read_text())
     savings = 1500 * 8784 * 0.95 * 60
-    assert result["snapshots"] == 8784 // hours
-    assert result["annual_weight_hours"] == 8784
+    assert result["snapshots"] == 8784
     assert result["with_project"]["wind_mwh"] == pytest.approx(1500 * 8784)
     assert result["project_annualised_capital_cost_eur"] == pytest.approx(4_600_000)
     assert result["operating_savings_source_eur"] == pytest.approx(savings)
@@ -136,21 +112,3 @@ def test_historical_pair_preserves_the_fleet_and_accounts_for_project_cost(
     )
     assert not project.generators.p_nom_extendable.any()
     assert not project.links.p_nom_extendable.any()
-    if sector_coupled:
-        assert project.links.at["DK heat pump", "p_nom"] == 100
-        assert (project.links_t.p0["DK heat pump"] == 50).all()
-
-
-def test_historical_sector_uses_the_original_2035_gurobi_preset(monkeypatch):
-    from scripts import run_bornholm_diagnostic as diagnostic
-
-    monkeypatch.setattr(
-        diagnostic, "memory_snapshot", lambda: {"MemTotal": 128, "MemAvailable": 128}
-    )
-    options = dispatch_solver_options("gurobi", 16, sector_coupled=True)
-    assert options["threads"] == 16
-    assert options["method"] == 2
-    assert options["crossover"] == 0
-    assert options["NumericFocus"] == 1
-    assert options["BarConvTol"] == 1e-8
-    assert options["SoftMemLimit"] == 96
