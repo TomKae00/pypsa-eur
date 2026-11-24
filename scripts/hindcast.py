@@ -885,6 +885,7 @@ def solve(
     marginal_costs=None,
     transmission_losses=None,
     grid_config=None,
+    wind_config=None,
 ):
     import pypsa
 
@@ -942,22 +943,22 @@ def solve(
         # interior solution that may fail the optimality tolerances.
         else {"Threads": threads, "Method": 2, "Crossover": -1, "NumericFocus": 2}
     )
-    from scripts import transmission_assumptions
-    from scripts.hindcast_wind import validate as validate_wind
+    from scripts import hindcast_wind, transmission_assumptions
 
     settings = n.meta.get("transmission_assumptions", {})
-    if grid_config:
-        if settings.get("enabled") or transmission_assumptions.AUDIT_KEY in n.meta:
-            raise ValueError("Use a native-grid source when applying a grid overlay")
+    year = int(n.snapshots[0].year)
+    if grid_config or wind_config:
         hours = hourly_network(n)
-        year = hours[0].year
         expected = pd.date_range(
             f"{year}-01-01", f"{year + 1}-01-01", freq="h", inclusive="left", tz="UTC"
         )
         if not hours.equals(expected) or n.meta.get("planning_horizons") != [year]:
             raise ValueError(
-                "The grid overlay requires a complete matching calendar year"
+                "Historical overlays require a complete matching calendar year"
             )
+    if grid_config:
+        if settings.get("enabled") or transmission_assumptions.AUDIT_KEY in n.meta:
+            raise ValueError("Use a native-grid source when applying a grid overlay")
         with Path(grid_config).open() as file:
             settings = yaml.safe_load(file)["transmission_assumptions"]
         transmission_assumptions.apply_asset_rules(n, settings, year)
@@ -966,7 +967,13 @@ def solve(
         )
         n.meta["transmission_assumptions"] = settings
     transmission_assumptions.validate(n, settings)
-    validate_wind(n, n.meta.get("hindcast_danish_wind", {}), int(n.snapshots[0].year))
+    wind_settings = n.meta.get("hindcast_danish_wind", {})
+    if wind_config:
+        with Path(wind_config).open() as file:
+            wind_settings = yaml.safe_load(file)["hindcast_danish_wind"]
+        hindcast_wind.apply(n, wind_settings, year)
+        n.meta["hindcast_danish_wind"] = wind_settings
+    hindcast_wind.validate(n, wind_settings, year)
     status, condition = n.optimize(
         extra_functionality=lambda net, sns: transmission_assumptions.add_constraints(
             net, sns, settings
@@ -1002,6 +1009,7 @@ def solve(
     from scripts.dispatch_checks import check as check_dispatch
 
     n.meta["hindcast_physical_quality"] = check_dispatch(n)
+    hindcast_wind.record_dispatch(n)
     n.export_to_netcdf(output)
     check = audit(n)
     check["objective"] = float(n.objective)
@@ -1045,6 +1053,10 @@ def main():
         "--grid-config",
         help="Apply dated transmission assumptions to a native annual network",
     )
+    run.add_argument(
+        "--wind-config",
+        help="Calibrate the historical Danish wind profiles before solving",
+    )
     bench = sub.add_parser("benchmark")
     bench.add_argument("--config", default="config/hindcast/benchmark.yaml")
     bench.add_argument("--network")
@@ -1077,6 +1089,7 @@ def main():
             args.marginal_costs,
             args.transmission_losses,
             args.grid_config,
+            args.wind_config,
         )
     else:
         cfg = benchmark_config(args.config, args.year)

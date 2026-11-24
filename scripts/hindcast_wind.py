@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 KEY = "hindcast_danish_wind_audit"
+ZONES = {"DK1": "DKW1", "DK2": "DKE1"}
 
 
 def observations_path(settings, year):
@@ -31,6 +32,15 @@ def _payload(settings, year):
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
     return payload, digest
+
+
+def _fleet(n, area, technology):
+    generators = n.generators.loc[n.components["Generator"].active_assets]
+    return generators.index[
+        generators.bus.isin([area, ZONES[area]])
+        & generators.carrier.str.startswith(technology)
+        & generators.p_nom.gt(0)
+    ]
 
 
 def apply(n, settings, year):
@@ -55,17 +65,14 @@ def apply(n, settings, year):
     data["snapshot"] = pd.to_datetime(data.snapshot, utc=True)
     if data.duplicated(["snapshot", "zone", "carrier"]).any():
         raise ValueError("Duplicate Danish wind observation")
+    technologies = settings.get("carriers", ["onwind"])
+    if not technologies or set(technologies).difference({"onwind", "offwind"}):
+        raise ValueError("Choose onwind and/or offwind for the Danish wind fit")
     rows = []
-    for area, bus in [("DK1", "DKW1"), ("DK2", "DKE1")]:
-        for technology in settings.get("carriers", ["onwind"]):
-            if technology != "onwind":
-                raise ValueError(
-                    "Only onshore calibration is reviewed; offshore native losses must not be fitted twice"
-                )
-            selected = n.generators.index[
-                n.generators.bus.isin([area, bus]) & n.generators.carrier.eq(technology)
-            ]
-            if selected.empty or n.generators.loc[selected, "p_nom"].sum() <= 0:
+    for area in ZONES:
+        for technology in technologies:
+            selected = _fleet(n, area, technology)
+            if selected.empty:
                 raise ValueError(f"Missing historical wind fleet: {area} {technology}")
             observed = (
                 data[data.zone.eq(area) & data.carrier.eq(technology)]
@@ -153,6 +160,7 @@ def apply(n, settings, year):
                     "reference_capacity_MW": float(reference_capacity),
                     "fit_hours": int(fit.sum()),
                     "observed_generation_MWh": float(observed.generation_MW.sum()),
+                    "observed_capacity_hours_MWh": float(actual_capacity.sum()),
                     "native_potential_MWh_with_actual_capacity": float(potential.sum()),
                     "corrected_effective_available_MWh": float(after.sum()),
                     "fit_relative_energy_error": abs(energy(factor) / target - 1),
@@ -166,7 +174,11 @@ def apply(n, settings, year):
         "fingerprint": digest,
         "series": rows,
         "interpretation": "Empirical historical effective availability. Positive-price fitting reduces, but does not eliminate, curtailment contamination. Validate post-solve curtailment and generation.",
-        "offshore_policy": "Unchanged; do not duplicate the native 0.8855 offshore correction.",
+        "offshore_policy": (
+            "Fit an incremental multiplier to the existing offshore profiles."
+            if "offwind" in technologies
+            else "Use the native offshore profiles."
+        ),
     }
     n.meta[KEY] = audit
     return audit
@@ -178,7 +190,19 @@ def validate(n, settings, year):
     audit = n.meta.get(KEY)
     if not audit or audit.get("year") != int(year):
         raise ValueError(
-            "Historical Danish wind was not corrected at composition; rebuild"
+            "Historical Danish wind calibration audit is missing"
         )
     if _payload(settings, year)[1] != audit["fingerprint"]:
         raise ValueError("Danish wind settings or observations changed; recompose")
+
+
+def record_dispatch(n):
+    audit = n.meta.get(KEY)
+    if not audit:
+        return
+    for row in audit["series"]:
+        names = _fleet(n, row["zone"], row["carrier"])
+        dispatch = n.generators_t.p.reindex(columns=names, fill_value=0)
+        row["realised_generation_MWh"] = float(
+            n.snapshot_weightings.generators @ dispatch.sum(axis=1)
+        )

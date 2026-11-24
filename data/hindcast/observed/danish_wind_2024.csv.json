@@ -1,0 +1,23 @@
+{
+  "year": 2024,
+  "sources": {
+    "ProductionConsumptionSettlement": {
+      "url": "https://api.energidataservice.dk/dataset/ProductionConsumptionSettlement",
+      "raw_sha256": "df66fbfcc4a417dec931d91dc16be4ae9e8128b98a8cad47ecf9fde00c86b533"
+    },
+    "CapacityPerMunicipality": {
+      "url": "https://api.energidataservice.dk/dataset/CapacityPerMunicipality",
+      "raw_sha256": "85368a25536b2592d158ab7372a3aa623a7275cf29690701d6a2eae085b4af96"
+    },
+    "hourly_prices": {
+      "file": "prices_zonal_2024.csv",
+      "sha256": "bfe63353f015aaf0091f4cfca73a675c5a328a3ae4f29fed0dff8f595b61df9b",
+      "repository": "martavp/pv_wind_historical_timeseries",
+      "commit": "ad89e2d8e8c0c8b1c7e717dded8ebd43d52b3beb"
+    }
+  },
+  "output_sha256": "ce1327d812a4fa8276734971efc00b2412131b60c5750af3e99039f1283674a8",
+  "rows": 35136,
+  "hours_per_series": 8784,
+  "capacity_definition": "Monthly reported fleet, municipality DK1/DK2 allocation; no intra-month commissioning dates inferred"
+}

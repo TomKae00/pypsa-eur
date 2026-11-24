@@ -15,11 +15,18 @@ case "$year" in
 esac
 
 native="hindcast-full-$year"
+reviewed="hindcast-reviewed-$year"
 grid_config=config/hindcast/grid-reviewed-full-years.yaml
+wind_args=()
 case "$grid" in
-    reviewed) run_name="hindcast-reviewed-$year" ;;
+    reviewed) run_name="$reviewed" ;;
+    wind-calibrated)
+        run_name="hindcast-wind-calibrated-$year"
+        grid=reviewed
+        wind_args=(--wind-config config/hindcast/wind-calibrated-full-years.yaml)
+        ;;
     native) run_name="$native" ;;
-    *) echo "Expected a reviewed or native grid, got: $grid" >&2; exit 2 ;;
+    *) echo "Expected reviewed, native or wind-calibrated, got: $grid" >&2; exit 2 ;;
 esac
 
 input="resources/$run_name/networks/composed_$year.nc"
@@ -33,8 +40,11 @@ fi
 # year-specific generation, load and cost inputs are then identical by construction.
 native_input="resources/$native/networks/composed_$year.nc"
 native_result="results/$native/network.nc"
+reviewed_result="results/$reviewed/network.nc"
 grid_args=()
-if [[ "$grid" == reviewed && ( -s "$native_input" || -s "$native_result" ) ]]; then
+if [[ ${#wind_args[@]} -gt 0 && -s "$reviewed_result" && -s "${reviewed_result%.nc}.audit.json" ]]; then
+    input="$reviewed_result"
+elif [[ "$grid" == reviewed && ( -s "$native_input" || -s "$native_result" ) ]]; then
     input="$native_input"
     if [[ ! -s "$input" ]]; then
         input="$native_result"
@@ -68,7 +78,7 @@ mapping=(python -m scripts.hindcast prepare-zonal "$input"
 # The first call may have created a new mapping template.
 "${mapping[@]}"
 python -m scripts.hindcast solve "$input" --output "$output" --solver gurobi \
-    --threads "$cores" "${grid_args[@]}"
+    --threads "$cores" "${grid_args[@]}" "${wind_args[@]}"
 if [[ -n "${HINDCAST_SUBMITTED_REVISION:-}" ]]; then
     printf '%s\n' "$HINDCAST_SUBMITTED_REVISION" > "$(dirname "$output")/submitted-revision.txt"
 fi

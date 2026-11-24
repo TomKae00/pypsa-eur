@@ -1,0 +1,8 @@
+# Use the same year's DK1/DK2 settlement production and monthly fleet.
+hindcast_danish_wind:
+  enabled: true
+  observations: data/hindcast/observed/danish_wind_{year}.csv.gz
+  carriers: [onwind, offwind]
+  minimum_fit_price_EUR_MWh: 5.0
+  minimum_fit_hours: 1000
+  factor_bounds: [0.3, 1.5]

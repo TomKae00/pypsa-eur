@@ -81,6 +81,40 @@ exits, regardless of its outcome.
 )
 ```
 
+## Calibrate Danish wind for 2024 and 2025
+
+The `wind-calibrated` mode fits onshore and offshore wind separately in DK1
+and DK2 for each year. It uses [Energinet's hourly settlement production](https://api.energidataservice.dk/meta/dataset/ProductionConsumptionSettlement),
+[reported monthly fleet capacities](https://api.energidataservice.dk/meta/dataset/CapacityPerMunicipality),
+and the [pinned hourly benchmark prices](https://github.com/martavp/pv_wind_historical_timeseries/tree/ad89e2d8e8c0c8b1c7e717dded8ebd43d52b3beb/data/entsoe).
+The fit uses hours at or above €5/MWh and native fleet availability of at least
+5%. The price filter reduces exposure to economic curtailment during fitting.
+Observed output still reflects outages and curtailment, so the fitted profile
+represents effective availability. Offshore fitting starts from the native
+profile, which already includes the PyPSA-Eur offshore correction.
+
+The fit preserves the hourly weather sequence and the capacity shares of
+resource classes. It uses measured monthly fleet capacity. The network audit
+records the fit, observed energy, effective available energy and realised
+dispatch. Compare the calibrated and grid-only runs to isolate the Danish
+wind changes. The two years are fitted separately.
+
+Submit both years from the Sophia hindcast checkout.
+
+```bash
+bash scripts/submit_wind_calibrated_sophia.sh
+```
+
+The two baselines go to `results/hindcast-wind-calibrated-YEAR/network.nc`.
+The launcher also submits the matched with/without-Bornholm comparison for each
+year in the sibling `pypsa-eur-bornholm` checkout. These jobs use the calibrated
+DK2 offshore availability as the Bornholm wind proxy. Their paired results are
+under `results/bornholm_historical/YEAR/JOB_ID/` in that checkout.
+
+The compressed observations are included with source hashes. To refresh them,
+fetch a full-year hourly benchmark price CSV as described below and run
+`python -m scripts.retrieve_danish_wind --year YEAR --prices data/hindcast/prices_zonal_YEAR.csv --output data/hindcast/observed/danish_wind_YEAR.csv.gz`.
+
 ## Benchmark and plot
 
 ```bash

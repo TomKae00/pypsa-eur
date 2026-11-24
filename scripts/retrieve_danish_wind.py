@@ -87,21 +87,42 @@ def hourly(data, year, label):
     return frame.set_index(["snapshot", "PriceArea"]).sort_index()
 
 
-def retrieve(year, output, cache=None):
+def retrieve(year, output, cache=None, hourly_prices=None):
     output = Path(output)
     cache = Path(cache) if cache else output.parent / "sources" / str(year)
     sources, receipts = {}, {}
-    for dataset in [
-        "ProductionConsumptionSettlement",
-        "CapacityPerMunicipality",
-        "Elspotprices",
-    ]:
+    datasets = ["ProductionConsumptionSettlement", "CapacityPerMunicipality"]
+    if hourly_prices is None:
+        datasets.append("Elspotprices")
+    for dataset in datasets:
         data, sha = fetch(dataset, year, cache)
         sources[dataset] = data
         receipts[dataset] = {"url": API + dataset, "raw_sha256": sha}
         time.sleep(2)
     production = hourly(sources["ProductionConsumptionSettlement"], year, "production")
-    prices = hourly(sources["Elspotprices"], year, "prices")
+    if hourly_prices is None:
+        prices = hourly(sources["Elspotprices"], year, "prices")
+        prices = prices.SpotPriceEUR.unstack("PriceArea")
+    else:
+        prices = pd.read_csv(hourly_prices, index_col=0).rename(
+            columns={"DK_1": "DK1", "DK_2": "DK2"}
+        )
+        prices.index = pd.to_datetime(prices.index, utc=True)
+        if prices.index.has_duplicates or not prices.index.equals(prices.index.floor("h")):
+            raise ValueError("Expected unique UTC hours in the observed-price CSV")
+        missing = {"DK1", "DK2"}.difference(prices.columns)
+        if missing or prices.columns.has_duplicates:
+            raise ValueError("Expected one DK1 and one DK2 series in the observed-price CSV")
+        receipts["hourly_prices"] = {
+            "file": Path(hourly_prices).name,
+            "sha256": hashlib.sha256(Path(hourly_prices).read_bytes()).hexdigest(),
+        }
+        manifest = Path(hourly_prices).with_suffix(".json")
+        if manifest.is_file():
+            provenance = json.loads(manifest.read_text())
+            receipts["hourly_prices"].update(
+                {key: provenance[key] for key in ("repository", "commit") if key in provenance}
+            )
     capacities = pd.DataFrame(sources["CapacityPerMunicipality"]["records"])
     capacities["month"] = pd.to_datetime(capacities.Month).dt.to_period("M").astype(str)
     capacities = capacities[capacities.month.str.startswith(str(year))].copy()
@@ -123,7 +144,7 @@ def retrieve(year, output, cache=None):
     rows = []
     for area in ["DK1", "DK2"]:
         observed = production.xs(area, level="PriceArea")
-        spot = prices.xs(area, level="PriceArea").SpotPriceEUR.reindex(observed.index)
+        spot = prices[area].reindex(observed.index)
         for carrier, prefix, capacity_column in [
             ("onwind", "OnshoreWind", "OnshoreWindCapacity"),
             ("offwind", "OffshoreWind", "OffshoreWindCapacity"),
@@ -179,5 +200,9 @@ if __name__ == "__main__":
         parser.add_argument("--year", type=int, required=True)
         parser.add_argument("--output", type=Path, required=True)
         parser.add_argument("--cache", type=Path)
+        parser.add_argument(
+            "--prices", type=Path, help="Hourly benchmark CSV with DK_1 and DK_2 prices"
+        )
         args = parser.parse_args()
-        print(json.dumps(retrieve(args.year, args.output, args.cache), indent=2))
+        receipt = retrieve(args.year, args.output, args.cache, args.prices)
+        print(json.dumps(receipt, indent=2))
