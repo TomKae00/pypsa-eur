@@ -50,7 +50,8 @@ printf 'Stage=%s year=%s job=%s node=%s CPUs=%s revision=%s\n' \
     "$mode" "$year" "$SLURM_JOB_ID" "$(hostname)" "$cores" "$submitted_revision"
 
 if [[ "$mode" == full-year ]]; then
-    run_pixi bash scripts/run_hindcast_full_year.sh "$year" "$cores"
+    export SINGULARITYENV_HINDCAST_SUBMITTED_REVISION="$submitted_revision"
+    run_pixi bash scripts/run_hindcast_full_year.sh "$year" "$cores" "${4:-reviewed}"
     exit
 fi
 

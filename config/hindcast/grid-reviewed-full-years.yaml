@@ -1,0 +1,8 @@
+# Apply after the annual calendar/fleet settings. Uses the existing corridor solver.
+transmission_assumptions:
+  enabled: true
+  limits: data/hindcast/transmission/limits.csv
+  hourly_limits: data/hindcast/transmission/hourly_{year}.csv.gz
+  asset_rules: data/hindcast/transmission/asset_rules.csv
+  expansion_policy: fixed
+  interpretation: 2024 Nordic maximum NTC before go-live and JAO directional border-flow envelopes afterwards

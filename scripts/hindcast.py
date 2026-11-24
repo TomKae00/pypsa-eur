@@ -878,7 +878,13 @@ def benchmark_years(config, years=None, output=None):
 
 
 def solve(
-    network, output, solver, threads, marginal_costs=None, transmission_losses=None
+    network,
+    output,
+    solver,
+    threads,
+    marginal_costs=None,
+    transmission_losses=None,
+    grid_config=None,
 ):
     import pypsa
 
@@ -940,6 +946,25 @@ def solve(
     from scripts.hindcast_wind import validate as validate_wind
 
     settings = n.meta.get("transmission_assumptions", {})
+    if grid_config:
+        if settings.get("enabled") or transmission_assumptions.AUDIT_KEY in n.meta:
+            raise ValueError("Use a native-grid source when applying a grid overlay")
+        hours = hourly_network(n)
+        year = hours[0].year
+        expected = pd.date_range(
+            f"{year}-01-01", f"{year + 1}-01-01", freq="h", inclusive="left", tz="UTC"
+        )
+        if not hours.equals(expected) or n.meta.get("planning_horizons") != [year]:
+            raise ValueError(
+                "The grid overlay requires a complete matching calendar year"
+            )
+        with Path(grid_config).open() as file:
+            settings = yaml.safe_load(file)["transmission_assumptions"]
+        transmission_assumptions.apply_asset_rules(n, settings, year)
+        transmission_assumptions.install(
+            n, settings, year, ac_losses=transmission_losses
+        )
+        n.meta["transmission_assumptions"] = settings
     transmission_assumptions.validate(n, settings)
     validate_wind(n, n.meta.get("hindcast_danish_wind", {}), int(n.snapshots[0].year))
     status, condition = n.optimize(
@@ -1016,6 +1041,10 @@ def main():
     run.add_argument("--threads", type=int, default=1)
     run.add_argument("--marginal-costs")
     run.add_argument("--transmission-losses", type=int, default=None)
+    run.add_argument(
+        "--grid-config",
+        help="Apply dated transmission assumptions to a native annual network",
+    )
     bench = sub.add_parser("benchmark")
     bench.add_argument("--config", default="config/hindcast/benchmark.yaml")
     bench.add_argument("--network")
@@ -1047,6 +1076,7 @@ def main():
             args.threads,
             args.marginal_costs,
             args.transmission_losses,
+            args.grid_config,
         )
     else:
         cfg = benchmark_config(args.config, args.year)

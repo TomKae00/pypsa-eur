@@ -1,0 +1,4 @@
+year_min,year_max,asset,nominal_MW,operating_MW,available_from_utc,basis,source
+2024,2025,relation/8184631-400-DC,,400,,Fenno-Skan 1 operated at reduced voltage; keep its 500 MW nameplate and limit dispatch to 400 MW,https://www.fingrid.fi/en/news/news/2021/fenno-skan-1-lifetime-will-be-extended-until-2040
+2024,2025,relation/8185767-500-DC,600,,,First Italy-Montenegro HVDC pole rated 600 MW,https://www.terna-reports.it/2019/assets/pdf/terna_sustainability_report_2019_en.pdf
+2024,2024,relation/15777152-320-DC,,,2024-08-10T00:00:00Z,Shetland HVDC energised 9 August; use the first following full UTC day,https://www.ssen-transmission.co.uk/projects/project-map/shetland/

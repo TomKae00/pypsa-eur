@@ -10,6 +10,7 @@ capacity. The two quantities are not substituted for each other.
 | Case | Operating reference | Interpretation |
 |---|---|---|
 | 2023 hindcast | 20 Nordic corridors from the NVE/RME 2023 report and cited TSO evidence | Static annual upper envelopes; hourly outages and joint Nordic restrictions remain incomplete |
+| 2024 and 2025 hindcasts | Nordic TSO maximum NTC through 29 October 2024 local delivery, then hourly JAO Max Border Flow | 29 independently bounded corridors, constrained further by native AC and DC limits |
 | 2035 Bornholm | ENTSO-E ERAA 2025 TY2035 public NTC tables, with reviewed TSO/project overrides | Annual maximum NTC scenario approximation, including Core fallback NTCs; not a validated flow-based market domain |
 | Poland 2035 | DE/CZ/SK legs and a shared 3,000 MW import/export profile | Conservative sum of positive directional border use; imports cannot cancel exports to obtain extra capacity |
 
@@ -83,8 +84,8 @@ Joint Nordic hourly restrictions, OL3-dependent FI–SE1 availability and comple
 historical outages still require dated data. Physical cable ratings alone do
 not supply those missing market constraints.
 
-The 2022, 2024 and 2025 configurations remain separate cases awaiting their own
-dated review. These changes do not silently apply 2023 limits to other years.
+The [2024 and 2025 hindcasts](hindcast-full-years.md) use their own dated inputs.
+The full joint Nordic market domain and the 2022 hindcast still need review.
 Hydro foresight/cyclicity, nuclear outages, reserves and CHP/heat assumptions
 remain modelling limitations to examine against the first updated hindcast.
 Passing numerical checks does not establish that every real-world assumption
