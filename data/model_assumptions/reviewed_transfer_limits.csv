@@ -1,0 +1,121 @@
+planning_year,zone0,zone1,forward_MW,reverse_MW,basis,source
+2023,DE-LU,DK1,2500.0,2500.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,DK1,DK2,590.0,600.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,DK1,SE3,715.0,715.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,DK2,SE4,1700.0,1300.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,FI,NO4,56.0,60.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,FI,SE1,1100.0,1500.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf ; https://www.fingrid.fi/en/news/news/2022/impact-of-olkiluoto-3-on-transmission-capacity-given-to-electricity-market-between-finland-and-sweden-on-northern-interconnections/
+2023,FI,SE3,1200.0,1200.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf ; https://www.fingrid.fi/en/news/news/2021/fenno-skan-1-lifetime-will-be-extended-until-2040
+2023,NO1,NO2,2200.0,3500.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO1,NO3,500.0,500.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO1,NO5,600.0,3900.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO1,SE3,2145.0,2095.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO2,NO5,500.0,600.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO3,NO4,400.0,1200.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO3,NO5,800.0,500.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO3,SE2,600.0,1000.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO4,SE1,700.0,600.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,NO4,SE2,250.0,300.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,SE1,SE2,3300.0,3300.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,SE2,SE3,7300.0,7300.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2023,SE3,SE4,6200.0,2800.0,2023 static NTC upper-envelope approximation; hourly outages and joint limits require explicit data,https://publikasjoner.nve.no/rme_rapport/2024/rme_rapport2024_04.pdf
+2035,AL00,GR00,600.0,600.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AL00,ME00,400.0,400.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AL00,MK00,500.0,500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AL00,RS00,500.0,500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AT00,CH00,1200.0,1200.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AT00,CZ00,900.0,900.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AT00,DE-LU,7900.0,7900.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AT00,HU00,800.0,800.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AT00,ITN1,725.0,345.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,AT00,SI00,1650.0,1650.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BA00,HR00,800.0,800.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BA00,ME00,700.0,700.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BA00,RS00,1500.0,1674.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BE00,DE-LU,1000.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BE00,FR00,3800.0,5300.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BE00,GB00,1000.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BE00,NL00,3400.0,3400.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BG00,GR00,1500.0,1400.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BG00,MK00,400.0,400.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BG00,RO00,2300.0,2300.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,BG00,RS00,840.0,620.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,CH00,DE-LU,4300.0,5000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,CH00,FR00,2200.0,4500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,CH00,ITN1,4572.0,1910.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,CZ00,DE-LU,3000.0,3000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,CZ00,PL00,1050.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,CZ00,SK00,1900.0,1600.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DE-LU,DK1,3500.0,3500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DE-LU,DK2,600.0,585.0,50Hertz Kontek sending-end direction: DE to DK2 600; DK2 to DE 585. KF CGS wind-dependent path excluded,https://www.50hertz.com/Market/Gridusageandcongestionmanagement/Usageofinterconnectors
+2035,DE-LU,FR00,4800.0,4800.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DE-LU,GB00,2800.0,2800.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DE-LU,NL00,5000.0,5000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DE-LU,NO2,1400.0,1400.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DE-LU,PL00,3000.0,3000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DE-LU,SE4,615.0,615.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DK1,DK2,590.0,600.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DK1,GB00,1400.0,1400.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DK1,NL00,700.0,700.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DK1,NO2,1632.0,1632.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DK1,SE3,1000.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain; 1000 MW KontiSkan replacement delivery sensitivity",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,DK2,SE4,1700.0,1300.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,EE,FI,1000.0,1000.0,2035 firm existing EstLink1+2 1000 MW; EstLink3 not assumed commissioned before its 2038 schedule,https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,EE,LV,2035.0,1845.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ES00,FR00,5600.0,5300.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ES00,PT00,4200.0,3500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,FI,NO4,150.0,150.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,FI,SE1,2000.0,2000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,FI,SE3,1200.0,1200.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,FR00,GB00,4000.0,4000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,FR00,IE/NI,700.0,700.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,FR00,ITN1,4485.0,2160.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,GB00,IE/NI,1500.0,1500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,GB00,NL00,1000.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,GB00,NO2,1444.0,1444.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,GR00,ITS1,1500.0,1500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,GR00,MK00,1100.0,850.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,HR00,HU00,800.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,HR00,RS00,300.0,300.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,HR00,SI00,1500.0,1500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,HU00,RO00,3027.0,2075.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,HU00,RS00,940.0,1440.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,HU00,SI00,1200.0,1200.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,HU00,SK00,1900.0,3273.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCA,ITS1,3250.0,2000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCA,ITSI,2000.0,2000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCN,ITCO,400.0,400.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCN,ITCS,5200.0,5900.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCN,ITN1,5300.0,6100.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCO,ITSA,425.0,500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCS,ITN1,2100.0,2100.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCS,ITS1,3900.0,6700.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCS,ITSA,720.0,900.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCS,ITVI,1000.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITCS,ME00,1200.0,1200.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITN1,ITS1,2100.0,2100.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITN1,SI00,1080.0,1153.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITSA,ITVI,1000.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ITSI,ITVI,1500.0,1500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,LT,LV,2200.0,1750.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,LT,PL00,700.0,700.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,LT,SE4,700.0,700.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,ME00,RS00,440.0,1120.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,MK00,RS00,600.0,600.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NL00,NO2,700.0,700.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO1,NO2,2200.0,3500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO1,NO3,500.0,500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO1,NO5,600.0,3900.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO1,SE3,2145.0,2095.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO2,NO5,500.0,600.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO3,NO4,400.0,1200.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO3,NO5,800.0,500.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO3,SE2,600.0,1000.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO4,SE1,700.0,600.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,NO4,SE2,250.0,300.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,PL00,SE4,600.0,600.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,PL00,SK00,894.0,880.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,RO00,RS00,2024.0,1820.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,SE1,SE2,3300.0,3300.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,SE2,SE3,10350.0,10350.0,SvK LMA2026 table10 2035 assumption 10350 MW both directions; 9600 MW is the 2034 step,https://www.svk.se/49da32/siteassets/om-oss/rapporter/langsiktig-marknadsanalys-2026/langsiktig-marknadsanalys-2026.pdf
+2035,SE3,SE4,6200.0,2800.0,"ERAA2025 TY2035 annual maximum NTC approximation; Core uses published fallback, not a validated flow-based domain",https://www.entsoe.eu/eraa/2025/modelling-data/

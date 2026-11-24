@@ -1,0 +1,42 @@
+# Annual overlay: use after config/hindcast/build.yaml in --configfile.
+# Independent overnight case; native scenarios cannot change planning_horizons.
+run:
+  name: hindcast-full-2025
+  scenarios:
+    enable: false
+planning_horizons:
+- 2025
+snapshots:
+  start: '2025-01-01'
+  end: '2026-01-01'
+  inclusive: left
+load:
+  fixed_year: 2025
+electricity:
+  # Mochovce 4 had not entered service by the end of 2025 (IAEA PRIS RDS-2, 2026).
+  powerplants_filter: >-
+    (DateOut >= 2025 or DateOut != DateOut) and
+    (DateIn <= 2025 or DateIn != DateIn) and Name != 'Mochovce 4'
+  estimate_renewable_capacities:
+    year: 2025
+    irenastat_capacity_file: data/hindcast/renewable_capacities_2025_irenastat.csv
+atlite:
+  default_cutout: europe-2025-era5
+  cutouts:
+    europe-2025-era5:
+      module: era5
+      x:
+      - -12.0
+      - 42.0
+      y:
+      - 33.0
+      - 72.0
+      dx: 0.3
+      dy: 0.3
+      time:
+      - '2025'
+      - '2025'
+      chunks:
+        time: 500
+      prepare_kwargs:
+        monthly_requests: true

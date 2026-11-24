@@ -81,6 +81,14 @@ rule base_network:
     input:
         unpack(input_base_network),
         nuts3_shapes=resources("nuts3_shapes.geojson"),
+        bidding_zones=lambda w: (
+            resources("bidding_zones.geojson")
+            if (
+                config_provider("clustering", "mode")(w) == "administrative"
+                and "bz" in config_provider("clustering", "administrative")(w).values()
+            )
+            else []
+        ),
         country_shapes=resources("country_shapes.geojson"),
         offshore_shapes=resources("offshore_shapes.geojson"),
         europe_shape=resources("europe_shape.geojson"),
@@ -233,7 +241,7 @@ if CUTOUT_DATASET["source"] in ["build"]:
 
     rule build_cutout:
         output:
-            cutout=CUTOUT_DATASET["folder"] / "{cutout}.nc",
+            cutout=f"{CUTOUT_DATASET['folder']}/{{cutout}}.nc",
         log:
             "logs/build_cutout/{cutout}.log",
         benchmark:
@@ -988,3 +996,15 @@ rule build_tyndp_network:
         "Building TYNDP network"
     script:
         scripts("build_tyndp_network.py")
+
+
+rule retrieve_danish_wind:
+    output:
+        csv="data/hindcast/observed/danish_wind_{year}.csv.gz",
+        provenance="data/hindcast/observed/danish_wind_{year}.csv.json",
+    wildcard_constraints:
+        year="2022|2023|2024|2025",
+    resources:
+        mem_mb=1000,
+    script:
+        "../scripts/retrieve_danish_wind.py"

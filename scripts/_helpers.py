@@ -1050,6 +1050,43 @@ def setup_dask(nprocesses: int) -> dict:
     return dict(scheduler=client)
 
 
+def read_hourly_prices(path, snapshots, required_columns=()) -> pd.DataFrame:
+    """Load prepared hourly prices, interpreting naive timestamps as UTC.
+
+    Select exact network timestamps (including any leap-day omission). No filling,
+    smoothing, currency conversion or efficiency adjustment is performed here.
+    """
+    prices = pd.read_csv(path, index_col=0)
+    prices.index = pd.to_datetime(
+        prices.index, utc=True, errors="raise"
+    ).tz_localize(None)
+    if prices.empty or prices.index.hasnans or not prices.index.is_unique:
+        raise ValueError(f"{path}: prices must have nonempty, unique UTC timestamps")
+    if not prices.index.is_monotonic_increasing:
+        raise ValueError(f"{path}: timestamps must be sorted")
+    if not prices.index.equals(prices.index.floor("h")):
+        raise ValueError(f"{path}: timestamps must be on whole UTC hours")
+    if not prices.index.to_series().diff().iloc[1:].eq(pd.Timedelta(hours=1)).all():
+        raise ValueError(f"{path}: prepared prices must have consecutive hourly rows")
+    missing = set(required_columns).difference(prices.columns)
+    if missing:
+        raise ValueError(f"{path}: missing price columns {sorted(missing)}")
+    prices = prices.apply(pd.to_numeric, errors="raise")
+    if not np.isfinite(prices.to_numpy()).all():
+        raise ValueError(f"{path}: prices must be finite numeric values")
+    if isinstance(snapshots, pd.MultiIndex):
+        raise ValueError("Prepared hourly prices require single-period snapshots")
+    timestamps = pd.to_datetime(snapshots, utc=True).tz_localize(None)
+    missing = timestamps.difference(prices.index)
+    if len(missing):
+        raise ValueError(
+            f"{path}: missing prices for {len(missing)} snapshots; first: {missing[0]}"
+        )
+    prices = prices.reindex(timestamps)
+    prices.index = snapshots
+    return prices
+
+
 def load_costs(cost_file: str) -> pd.DataFrame:
     """
     Load prepared cost data from CSV.

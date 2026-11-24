@@ -187,6 +187,24 @@ def copperplate_buses(n: pypsa.Network, copperplate_regions: list[list[str]]):
     copperplate_regions : list[list[str]]
         List of groups of regions to copperplate
     """
+    # A typo used to be silently ignored, leaving the market electrically separate.
+    seen = set()
+    for region in copperplate_regions:
+        if len(region) < 2 or len(region) != len(set(region)):
+            raise ValueError("A copperplate group needs at least two distinct bus IDs")
+        missing = set(region).difference(n.buses.index)
+        if missing:
+            raise ValueError(
+                f"Unknown copperplate bus IDs: {sorted(missing)}. "
+                "Use actual clustered bus IDs in clustering.copperplate_regions; "
+                f"available IDs: {sorted(n.buses.index)}"
+            )
+        if seen.intersection(region):
+            raise ValueError("A bus cannot belong to multiple copperplate groups")
+        if not n.buses.loc[region, "carrier"].isin(["AC", "DC", ""]).all():
+            raise ValueError("Copperplate groups must contain electricity buses only")
+        seen.update(region)
+
     buses_to_regions_raw = {
         bus: "_".join(region) for region in copperplate_regions for bus in region
     }
@@ -205,16 +223,17 @@ def copperplate_buses(n: pypsa.Network, copperplate_regions: list[list[str]]):
         if len(to_remove) > 0:
             n.remove(c, to_remove)
 
-    # Add new lines with infinite capacity within each zone
+    # Lossless, zero-cost controllable links create one price while retaining countries.
+    if copperplate_regions and "copper" not in n.carriers.index:
+        n.add("Carrier", "copper")
     for zone, buses in regions_to_buses.items():
         if len(buses) > 1:
             logging.info(
                 f"Copperplating together the following buses: {', '.join(buses)}"
             )
 
-            # Create lines between first bus and all others
-            first_bus = list(buses)[0]
-            other_buses = list(buses)[1:]
+            # Create controllable links between the first bus and all others.
+            first_bus, *other_buses = sorted(buses)
 
             for i, bus in enumerate(other_buses):
                 n.add(
@@ -224,10 +243,21 @@ def copperplate_buses(n: pypsa.Network, copperplate_regions: list[list[str]]):
                     bus0=first_bus,
                     bus1=bus,
                     p_nom=float("inf"),
+                    p_nom_extendable=False,
                     p_min_pu=-1,
+                    p_max_pu=1,
+                    efficiency=1.0,
+                    marginal_cost=0.0,
                     underwater_fraction=0.0,
-                    under_construction=0.0,
+                    under_construction=False,
                 )
+
+    # under_construction is a custom Boolean flag inherited from the OSM network.
+    # Appending links can leave a mixed object column (bool/float), which xarray
+    # cannot serialize. New market-internal links are not under construction.
+    if "under_construction" in n.links.columns:
+        flags = n.links["under_construction"]
+        n.links["under_construction"] = flags.where(flags.notna(), False).astype(bool)
 
 
 def get_feature_data_for_hac(fn: str) -> pd.DataFrame:

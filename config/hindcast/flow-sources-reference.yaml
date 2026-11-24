@@ -1,0 +1,10 @@
+# Country-border net flows. For a zonal model use individual zone pairs instead.
+# All entries must have directional ENTSO-E data; missing entries are not zero.
+DK->DE:
+  - [DK_1, DE_LU]
+  - [DK_2, DE_LU]
+DK->SE:
+  - [DK_1, SE_3]
+  - [DK_2, SE_4]
+SE->PL:
+  - [SE_4, PL]

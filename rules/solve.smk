@@ -6,6 +6,7 @@
 rule solve_network:
     input:
         network=resources("networks/composed_{horizon}.nc"),
+        operating_code="scripts/transmission_assumptions.py",
     output:
         network=RESULTS + "networks/solved_{horizon}.nc",
         model=(

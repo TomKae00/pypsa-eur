@@ -1,0 +1,7 @@
+planning_year,constraint,zone0,zone1,coefficient,positive_only,limit_MW,basis,source
+2035,Poland_profile_export,PL00,DE-LU,1,True,3000,ERAA2025 Polish fallback shared profile; conservative gross directional use,https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,Poland_profile_export,PL00,CZ00,1,True,3000,ERAA2025 Polish fallback shared profile; conservative gross directional use,https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,Poland_profile_export,PL00,SK00,1,True,3000,ERAA2025 Polish fallback shared profile; conservative gross directional use,https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,Poland_profile_import,DE-LU,PL00,1,True,3000,ERAA2025 Polish fallback shared profile; conservative gross directional use,https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,Poland_profile_import,CZ00,PL00,1,True,3000,ERAA2025 Polish fallback shared profile; conservative gross directional use,https://www.entsoe.eu/eraa/2025/modelling-data/
+2035,Poland_profile_import,SK00,PL00,1,True,3000,ERAA2025 Polish fallback shared profile; conservative gross directional use,https://www.entsoe.eu/eraa/2025/modelling-data/

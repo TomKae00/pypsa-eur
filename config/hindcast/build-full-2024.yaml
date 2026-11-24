@@ -1,0 +1,5 @@
+# Apply after build-2024.yaml to retain 29 February in the full-year comparison.
+run:
+  name: hindcast-full-2024
+enable:
+  drop_leap_day: false

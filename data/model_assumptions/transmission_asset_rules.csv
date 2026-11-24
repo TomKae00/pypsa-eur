@@ -1,0 +1,8 @@
+year_min,year_max,asset,nominal_MW,operating_MW,available_from_utc,basis,source
+2023,2035,relation/8184631-400-DC,,400,,Fenno-Skan1 engineering nameplate retained; 400MW market operation plus separate 800MW Fenno-Skan2,https://www.fingrid.fi/en/news/news/2021/fenno-skan-1-lifetime-will-be-extended-until-2040
+2023,2035,relation/8185767-500-DC,600,,,Italy-Montenegro first pole 600MW; additional TYNDP pole must be counted separately,https://www.terna-reports.it/2019/assets/pdf/terna_sustainability_report_2019_en.pdf
+2023,2023,relation/15777152-320-DC,,,2024-08-09T00:00:00Z,Shetland unavailable throughout 2023; energized August2024,https://www.ssen-transmission.co.uk/projects/project-map/shetland/
+2023,2023,relation/15781671-525-DC,,800,2023-12-30T00:00:00Z,Viking initial 800MW; conservative first full UTC day after 29December opening; exact first commercial hour unresolved,https://www.nationalgrid.com/national-grid-ventures/viking-link
+2035,2035,TYNDP2026_153_987,0,,,FAB proposal excluded from firm2035 base after February2026 regulatory decision,https://www.ofgem.gov.uk/sites/default/files/2026-02/CRE_Ofgem_Joint_Statement_Update_February_2026.pdf
+2035,2035,TYNDP2026_247_1381,0,,,GridLink proposal excluded from firm2035 base after February2026 regulatory decision,https://www.ofgem.gov.uk/sites/default/files/2026-02/CRE_Ofgem_Joint_Statement_Update_February_2026.pdf
+2035,2035,TYNDP2026_285_1383,0,,,Aquind proposal excluded from firm2035 base after February2026 regulatory decision,https://www.ofgem.gov.uk/sites/default/files/2026-02/CRE_Ofgem_Joint_Statement_Update_February_2026.pdf

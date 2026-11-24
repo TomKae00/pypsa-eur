@@ -38,6 +38,7 @@ from linopy.constants import SolverStatus, TerminationCondition
 from linopy.remote.oetc import OetcCredentials, OetcHandler, OetcSettings
 from pypsa.descriptors import get_activity_mask
 
+from scripts import transmission_assumptions
 from scripts._benchmark import memory_logger
 from scripts._helpers import (
     PYPSA_V1,
@@ -1253,6 +1254,10 @@ def extra_functionality(
     """
     config = n.config
     constraints = config["solving"].get("constraints", {})
+    if not config.get("bornholm_model_assumptions", {}).get("enabled", False):
+        transmission_assumptions.add_constraints(
+            n, snapshots, config.get("transmission_assumptions", {})
+        )
     if constraints["BAU"] and n.generators.p_nom_extendable.any():
         add_BAU_constraints(n, config)
     if constraints["SAFE"] and n.generators.p_nom_extendable.any():
@@ -1624,7 +1629,13 @@ if __name__ == "__main__":
     if status == SolverStatus.warning:
         raise RuntimeError("Solving status 'warning'. Discarding solution.")
 
+    reviewed_audits = {
+        key: value
+        for key, value in n.meta.items()
+        if key.endswith("_audit") or key == "transmission_asset_rules"
+    }
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    n.meta.update(reviewed_audits)
     n.export_to_netcdf(snakemake.output.network)
 
     if snakemake.output.get("model"):

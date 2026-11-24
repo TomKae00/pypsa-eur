@@ -100,3 +100,11 @@ doc/img/intro-workflow.svg
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# Keep the shared hindcast starter notebook; other local notebooks stay ignored.
+!/notebooks/
+/notebooks/*
+!/notebooks/inspect_hindcast.ipynb
+
+/data/hindcast/observed/
+!/data/model_assumptions/
