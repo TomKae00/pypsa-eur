@@ -291,7 +291,8 @@ availability, cable losses and per-MW costs retain the treaty assumptions.
 Removing a landing removes both directed links and adjusts the project's
 allowance in any native DC expansion budget. The one-country layouts are
 physical counterfactuals at the Bornholm site. They do not assume a particular
-national ownership or CfD agreement.
+national ownership or CfD agreement. The follow-up uses the original final-v1
+Gurobi barrier preset with 16 threads, `NumericFocus=1` and `BarConvTol=1e-8`.
 
 | Array task | Layout | DK / DE cable GW | Wind GW |
 | --- | --- | --- | --- |

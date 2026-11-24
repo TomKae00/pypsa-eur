@@ -260,10 +260,11 @@ def run(index, batch, *, layout_screen=False, central_followup=False):
         context = original.context_for(source_case)
         # Scenario overrides have already been loaded by original.context_for.
         context.config["run"]["scenarios"]["enable"] = False
-        options = context.params.solving["solver_options"]
-        options[context.params.solving["solver"]["options"]].update(
-            NumericFocus=2, BarConvTol=1e-9
-        )
+        if not central_followup:
+            options = context.params.solving["solver_options"]
+            options[context.params.solving["solver"]["options"]].update(
+                NumericFocus=2, BarConvTol=1e-9
+            )
         identity = dict(name=name, parent=parent, dk_mw=dk_mw)
         if layout_screen:
             identity["de_mw"] = de_mw
