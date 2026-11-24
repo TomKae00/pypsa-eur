@@ -350,6 +350,27 @@ annual average HICP](https://ec.europa.eu/eurostat/statistics-explained/SEPDF/ca
 requires another conversion. This is a one-year counterfactual with the
 historical fleet fixed.
 
+### Historical sector-coupled pairs
+
+The same launcher accepts `--sector-coupled` for a prepared historical sector
+network. Compose the no-project network for each year using the historical
+electricity fleet and grid together with existing heat, transport and industrial
+assets and demands. Reconcile these demands with the original electricity load
+before dispatch. All capacities must be fixed. The composed input must include
+its native historical configuration and dynamic fuel costs.
+
+The paired solver uses complete three-hour chronology with 2,928 snapshots in
+2024 and 2,920 in 2025. It applies the native sector constraints and reads the
+original final-v1 Gurobi preset, including 16 threads, `NumericFocus=1` and
+`BarConvTol=1e-8`. It solves the baseline first, then the same system with the
+fixed treaty project. It reports operating savings and the project's annualised
+cost in a common price basis.
+
+Supply the path to a prepared sector network and its year. Add `--check` to
+validate the input without solving. Use a 48-hour Slurm allocation for the two
+sequential solves in a pair. Outputs are under
+`results/bornholm_historical_sector/<year>/<job>/`.
+
 ## Interpretation of demand sensitivities
 
 In final-v1, the treaty hybrid's incremental cost against the corresponding

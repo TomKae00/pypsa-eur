@@ -5,10 +5,12 @@ import argparse
 import math
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pypsa
+import yaml
 
 from scripts import transmission_assumptions
 from scripts.dispatch_checks import check as check_dispatch
@@ -23,6 +25,7 @@ LANDINGS = {"BEI_TO_DK2": "DKE1", "BEI_TO_DE": "DE00"}
 TEMPLATE = Path(
     "resources/bornholm_2035_final_v1/central_hybrid/networks/composed_2035.nc"
 )
+CALIBRATED_CONFIG = Path("config/config.bornholm-calibrated-base.yaml")
 
 
 def fixed_fleet(n):
@@ -39,14 +42,31 @@ def fixed_fleet(n):
     }
 
 
-def validate_historical(n, year):
-    expected = pd.date_range(str(year), str(year + 1), freq="h", inclusive="left")
+def validate_historical(n, year, *, sector_coupled=False):
+    step_hours = 3 if sector_coupled else 1
+    expected = pd.date_range(
+        str(year), str(year + 1), freq=f"{step_hours}h", inclusive="left"
+    )
     require(
         isinstance(n.snapshots, pd.DatetimeIndex)
-        and n.snapshots.equals(expected)
-        and np.allclose(n.snapshot_weightings, 1),
-        f"Expected the full hourly {year} hindcast with unit weights",
+        and n.snapshots.as_unit("ns").equals(expected.as_unit("ns"))
+        and np.allclose(n.snapshot_weightings, step_hours),
+        f"Expected the full {year} hindcast with {step_hours}-hour snapshots and weights",
     )
+    sector = n.meta.get("sector", {})
+    require(
+        sector.get("enabled", False) == sector_coupled,
+        "Sector setting does not match the historical solver mode",
+    )
+    if sector_coupled:
+        require(
+            all(sector.get(key) for key in ("heating", "transport", "industry")),
+            "Historical sector case must include heat, transport and industry",
+        )
+        require(
+            n.meta.get("planning_horizons") == [year],
+            f"Expected native sector metadata for the historical planning year {year}",
+        )
     require(
         n.investment_periods.empty and not n.has_scenarios,
         "Expected one historical period",
@@ -61,8 +81,11 @@ def validate_historical(n, year):
             not static.get("committable", pd.Series(False, index=static.index)).any(),
             f"Unexpected unit commitment on historical {component}",
         )
+    dynamic_costs = [n.generators_t.marginal_cost]
+    if sector_coupled:
+        dynamic_costs.extend([n.links_t.marginal_cost, n.stores_t.marginal_cost])
     require(
-        not n.generators_t.marginal_cost.empty,
+        any(not costs.empty for costs in dynamic_costs),
         "Historical dynamic fuel costs are missing",
     )
     require(
@@ -170,14 +193,36 @@ def add_project(n, template, profile):
     return annual_cost
 
 
-def solve(n, directory, case, solver, threads):
-    solver_options = (
-        {"Threads": threads, "Method": 2, "Crossover": -1, "NumericFocus": 2}
-        if solver == "gurobi"
-        else {"threads": threads, "solver": "ipm", "run_crossover": "off"}
+def dispatch_solver_options(solver, threads, *, sector_coupled=False):
+    if solver == "highs":
+        return {"threads": threads, "solver": "ipm", "run_crossover": "off"}
+    if not sector_coupled:
+        return {"Threads": threads, "Method": 2, "Crossover": -1, "NumericFocus": 2}
+
+    from scripts.run_bornholm_diagnostic import memory_snapshot, soft_memory_limit
+
+    solving = yaml.safe_load(CALIBRATED_CONFIG.read_text())["solving"]
+    options = solving["solver_options"][solving["solver"]["options"]].copy()
+    options["threads"] = threads
+    options["SoftMemLimit"] = soft_memory_limit(
+        memory_snapshot(), options["SoftMemLimit"]
     )
+    return options
+
+
+def solve(n, directory, case, solver, solver_options, *, sector_coupled=False):
+    add_constraints = transmission_assumptions.add_constraints
+    if sector_coupled:
+        from scripts.solve_network import extra_functionality
+
+        n.config = n.meta
+        custom = n.config["solving"]["options"].get("custom_extra_functionality")
+        n.params = SimpleNamespace(
+            custom_extra_functionality=Path("rules") / custom if custom else None
+        )
+        add_constraints = extra_functionality
     status, termination = n.optimize(
-        extra_functionality=transmission_assumptions.add_constraints,
+        extra_functionality=add_constraints,
         solver_name=solver,
         solver_options=solver_options,
         transmission_losses=n.meta.get("solving", {})
@@ -238,6 +283,7 @@ def run(
     *,
     operating_to_eur2025=None,
     check=False,
+    sector_coupled=False,
 ):
     factor = operating_to_eur2025
     if factor is None:
@@ -247,7 +293,7 @@ def run(
         "Invalid EUR2025 conversion",
     )
     historical = pypsa.Network(source)
-    validate_historical(historical, year)
+    validate_historical(historical, year, sector_coupled=sector_coupled)
     original_fleet = fixed_fleet(historical)
     profile, proxy = historical_wind_profile(historical)
     with_project = historical.copy()
@@ -260,14 +306,21 @@ def run(
             )
     if check:
         print(
-            f"{year}: {len(profile)} hours; DK2 offshore profile capacity factor {profile.mean():.2%}"
+            f"{year}: {len(profile)} snapshots and "
+            f"{historical.snapshot_weightings.generators.sum():g} hours; "
+            f"DK2 offshore profile capacity factor {profile.mean():.2%}"
         )
         print(f"Treaty layout annualised capital cost: EUR {annual_cost:,.0f}")
         return
+    solver_options = dispatch_solver_options(
+        solver, threads, sector_coupled=sector_coupled
+    )
     directory.mkdir(parents=True, exist_ok=False)
     report = dict(
         weather_and_fleet_year=year,
+        sector_coupled=sector_coupled,
         snapshots=len(profile),
+        annual_weight_hours=float(historical.snapshot_weightings.generators.sum()),
         source=str(source),
         source_sha256=digest(source),
         treaty_template=str(template_path),
@@ -277,16 +330,27 @@ def run(
         project_annualised_capital_cost_eur=annual_cost,
         project_cost_basis="Bornholm 2035 Central treaty template, EUR2025",
         solver=solver,
+        solver_options=solver_options,
         operating_cost_to_eur2025_factor=factor,
         currency_note="Euro-area HICP approximation for historical operating costs, unless overridden.",
     )
     report["without_project"] = solve(
-        historical, directory, "without_project", solver, threads
+        historical,
+        directory,
+        "without_project",
+        solver,
+        solver_options,
+        sector_coupled=sector_coupled,
     )
     del historical
     write_json(directory / "summary.json", report)
     report["with_project"] = solve(
-        with_project, directory, "with_project", solver, threads
+        with_project,
+        directory,
+        "with_project",
+        solver,
+        solver_options,
+        sector_coupled=sector_coupled,
     )
     savings = (
         report["without_project"]["operating_cost_eur"]
@@ -331,6 +395,11 @@ def main():
         "--threads", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "16"))
     )
     parser.add_argument("--operating-to-eur2025", type=float)
+    parser.add_argument(
+        "--sector-coupled",
+        action="store_true",
+        help="Use a fixed three-hourly historical sector network and native sector constraints",
+    )
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     directory = args.output
@@ -338,7 +407,10 @@ def main():
         job = os.environ.get("SLURM_JOB_ID")
         if not job:
             parser.error("Provide --output when running outside Slurm")
-        directory = Path(f"results/bornholm_historical/{args.year}/{job}")
+        root = (
+            "bornholm_historical_sector" if args.sector_coupled else "bornholm_historical"
+        )
+        directory = Path("results") / root / str(args.year) / job
     run(
         args.source,
         args.template,
@@ -348,6 +420,7 @@ def main():
         args.threads,
         operating_to_eur2025=args.operating_to_eur2025,
         check=args.check,
+        sector_coupled=args.sector_coupled,
     )
 
 

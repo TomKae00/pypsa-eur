@@ -933,7 +933,7 @@ def add_TES_energy_to_power_ratio_constraints(n: pypsa.Network) -> None:
         & n.links.p_nom_extendable
     ]
     indices_stores_e_nom_extendable = n.stores.index[
-        n.stores.index.str.contains("water tanks|water pits")
+        n.stores.index.astype(str).str.contains("water tanks|water pits")
         & n.stores.e_nom_extendable
     ]
 
