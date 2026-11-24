@@ -326,14 +326,22 @@ demand, fleet, grid and operating constraints. They optimise dispatch and
 flows separately. The project case adds 3 GW of wind, a 1.2 GW cable to DK2
 and a 2 GW cable to Germany. The wind profile uses capacity-weighted
 availability from the existing DK2 offshore fleet in the same weather year
-as a proxy for the project site. Cable losses and annualised project costs
-come from the prepared 2035 Central treaty template.
+as a proxy for the project site. For 2024 and 2025, scale the hourly proxy
+for the added wind farm to a 49.47% available capacity factor, capping each
+hour at nameplate. The Danish Energy Agency's [AF26 workbook](https://ens.dk/media/8833/download)
+gives 4,325 and 4,338 full-load hours for the two Bornholm entries
+(`Vindmøller!D96:D97`). Weighting these by the 1:2 capacity allocation gives
+4,333.7 full-load hours per 8,760-hour year. The model uses 3 GW of wind and
+lets dispatch determine curtailment. Both runs use the same fitted historical
+DK2 fleet. The summary records the unscaled proxy, the target, the multiplier,
+available wind energy and realised project capacity factor. Cable losses and
+annualised project costs come from the prepared 2035 Central treaty template.
 
 From the same Bornholm checkout on Sophia:
 
 ```bash
 for year in 2024 2025; do
-  historical="$HOME/projects/pypsa-eur-hindcast/results/hindcast-full-$year/network.nc"
+  historical="$HOME/projects/pypsa-eur-hindcast/results/hindcast-wind-calibrated-$year/network.nc"
   if [[ -s "$historical" ]]; then
     sbatch --job-name="bornholm-hindcast-$year" \
       scripts/bornholm_historical.sbatch "$historical" --year "$year"

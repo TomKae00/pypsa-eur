@@ -17,6 +17,10 @@ from scripts.run_bornholm_welfare import digest, write_json
 
 HUB = "BEI_HUB"
 WIND = "BEI_WIND"
+# DEA AF26 workbook, Vindmøller!D96:D97. The 1:2 split weights the two rows.
+AF26_BORNHOLM_FULL_LOAD_HOURS = (4325 + 2 * 4338) / 3
+AF26_BORNHOLM_CF = AF26_BORNHOLM_FULL_LOAD_HOURS / 8760
+AF26_WORKBOOK = "https://ens.dk/media/8833/download"
 # Eurostat euro-area annual average HICP. Used only for the illustrative capital-cost comparison.
 EUR2025_PER_SOURCE_EUR = {2023: 1.024 * 1.021, 2024: 1.021, 2025: 1.0}
 LANDINGS = {"BEI_TO_DK2": "DKE1", "BEI_TO_DE": "DE00"}
@@ -107,6 +111,26 @@ def historical_wind_profile(n):
     )
     capacity = g.loc[offshore, "p_nom"]
     return profile @ (capacity / capacity.sum()), capacity.to_dict()
+
+
+def scale_project_wind(profile, target):
+    """Match the annual CF after clipping each hour at nameplate."""
+    values = profile.to_numpy(dtype=float)
+    require(
+        0 < target < 1 and target <= np.count_nonzero(values > 0) / len(values),
+        "Bornholm CF target exceeds the available hours of the historical proxy",
+    )
+    lower, upper = 0.0, 1.0
+    while np.minimum(upper * values, 1.0).mean() < target:
+        upper *= 2
+        require(math.isfinite(upper), "Cannot bracket the Bornholm CF target")
+    for _ in range(55):
+        middle = (lower + upper) / 2
+        if np.minimum(middle * values, 1.0).mean() < target:
+            lower = middle
+        else:
+            upper = middle
+    return profile.mul(upper).clip(upper=1.0), upper
 
 
 def add_project(n, template, profile):
@@ -250,8 +274,29 @@ def run(
     validate_historical(historical, year)
     original_fleet = fixed_fleet(historical)
     profile, proxy = historical_wind_profile(historical)
+    proxy_cf = float(profile.mean())
+    target = AF26_BORNHOLM_CF if year in (2024, 2025) else None
+    multiplier = 1.0
+    if target is not None:
+        profile, multiplier = scale_project_wind(profile, target)
     with_project = historical.copy()
     annual_cost = add_project(with_project, pypsa.Network(template_path), profile)
+    available_cf = float(profile.mean())
+    nominal_mwh = float(len(profile) * with_project.generators.at[WIND, "p_nom"])
+    available_mwh = available_cf * nominal_mwh
+    profile_audit = dict(
+        wind_profile_proxy_mw=proxy,
+        wind_profile_proxy_capacity_factor=proxy_cf,
+        wind_profile_capacity_factor=available_cf,
+        wind_profile_multiplier=multiplier,
+        wind_profile_target_capacity_factor=target,
+    )
+    if target is not None:
+        profile_audit.update(
+            wind_profile_target_source=AF26_WORKBOOK,
+            wind_profile_target_full_load_hours=AF26_BORNHOLM_FULL_LOAD_HOURS,
+        )
+    with_project.meta = dict(with_project.meta, bornholm_historical_wind=profile_audit)
     updated_fleet = fixed_fleet(with_project)
     for component, nominal in original_fleet.items():
         if not nominal.empty:
@@ -260,7 +305,8 @@ def run(
             )
     if check:
         print(
-            f"{year}: {len(profile)} hours; DK2 offshore profile capacity factor {profile.mean():.2%}"
+            f"{year}: {len(profile)} hours; DK2 offshore proxy {proxy_cf:.2%}; "
+            f"Bornholm available capacity factor {available_cf:.2%}"
         )
         print(f"Treaty layout annualised capital cost: EUR {annual_cost:,.0f}")
         return
@@ -272,8 +318,7 @@ def run(
         source_sha256=digest(source),
         treaty_template=str(template_path),
         treaty_template_sha256=digest(template_path),
-        wind_profile_proxy_mw=proxy,
-        wind_profile_capacity_factor=float(profile.mean()),
+        **profile_audit,
         project_annualised_capital_cost_eur=annual_cost,
         project_cost_basis="Bornholm 2035 Central treaty template, EUR2025",
         solver=solver,
@@ -287,6 +332,10 @@ def run(
     write_json(directory / "summary.json", report)
     report["with_project"] = solve(
         with_project, directory, "with_project", solver, threads
+    )
+    report["with_project"].update(
+        wind_available_mwh=available_mwh,
+        wind_realised_capacity_factor=report["with_project"]["wind_mwh"] / nominal_mwh,
     )
     savings = (
         report["without_project"]["operating_cost_eur"]
